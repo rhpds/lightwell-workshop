@@ -20,9 +20,25 @@ project:
   workflow_id: "5be45dfe-5576-468e-bcb2-341444d1a302"
 
 spec:
-  title: "Automated Open Source Vulnerability Remediation with Red Hat Lightwell"
+  title: "Get Ready for Lightwell: Patch to Production at the Speed of AI"
   learning_objectives: []
-  modules: []              # [{id, title, duration_min}] — written by intake Phase 4; id is stable (e.g. module-01)
+  modules:
+  - id: module-01
+    title: "Patch Ingestion — From Lightwell to Artifactory to Ansible"
+    duration_min: 20
+    status: not_started
+  - id: module-02
+    title: "Vulnerability Analysis with Trusted Profile Analyzer"
+    duration_min: 20
+    status: not_started
+  - id: module-03
+    title: "AI-Assisted Remediation — Reviewing and Approving Patches"
+    duration_min: 25
+    status: not_started
+  - id: module-04
+    title: "Build, Deploy, and Close the Loop"
+    duration_min: 25
+    status: not_started
   environment:
     platform: ""               # ocp | rhel-vms — determines which sizing fields apply
     topology: ""               # shared-cluster | per-student | cnv-pool
@@ -79,7 +95,7 @@ tracking:
 approval_checklist:
 
   content:
-    prerequisites_verifiable: null
+    prerequisites_verifiable: false
     assessment_strategy: ""
     catalog_gap: ""
     design_overview: ""

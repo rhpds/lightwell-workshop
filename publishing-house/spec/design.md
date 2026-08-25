@@ -1,89 +1,84 @@
-# [Project Title]
-
-<!-- This file is the design document for your lab or demo. -->
-<!-- Fill in each section below, or run /rhdp-publishing-house to have the intake skill help. -->
-<!-- Sections marked with [brackets] are placeholders — replace with real content. -->
-<!-- The validation gate checks for all required sections before submission. -->
+# Get Ready for Lightwell: Patch to Production at the Speed of AI
 
 ## Overview
 
-[2-3 sentences on what this lab or demo is and why it exists. Then a direct description of what participants will do — specific enough that someone reading this section immediately understands the content without interpretation. No flowery language. Example: "Participants will deploy a 3-tier application on OpenShift, configure autoscaling, and troubleshoot a simulated pod failure."]
+This lab demonstrates how Red Hat Lightwell transforms open source vulnerability remediation from a weeks-long manual process into a continuous, policy-driven automated operation. Participants step into the role of Dinesh, a platform engineer at a fictional financial services company, arriving to find that Lightwell has already processed 298 patches across 29 applications overnight — analyzing CVEs, assessing business risk, generating merge requests, and auto-merging the safe ones. A handful of high-risk items remain flagged for expert review.
+
+The remediation pipeline begins when Lightwell patches are automatically delivered into a JFrog Artifactory environment. The arrival of a new patch in Artifactory triggers an Event-Driven Ansible workflow, which passes patch data to Red Hat Trusted Profile Analyzer for environmental impact analysis. From there, the Lightwell Deep Agent assesses risk, generates merge requests, and routes high-risk items for human review. Approved patches move through the Trusted Software Factory for build, signing, and verification, before being deployed across a multi-cluster fleet via RHACM and OpenShift GitOps. Participants work through the flagged items and observe the full pipeline close the loop end-to-end.
 
 ## Target Audience
 
-- **Role:** [Data scientists, platform engineers, developers, etc.]
-- **Experience level:** [Beginner, intermediate, or advanced]
-- **What they already know:** [Existing skills and knowledge]
-- **What they don't know:** [Skills this lab teaches]
+- **Role:** Platform engineers and security-focused operations engineers
+- **Experience level:** Intermediate
+- **What they already know:** Familiarity with OpenShift, CI/CD pipelines, and basic vulnerability management concepts (CVEs, SBOMs, patch workflows)
+- **What they don't know:** How Lightwell orchestrates automated, AI-assisted remediation across a multi-product Red Hat stack; how TPA, OpenShift AI, Trusted Software Factory, and RHACM fit together in a continuous patching pipeline
 
 ## Prerequisites
 
-- [What the learner must know or have completed before starting]
-- [Can the lab validate these automatically? Yes/No — brief explanation]
+- Basic familiarity with OpenShift (navigating the console, understanding namespaces and deployments)
+- Conceptual understanding of CVEs and software supply chain security
+- No prior Lightwell experience required
 
-<!-- If no prerequisites, write "None" -->
+Can the lab validate these automatically? No — trust-based.
 
 ## Learning Objectives
 
-1. [Action verb] [specific, measurable outcome]
-2. [Action verb] [specific, measurable outcome]
-3. [Action verb] [specific, measurable outcome]
-
-<!-- Scale to duration: up to 3 objectives per 45 min of content. Start with action verbs: Configure, Deploy, Create, Implement, Troubleshoot, Monitor, Scale. Each should be testable. NOT: Understand, Learn, Know. -->
+1. Navigate the Lightwell dashboard to interpret automated patch assessments and identify items requiring manual review
+2. Analyze CVE impact scope using Red Hat Trusted Profile Analyzer and SBOM data to assess business risk
+3. Review and approve AI-generated merge requests produced by the Lightwell Deep Agent
+4. Trace a patch through the Trusted Software Factory build, sign, and verify pipeline
+5. Deploy patched container images across a multi-cluster fleet using Red Hat Advanced Cluster Management and OpenShift GitOps
+6. Verify end-to-end remediation closure, including automated ServiceNow ticket resolution
 
 ## Content Type
 
-[Lab (hands-on) or Demo (presenter-led)]
+Lab
 
 ## Products & Technologies
 
-- [Official Red Hat product name with version if relevant]
-- [Additional products/technologies]
-
-<!-- Use official names: "Red Hat OpenShift", not "OpenShift". List upstream projects separately. -->
+- Red Hat Lightwell
+- Red Hat OpenShift Container Platform
+- Red Hat OpenShift AI
+- Red Hat Trusted Profile Analyzer
+- Red Hat Ansible Automation Platform (Event-Driven Ansible)
+- Trusted Software Factory
+- Red Hat Advanced Cluster Management
+- Red Hat OpenShift GitOps
+- JFrog Artifactory (community, patch ingestion and trigger)
+- GitLab (upstream, merge request target)
+- ServiceNow (external ITSM integration)
 
 ## Module Map
 
 | Module | Title | Duration |
 |--------|-------|----------|
-| 1 | [Module title] | [XX min] |
-| 2 | [Module title] | [XX min] |
-| — | **Total hands-on** | **[X hours]** |
-| — | Intro / presentation | [~XX min] |
-| — | **Total lab** | **[~X hours]** |
-
-<!-- Each module 10-30 min. Total: lab 1-4 hours, demo 15-45 min. Modules should build on each other. -->
+| 1 | Patch Ingestion — From Lightwell to Artifactory to Ansible | 20 min |
+| 2 | Vulnerability Analysis with Trusted Profile Analyzer | 20 min |
+| 3 | AI-Assisted Remediation — Reviewing and Approving Patches | 25 min |
+| 4 | Build, Deploy, and Close the Loop | 25 min |
+| — | **Total hands-on** | **90 min** |
+| — | Intro / orientation | ~5 min |
+| — | **Total lab** | **~95 min** |
 
 ## Difficulty Level
 
-[Beginner, Intermediate, or Advanced]
+Intermediate
 
 ## Environment
 
-**Learner view:** [What exists when the lab starts — pre-deployed resources, what participants see and interact with. Be specific about cluster details.]
+**Learner view:** Participants access a fully pre-deployed environment on OpenShift. The Lightwell dashboard shows 298 patches already processed across 29 applications — auto-merged safe patches are visible in the history, and a small set of high-risk items are queued for manual review. A JFrog Artifactory instance is pre-loaded with the latest Lightwell patch bundles. RHOAI (with Deep Agent skills pre-configured), TPA, TSF, RHACM, and OpenShift GitOps are all deployed and integrated. GitLab repositories are pre-populated with sample applications. A ServiceNow sandbox is pre-wired for ticket management.
 
-**Automation needed:** [Yes/No]
-
-[If yes, list what automation must provision — operators, per-user resources, sample apps, data sets.]
+**Automation needed:** Yes. Pre-provisioning must deploy the full stack (Lightwell, RHOAI, TPA, TSF, RHACM, GitOps), configure Artifactory with patch bundles and the EDA webhook trigger, seed the platform with CVE data and overnight patch state, configure Deep Agent skills in RHOAI, populate GitLab repositories, and wire in the ServiceNow integration. Participants begin at the "morning review" state — not at a clean install.
 
 ## Infrastructure Requirements
 
-- **Cloud provider:** [CNV (default), AWS, or Troshka (bare-metal/nested virt)]
-- **Cluster type:** [Multinode or SNO (Single Node OpenShift)]
-- **OCP version:** [e.g. 4.20 — minimum 4.20]
-- **Topology:** [Shared cluster, per-student, or CNV pool]
-- **Sizing:** [Node types and counts with resources — e.g., "3 control plane (16 CPU, 64GB RAM), 6 workers (8 CPU, 32GB RAM, 100GB disk)"]
-- **Automation approach:** [Ansible, GitOps (Helm + ArgoCD), or combo]
-- **AI/MaaS:** [None, MaaS (open-source model), MaaS (frontier model), or dedicated GPU — include justification if not "none"]
-- **External services:** [Named services — e.g., github.com, registry.access.redhat.com — or "None"]
-- **AAP version:** [e.g. 2.5 — only if AAP is in products; omit otherwise]
-- **Non-GA products:** [Product name + version, with access plan — or "None (all products are GA)"]
-
-<!-- Not all fields must be known at intake. "TBD, estimating ~X" is fine. -->
-
-## Assessment Strategy (Optional)
-
-<!-- Optional — skip this section for demos or classic labs without verification. -->
-<!-- Relevant for Zero-Touch labs with solve/validate buttons or labs with automated checks. -->
-
-[If applicable: how will we know the learner successfully completed each module? Per module: verification script, solve/validate button, visible result in the UI, or automated check.]
+- **Cloud provider:** TBD — confirmed in infrastructure phase
+- **Cluster type:** TBD — confirmed in infrastructure phase
+- **OCP version:** TBD — confirmed in infrastructure phase
+- **Topology:** TBD — confirmed in infrastructure phase
+- **Sizing:** TBD — confirmed in infrastructure phase
+- **Automation approach:** TBD — confirmed in infrastructure phase
+- **AI/MaaS:** TBD — confirmed in infrastructure phase
+- **External services:** TBD — confirmed in infrastructure phase
+- **AAP version:** TBD — confirmed in infrastructure phase
+- **Non-GA products:** TBD — confirmed in infrastructure phase
