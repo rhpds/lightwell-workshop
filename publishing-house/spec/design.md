@@ -72,13 +72,13 @@ Intermediate
 
 ## Infrastructure Requirements
 
-- **Cloud provider:** TBD — confirmed in infrastructure phase
-- **Cluster type:** TBD — confirmed in infrastructure phase
-- **OCP version:** TBD — confirmed in infrastructure phase
-- **Topology:** TBD — confirmed in infrastructure phase
-- **Sizing:** TBD — confirmed in infrastructure phase
-- **Automation approach:** TBD — confirmed in infrastructure phase
-- **AI/MaaS:** TBD — confirmed in infrastructure phase
-- **External services:** TBD — confirmed in infrastructure phase
-- **AAP version:** TBD — confirmed in infrastructure phase
-- **Non-GA products:** TBD — confirmed in infrastructure phase
+- **Cloud provider:** CNV
+- **Cluster type:** Multinode
+- **OCP version:** 4.20
+- **Topology:** Shared-cluster, 20 max concurrent users
+- **Sizing:** 3 control plane (16 vCPU, 64GB RAM); 6 workers (16 vCPU, 64GB RAM, 200GB disk)
+- **Automation approach:** GitOps (Helm + ArgoCD)
+- **AI/MaaS:** MaaS — open-source model (Opus-tier equivalent) via LangChain Deep Agent harness on OpenShift AI
+- **External services:** Lightwell Network (patch delivery), ServiceNow sandbox, quay.io, registry.access.redhat.com
+- **AAP version:** Latest GA
+- **Non-GA products:** None (all products are GA)
