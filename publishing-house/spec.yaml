@@ -16,8 +16,8 @@ project:
   automation_type: "gitops"
   description: "See how Lightwell transforms open source vulnerability remediation from a weeks-long manual process into an automated operation using AAP, TPA, TSF and RHAI."
   # content_reviewer_email and infra_reviewer_email are assigned by the RHDP team — not set by the author
-  jira_ticket: ""
-  workflow_id: ""
+  jira_ticket: "RHDPCD-1247"
+  workflow_id: "5be45dfe-5576-468e-bcb2-341444d1a302"
 
 spec:
   title: ""
