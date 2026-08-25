@@ -20,7 +20,7 @@ project:
   workflow_id: "5be45dfe-5576-468e-bcb2-341444d1a302"
 
 spec:
-  title: ""
+  title: "Automated Open Source Vulnerability Remediation with Red Hat Lightwell"
   learning_objectives: []
   modules: []              # [{id, title, duration_min}] — written by intake Phase 4; id is stable (e.g. module-01)
   environment:
@@ -55,8 +55,8 @@ spec:
     external_services: []              # named external service dependencies e.g. [github.com]
     gpu_nodes: 0                       # number of GPU nodes (0 = none)
     gpu_type: ""                       # e.g. NVIDIA A100 40GB (required if gpu_nodes > 0)
-  duration_hours: null
-  audience: ""               # beginner | intermediate | advanced
+  duration_hours: 1.5
+  audience: "intermediate"
 
 development:
   automation:
