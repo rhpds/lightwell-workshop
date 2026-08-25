@@ -1,0 +1,35 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: lightwell-workshop
+  title: lightwell-workshop
+  description: See how Lightwell transforms open source vulnerability remediation
+    from a weeks-long manual process into an automated operation using AAP, TPA,
+    TSF and RHAI.
+  annotations:
+    ph.rhdp.io/content-type: lab
+    ph.rhdp.io/deployment-mode: rhdp_published
+    ph.rhdp.io/github-user: blues-man
+    ph.rhdp.io/owner: nvinto@redhat.com
+    backstage.io/techdocs-ref: dir:.
+    github.com/project-slug: rhpds/lightwell-workshop
+    ph.rhdp.io/created-at: 2026-08-25T09:22:23.897Z
+  tags:
+    - publishing-house
+    - lab
+    - rhdp-published
+  links:
+    - url: https://github.com/rhpds/lightwell-workshop
+      title: Repository
+      icon: github
+    - url: https://devspaces.apps.ocpv-infra02.wdc07.infra.demo.redhat.com#https://github.com/rhpds/lightwell-workshop
+      title: Open in DevSpaces
+      icon: catalog
+    - url: https://central-api-publishing-house.apps.ocpv-infra02.wdc07.infra.demo.redhat.com
+      title: Central
+      icon: dashboard
+spec:
+  type: content
+  lifecycle: experimental
+  owner: rhdp-team
+  system: publishing-house
