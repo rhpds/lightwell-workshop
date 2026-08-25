@@ -21,7 +21,13 @@ project:
 
 spec:
   title: "Get Ready for Lightwell: Patch to Production at the Speed of AI"
-  learning_objectives: []
+  learning_objectives:
+    - "Explore the Lightwell dashboard to interpret automated patch assessments and identify items requiring manual review"
+    - "Analyze CVE impact scope using Red Hat Trusted Profile Analyzer and SBOM data to assess business risk"
+    - "Evaluate and approve AI-generated merge requests produced by the Lightwell Deep Agent"
+    - "Observe a patch moving through the Trusted Software Factory build, sign, and verify pipeline"
+    - "Deploy patched container images across a multi-cluster fleet using Red Hat Advanced Cluster Management and OpenShift GitOps"
+    - "Verify end-to-end remediation closure, including automated ServiceNow ticket resolution"
   modules:
   - id: module-01
     title: "Patch Ingestion — From Lightwell to Artifactory to Ansible"
@@ -46,7 +52,7 @@ spec:
     max_concurrent_users: 20
 
     # --- OCP-specific fields (only when platform = ocp) ---
-    ocp_version: "4.20"
+    ocp_version: "4.22"
     cluster_type: "multinode"
     control_plane_instance_count: 3
     control_plane_cpu: 16
@@ -135,7 +141,6 @@ approval_checklist:
         relevance_score: 58
         why_it_fits: "Covers RHACM multi-cluster management, OpenShift GitOps/ArgoCD, and vulnerability management workflows aligning with the fleet deployment and CVE remediation themes."
         workloads: []
-    catalog_gap: "No existing catalog item covers Red Hat Lightwell as the orchestrating agent for automated patch remediation, nor the Artifactory-triggered Event-Driven Ansible pipeline that drives the workflow. Existing labs treat TPA, RHACM, GitOps, and AAP as separate topics; this lab is the first to unify them into a single end-to-end CVE-to-deploy pipeline with AI-generated merge requests and automated ticket closure."
     rejections: []
 
   infra:

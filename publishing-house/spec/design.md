@@ -23,10 +23,10 @@ Can the lab validate these automatically? No — trust-based.
 
 ## Learning Objectives
 
-1. Navigate the Lightwell dashboard to interpret automated patch assessments and identify items requiring manual review
+1. Explore the Lightwell dashboard to interpret automated patch assessments and identify items requiring manual review
 2. Analyze CVE impact scope using Red Hat Trusted Profile Analyzer and SBOM data to assess business risk
-3. Review and approve AI-generated merge requests produced by the Lightwell Deep Agent
-4. Trace a patch through the Trusted Software Factory build, sign, and verify pipeline
+3. Evaluate and approve AI-generated merge requests produced by the Lightwell Deep Agent
+4. Observe a patch moving through the Trusted Software Factory build, sign, and verify pipeline
 5. Deploy patched container images across a multi-cluster fleet using Red Hat Advanced Cluster Management and OpenShift GitOps
 6. Verify end-to-end remediation closure, including automated ServiceNow ticket resolution
 
@@ -74,7 +74,7 @@ Intermediate
 
 - **Cloud provider:** CNV
 - **Cluster type:** Multinode
-- **OCP version:** 4.20
+- **OCP version:** 4.22
 - **Topology:** Shared-cluster, 20 max concurrent users
 - **Sizing:** 3 control plane (16 vCPU, 64GB RAM); 6 workers (16 vCPU, 64GB RAM, 200GB disk)
 - **Automation approach:** GitOps (Helm + ArgoCD)
