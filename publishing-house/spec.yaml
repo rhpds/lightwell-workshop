@@ -1,59 +1,55 @@
-# Publishing House — Project Spec
-# Lifecycle: intake → content_review → infra_review → jira_sync → development → ready → published
-# No secrets in this file. Tokens live in ~/.config/publishing-house/auth.json
-# Stage is managed by SonataFlow and cached in .ph-state — do not edit stage.current manually.
-# NOTE: This file is also in the template repo. The Scaffolder overlays project.* values.
-# TODO: Eliminate this copy — Scaffolder should pull from template repo directly.
-
 project:
-  slug: "lightwell-workshop"
-  owner_email: "nvinto@redhat.com"
-  content_type: "lab"
-  deployment_mode: "rhdp_published"
-  initiative_key: "rh1_2027"
-  showroom_type: "classic"
-  intake_type: "new"
-  automation_type: "gitops"
-  description: "See how Lightwell transforms open source vulnerability remediation from a weeks-long manual process into an automated operation using AAP, TPA, TSF and RHAI."
-  # content_reviewer_email and infra_reviewer_email are assigned by the RHDP team — not set by the author
-  jira_ticket: "RHDPCD-1247"
-  workflow_id: "5be45dfe-5576-468e-bcb2-341444d1a302"
-
+  slug: lightwell-workshop
+  owner_email: nvinto@redhat.com
+  content_type: lab
+  deployment_mode: rhdp_published
+  initiative_key: rh1_2027
+  showroom_type: classic
+  intake_type: new
+  automation_type: gitops
+  description: See how Lightwell transforms open source vulnerability remediation
+    from a weeks-long manual process into an automated operation using AAP, TPA, TSF
+    and RHAI.
+  jira_ticket: RHDPCD-1247
+  workflow_id: 5be45dfe-5576-468e-bcb2-341444d1a302
 spec:
-  title: "Get Ready for Lightwell: Patch to Production at the Speed of AI"
+  title: 'Get Ready for Lightwell: Patch to Production at the Speed of AI'
   learning_objectives:
-    - "Explore the Lightwell dashboard to interpret automated patch assessments and identify items requiring manual review"
-    - "Analyze CVE impact scope using Red Hat Trusted Profile Analyzer and SBOM data to assess business risk"
-    - "Evaluate and approve AI-generated merge requests produced by the Lightwell Deep Agent"
-    - "Observe a patch moving through the Trusted Software Factory build, sign, and verify pipeline"
-    - "Deploy patched container images across a multi-cluster fleet using Red Hat Advanced Cluster Management and OpenShift GitOps"
-    - "Verify end-to-end remediation closure, including automated ServiceNow ticket resolution"
+  - Explore the Lightwell dashboard to interpret automated patch assessments and identify
+    items requiring manual review
+  - Analyze CVE impact scope using Red Hat Trusted Profile Analyzer and SBOM data
+    to assess business risk
+  - Evaluate and approve AI-generated merge requests produced by the Lightwell Deep
+    Agent
+  - Observe a patch moving through the Trusted Software Factory build, sign, and verify
+    pipeline
+  - Deploy patched container images across a multi-cluster fleet using Red Hat Advanced
+    Cluster Management and OpenShift GitOps
+  - Verify end-to-end remediation closure, including automated ServiceNow ticket resolution
   modules:
   - id: module-01
-    title: "Patch Ingestion — From Lightwell to Artifactory to Ansible"
+    title: "Patch Ingestion \u2014 From Lightwell to Artifactory to Ansible"
     duration_min: 20
     status: not_started
   - id: module-02
-    title: "Vulnerability Analysis with Trusted Profile Analyzer"
+    title: Vulnerability Analysis with Trusted Profile Analyzer
     duration_min: 20
     status: not_started
   - id: module-03
-    title: "AI-Assisted Remediation — Reviewing and Approving Patches"
+    title: "AI-Assisted Remediation \u2014 Reviewing and Approving Patches"
     duration_min: 25
     status: not_started
   - id: module-04
-    title: "Build, Deploy, and Close the Loop"
+    title: Build, Deploy, and Close the Loop
     duration_min: 25
     status: not_started
   environment:
-    platform: "ocp"
-    topology: "shared-cluster"
+    platform: ocp
+    topology: shared-cluster
     cloud_provider: cnv
     max_concurrent_users: 20
-
-    # --- OCP-specific fields (only when platform = ocp) ---
-    ocp_version: "4.22"
-    cluster_type: "multinode"
+    ocp_version: '4.22'
+    cluster_type: multinode
     control_plane_instance_count: 3
     control_plane_cpu: 16
     control_plane_ram_gb: 64
@@ -61,28 +57,24 @@ spec:
     worker_cpu: 16
     worker_ram_gb: 64
     worker_disk_gb: 200
-
-    # --- VM-specific fields (only when platform = rhel-vms) ---
     vms_per_student: []
-
-    # --- Common fields (both platforms) ---
-    aap_version: "latest GA"
-    ai_requirement: "maas"
-    ai_model_tier: "open-source"
-    ai_model_name: "Opus-tier equivalent open-source model via LangChain Deep Agent harness"
-    ai_justification: ""
+    aap_version: latest GA
+    ai_requirement: maas
+    ai_model_tier: open-source
+    ai_model_name: Opus-tier equivalent open-source model via LangChain Deep Agent
+      harness
+    ai_justification: ''
     non_ga_products: []
-    non_ga_access_plan: ""
+    non_ga_access_plan: ''
     external_services:
-      - "Lightwell Network (patch delivery)"
-      - "ServiceNow sandbox"
-      - "quay.io"
-      - "registry.access.redhat.com"
+    - Lightwell Network (patch delivery)
+    - ServiceNow sandbox
+    - quay.io
+    - registry.access.redhat.com
     gpu_nodes: 0
-    gpu_type: ""
+    gpu_type: ''
   duration_hours: 1.5
-  audience: "intermediate"
-
+  audience: intermediate
 development:
   automation:
     gitops:
@@ -91,62 +83,99 @@ development:
     status: not_started
   healthCheck:
     status: not_started
-
 compliance:
   last_hard_check: null
   hard_result: null
-
 tracking:
   paused: false
   pause_reason: null
-
-# Approval checklist — filled collaboratively by author + skill + system + reviewers
 approval_checklist:
-
   content:
     prerequisites_verifiable: false
-    assessment_strategy: ""
-    catalog_gap: "No existing catalog item covers Red Hat Lightwell as the orchestrating agent for automated patch remediation, nor the Artifactory-triggered Event-Driven Ansible pipeline that drives the workflow. Existing labs treat TPA, RHACM, GitOps, and AAP as separate topics; this lab is the first to unify them into a single end-to-end CVE-to-deploy pipeline with AI-generated merge requests and automated ticket closure."
-    design_overview: "This lab puts platform engineers in the role of Dinesh, a security operations engineer at a fictional financial services company, experiencing how Red Hat Lightwell automates open source vulnerability remediation end-to-end. Lightwell patches are ingested via JFrog Artifactory, triggering an Event-Driven Ansible pipeline that drives CVE analysis through Trusted Profile Analyzer, AI-assisted merge requests from the Lightwell Deep Agent on OpenShift AI, container build and signing via Trusted Software Factory, and multi-cluster deployment through RHACM and OpenShift GitOps. In 90 minutes, participants work through the complete patch-to-production workflow and observe automated ServiceNow ticket closure."
+    assessment_strategy: ''
+    catalog_gap: No existing catalog item covers Red Hat Lightwell as the orchestrating
+      agent for automated patch remediation, nor the Artifactory-triggered Event-Driven
+      Ansible pipeline that drives the workflow. Existing labs treat TPA, RHACM, GitOps,
+      and AAP as separate topics; this lab is the first to unify them into a single
+      end-to-end CVE-to-deploy pipeline with AI-generated merge requests and automated
+      ticket closure.
+    design_overview: This lab puts platform engineers in the role of Dinesh, a security
+      operations engineer at a fictional financial services company, experiencing
+      how Red Hat Lightwell automates open source vulnerability remediation end-to-end.
+      Lightwell patches are ingested via JFrog Artifactory, triggering an Event-Driven
+      Ansible pipeline that drives CVE analysis through Trusted Profile Analyzer,
+      AI-assisted merge requests from the Lightwell Deep Agent on OpenShift AI, container
+      build and signing via Trusted Software Factory, and multi-cluster deployment
+      through RHACM and OpenShift GitOps. In 90 minutes, participants work through
+      the complete patch-to-production workflow and observe automated ServiceNow ticket
+      closure.
     module_summaries:
-      - title: "Patch Ingestion — From Lightwell to Artifactory to Ansible"
-        overview: "Participants orient to the Lightwell dashboard, review what was auto-processed overnight versus flagged for expert review, and trace how a patch delivery into JFrog Artifactory triggered the Event-Driven Ansible workflow."
-      - title: "Vulnerability Analysis with Trusted Profile Analyzer"
-        overview: "Participants use Red Hat Trusted Profile Analyzer to investigate the blast radius of a flagged CVE, examine SBOM lineage to identify impacted components, and interpret business risk context before the patch proceeds to AI-assisted remediation."
-      - title: "AI-Assisted Remediation — Reviewing and Approving Patches"
-        overview: "Participants review risk assessments and merge requests generated by the Lightwell Deep Agent on OpenShift AI, inspect diffs in GitLab, and approve patches to advance through the build pipeline."
-      - title: "Build, Deploy, and Close the Loop"
-        overview: "Participants observe the Trusted Software Factory build and image-signing pipeline, watch RHACM and OpenShift GitOps deploy the patched image across the multi-cluster fleet, and verify that TPA clears the CVE and ServiceNow auto-closes the related ticket."
+    - title: "Patch Ingestion \u2014 From Lightwell to Artifactory to Ansible"
+      overview: Participants orient to the Lightwell dashboard, review what was auto-processed
+        overnight versus flagged for expert review, and trace how a patch delivery
+        into JFrog Artifactory triggered the Event-Driven Ansible workflow.
+    - title: Vulnerability Analysis with Trusted Profile Analyzer
+      overview: Participants use Red Hat Trusted Profile Analyzer to investigate the
+        blast radius of a flagged CVE, examine SBOM lineage to identify impacted components,
+        and interpret business risk context before the patch proceeds to AI-assisted
+        remediation.
+    - title: "AI-Assisted Remediation \u2014 Reviewing and Approving Patches"
+      overview: Participants review risk assessments and merge requests generated
+        by the Lightwell Deep Agent on OpenShift AI, inspect diffs in GitLab, and
+        approve patches to advance through the build pipeline.
+    - title: Build, Deploy, and Close the Loop
+      overview: Participants observe the Trusted Software Factory build and image-signing
+        pipeline, watch RHACM and OpenShift GitOps deploy the patched image across
+        the multi-cluster fleet, and verify that TPA clears the CVE and ServiceNow
+        auto-closes the related ticket.
     rcars_overlap_pct: 76
     rcars_top_matches:
-      - title: "Product Enablement: Red Hat Advanced Developer Suite (TL3)"
-        ci_name: "pert.redhat-rhads.prod"
-        url: "https://catalog.demo.redhat.com/catalog?item=pert.redhat-rhads.prod"
-        relevance_score: 76
-        why_it_fits: "Covers TPA, OpenShift GitOps/ArgoCD, and software supply chain security workflows central to this scenario; platform engineers gain hands-on depth in TPA vulnerability management and GitOps-driven deployment patterns."
-        workloads:
-          - role: "ocp4_workload_cert_manager"
-            collection: "agnosticd.core_workloads"
-          - role: "ocp4_workload_external_odf"
-            collection: "agnosticd.core_workloads"
-      - title: "Product Enablement: Red Hat Advanced Developer Suite on RHEL (TL3)"
-        ci_name: "openshift-cnv.rhads-rhel-lab.prod"
-        url: "https://catalog.demo.redhat.com/catalog?item=openshift-cnv.rhads-rhel-lab.prod"
-        relevance_score: 62
-        why_it_fits: "Covers TPA and AAP including CVE/vulnerability analysis via SBOM ingestion into TPA — directly relevant to the analyze-CVE objective."
-        workloads: []
-      - title: "Hands-on lab with Red Hat OpenShift Platform Plus (2025)"
-        ci_name: "sandboxes-gpte.opp-hol.prod"
-        url: "https://catalog.demo.redhat.com/catalog?item=sandboxes-gpte.opp-hol.prod"
-        relevance_score: 58
-        why_it_fits: "Covers RHACM multi-cluster management, OpenShift GitOps/ArgoCD, and vulnerability management workflows aligning with the fleet deployment and CVE remediation themes."
-        workloads: []
-    rejections: []
-
+    - title: 'Product Enablement: Red Hat Advanced Developer Suite (TL3)'
+      ci_name: pert.redhat-rhads.prod
+      url: https://catalog.demo.redhat.com/catalog?item=pert.redhat-rhads.prod
+      relevance_score: 76
+      why_it_fits: Covers TPA, OpenShift GitOps/ArgoCD, and software supply chain
+        security workflows central to this scenario; platform engineers gain hands-on
+        depth in TPA vulnerability management and GitOps-driven deployment patterns.
+      workloads:
+      - role: ocp4_workload_cert_manager
+        collection: agnosticd.core_workloads
+      - role: ocp4_workload_external_odf
+        collection: agnosticd.core_workloads
+    - title: 'Product Enablement: Red Hat Advanced Developer Suite on RHEL (TL3)'
+      ci_name: openshift-cnv.rhads-rhel-lab.prod
+      url: https://catalog.demo.redhat.com/catalog?item=openshift-cnv.rhads-rhel-lab.prod
+      relevance_score: 62
+      why_it_fits: "Covers TPA and AAP including CVE/vulnerability analysis via SBOM\
+        \ ingestion into TPA \u2014 directly relevant to the analyze-CVE objective."
+      workloads: []
+    - title: Hands-on lab with Red Hat OpenShift Platform Plus (2025)
+      ci_name: sandboxes-gpte.opp-hol.prod
+      url: https://catalog.demo.redhat.com/catalog?item=sandboxes-gpte.opp-hol.prod
+      relevance_score: 58
+      why_it_fits: Covers RHACM multi-cluster management, OpenShift GitOps/ArgoCD,
+        and vulnerability management workflows aligning with the fleet deployment
+        and CVE remediation themes.
+      workloads: []
+    rejections:
+    - id: 7b7d5ee3-71b5-4ffe-91c9-75b5278b85b6
+      text: This should be closer to 2 hours, not ~90 minutes
+      resolved: false
+      reviewer: nstephan@redhat.com
+      timestamp: '2026-08-25T14:27:37.447618+00:00'
+    - id: 81f327f8-3e38-4a85-bb72-0f95e05acf6d
+      text: This is going to be a hot topic, so take the time to explain the CVEs,
+        SBOMs, patch workflows concepts instead of assuming that everyone understands
+        even when they don't. You can do a steep climb after that, but make sure the
+        basics are well understood - especially since a lot of the advanced stuff
+        is "magic".
+      resolved: false
+      reviewer: nstephan@redhat.com
+      timestamp: '2026-08-25T14:27:37.447618+00:00'
   infra:
     peak_environments: null
-    cost_per_run_est: ""
-    provisioning_time_est: ""
-    agnosticv_base_ci: ""
-    approved_by: ""
+    cost_per_run_est: ''
+    provisioning_time_est: ''
+    agnosticv_base_ci: ''
+    approved_by: ''
     rejections: []
