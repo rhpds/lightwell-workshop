@@ -8,7 +8,7 @@ Armed with TPA's environmental impact findings, the Lightwell Deep Agent has gen
 
 - **Target persona:** Platform engineers and security-focused operations engineers with intermediate OpenShift and CI/CD experience
 - **Prerequisites for this module:** Completion of Modules 01 and 02; basic familiarity with merge request review in a Git-based workflow
-- **Estimated duration:** 25 minutes
+- **Estimated duration:** 30 minutes
 
 ## Learning Objectives
 
@@ -22,9 +22,9 @@ Armed with TPA's environmental impact findings, the Lightwell Deep Agent has gen
 
 | Section | Title | Duration |
 |---------|-------|----------|
-| 1 | Reviewing Deep Agent Risk Assessments | 7 min |
-| 2 | Examining AI-Generated Merge Requests in GitLab | 10 min |
-| 3 | Approving Patches and Submitting for Build | 8 min |
+| 1 | Reviewing Deep Agent Risk Assessments | 8 min |
+| 2 | Examining AI-Generated Merge Requests in GitLab | 12 min |
+| 3 | Approving Patches and Submitting for Build | 10 min |
 
 ## Detailed Steps
 

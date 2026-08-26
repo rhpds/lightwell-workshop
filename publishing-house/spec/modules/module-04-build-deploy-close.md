@@ -8,7 +8,7 @@ With patches approved in Module 03, the final module traces the end-to-end path 
 
 - **Target persona:** Platform engineers and security-focused operations engineers with intermediate OpenShift and CI/CD experience
 - **Prerequisites for this module:** Completion of Modules 01–03; familiarity with CI/CD pipeline concepts and basic GitOps principles
-- **Estimated duration:** 25 minutes
+- **Estimated duration:** 30 minutes
 
 ## Learning Objectives
 
@@ -24,8 +24,8 @@ With patches approved in Module 03, the final module traces the end-to-end path 
 | Section | Title | Duration |
 |---------|-------|----------|
 | 1 | Tracing the Build and Sign Pipeline in Trusted Software Factory | 8 min |
-| 2 | Deploying Patched Images via RHACM and OpenShift GitOps | 10 min |
-| 3 | Verifying End-to-End Closure and ServiceNow Resolution | 7 min |
+| 2 | Deploying Patched Images via RHACM and OpenShift GitOps | 13 min |
+| 3 | Verifying End-to-End Closure and ServiceNow Resolution | 9 min |
 
 ## Detailed Steps
 

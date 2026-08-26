@@ -27,21 +27,25 @@ spec:
     Cluster Management and OpenShift GitOps
   - Verify end-to-end remediation closure, including automated ServiceNow ticket resolution
   modules:
+  - id: module-00
+    title: "CVEs, SBOMs, and the Patch Workflow \u2014 Foundations"
+    duration_min: 5
+    status: not_started
   - id: module-01
     title: "Patch Ingestion \u2014 From Lightwell to Artifactory to Ansible"
-    duration_min: 20
+    duration_min: 25
     status: not_started
   - id: module-02
-    title: Vulnerability Analysis with Trusted Profile Analyzer
-    duration_min: 20
+    title: "Vulnerability Analysis with Trusted Profile Analyzer"
+    duration_min: 30
     status: not_started
   - id: module-03
     title: "AI-Assisted Remediation \u2014 Reviewing and Approving Patches"
-    duration_min: 25
+    duration_min: 30
     status: not_started
   - id: module-04
-    title: Build, Deploy, and Close the Loop
-    duration_min: 25
+    title: "Build, Deploy, and Close the Loop"
+    duration_min: 30
     status: not_started
   environment:
     platform: ocp
@@ -73,7 +77,7 @@ spec:
     - registry.access.redhat.com
     gpu_nodes: 0
     gpu_type: ''
-  duration_hours: 1.5
+  duration_hours: 2.0
   audience: intermediate
 development:
   automation:
@@ -110,6 +114,8 @@ approval_checklist:
       the complete patch-to-production workflow and observe automated ServiceNow ticket
       closure.
     module_summaries:
+    - title: "CVEs, SBOMs, and the Patch Workflow \u2014 Foundations"
+      overview: "A 5-minute orientation covering what CVEs are and how they are scored, what SBOMs are and how they enable precise impact analysis, and why traditional patch workflows take weeks \u2014 establishing the conceptual foundation before participants engage with Lightwell's automation."
     - title: "Patch Ingestion \u2014 From Lightwell to Artifactory to Ansible"
       overview: Participants orient to the Lightwell dashboard, review what was auto-processed
         overnight versus flagged for expert review, and trace how a patch delivery
@@ -160,7 +166,7 @@ approval_checklist:
     rejections:
     - id: 7b7d5ee3-71b5-4ffe-91c9-75b5278b85b6
       text: This should be closer to 2 hours, not ~90 minutes
-      resolved: false
+      resolved: true
       reviewer: nstephan@redhat.com
       timestamp: '2026-08-25T14:27:37.447618+00:00'
     - id: 81f327f8-3e38-4a85-bb72-0f95e05acf6d
@@ -169,7 +175,7 @@ approval_checklist:
         even when they don't. You can do a steep climb after that, but make sure the
         basics are well understood - especially since a lot of the advanced stuff
         is "magic".
-      resolved: false
+      resolved: true
       reviewer: nstephan@redhat.com
       timestamp: '2026-08-25T14:27:37.447618+00:00'
   infra:

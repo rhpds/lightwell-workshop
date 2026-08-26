@@ -52,13 +52,13 @@ Lab
 
 | Module | Title | Duration |
 |--------|-------|----------|
-| 1 | Patch Ingestion — From Lightwell to Artifactory to Ansible | 20 min |
-| 2 | Vulnerability Analysis with Trusted Profile Analyzer | 20 min |
-| 3 | AI-Assisted Remediation — Reviewing and Approving Patches | 25 min |
-| 4 | Build, Deploy, and Close the Loop | 25 min |
-| — | **Total hands-on** | **90 min** |
-| — | Intro / orientation | ~5 min |
-| — | **Total lab** | **~95 min** |
+| 0 | CVEs, SBOMs, and the Patch Workflow — Foundations | 5 min |
+| 1 | Patch Ingestion — From Lightwell to Artifactory to Ansible | 25 min |
+| 2 | Vulnerability Analysis with Trusted Profile Analyzer | 30 min |
+| 3 | AI-Assisted Remediation — Reviewing and Approving Patches | 30 min |
+| 4 | Build, Deploy, and Close the Loop | 30 min |
+| — | **Total hands-on** | **120 min** |
+| — | **Total lab** | **~2 hours** |
 
 ## Difficulty Level
 

@@ -7,8 +7,8 @@ Participants step into the role of Dinesh, a platform engineer who arrives to fi
 ## Audience and Time
 
 - **Target persona:** Platform engineers and security-focused operations engineers with intermediate OpenShift and CI/CD experience
-- **Prerequisites for this module:** Basic familiarity with OpenShift namespaces and console navigation; conceptual understanding of CVEs and patch workflows
-- **Estimated duration:** 20 minutes
+- **Prerequisites for this module:** Completion of Module 00 (CVEs, SBOMs, and the Patch Workflow — Foundations); basic familiarity with OpenShift namespaces and console navigation
+- **Estimated duration:** 25 minutes
 
 ## Learning Objectives
 
@@ -22,8 +22,8 @@ Participants step into the role of Dinesh, a platform engineer who arrives to fi
 | Section | Title | Duration |
 |---------|-------|----------|
 | 1 | Morning Review: Orienting to the Pre-Deployed Environment | 5 min |
-| 2 | Navigating the Lightwell Dashboard | 8 min |
-| 3 | Tracing the EDA Trigger from Artifactory | 7 min |
+| 2 | Navigating the Lightwell Dashboard | 10 min |
+| 3 | Tracing the EDA Trigger from Artifactory | 10 min |
 
 ## Detailed Steps
 
