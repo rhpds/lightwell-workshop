@@ -3,6 +3,7 @@
 Welcome to the project spec. Use the navigation to browse the design and module outlines.
 
 - [Design Spec](design.md)
+- [Module 0 - Concepts](modules/module-00-concepts.md)
 - [Module 1 - Patch Ingestion](modules/module-01-patch-ingestion.md)
 - [Module 2 - Vulnerability Analysis](modules/module-02-vulnerability-analysis.md)
 - [Module 3 - Ai Assisted Remediation](modules/module-03-ai-assisted-remediation.md)
