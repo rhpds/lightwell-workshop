@@ -1,5 +1,18 @@
-= My Lab Title
+= Get Ready for Lightwell: Patch to Production at the Speed of AI
 
-This project was created with the RHDP Publishing House template.
+This lab demonstrates how Red Hat Lightwell transforms open source vulnerability remediation from a weeks-long manual process into a continuous, policy-driven automated operation.
 
-Run `/rhdp-publishing-house` in Claude Code to begin.
+Step into the role of Dinesh, a platform engineer at a fictional financial services company, arriving to find that Lightwell has already processed 298 patches across 29 applications overnight. Work through the flagged high-risk items and observe the full remediation pipeline — from patch ingestion through AI-assisted review, build, multi-cluster deployment, and automated ticket closure.
+
+== Lab Modules
+
+[cols="1,4,1",options="header"]
+|===
+| Module | Title | Duration
+| 0 | xref:module-00-concepts.adoc[CVEs, SBOMs, and the Patch Workflow — Foundations] | 5 min
+| 1 | xref:module-01-patch-ingestion.adoc[Patch Ingestion — From Lightwell to Artifactory to Ansible] | 25 min
+| 2 | xref:module-02-vulnerability-analysis.adoc[Vulnerability Analysis with Trusted Profile Analyzer] | 30 min
+| 3 | xref:module-03-ai-assisted-remediation.adoc[AI-Assisted Remediation — Reviewing and Approving Patches] | 30 min
+| 4 | xref:module-04-build-deploy-close.adoc[Build, Deploy, and Close the Loop] | 30 min
+| | *Total* | *~2 hours*
+|===

@@ -1,0 +1,12 @@
+= Module 0: CVEs, SBOMs, and the Patch Workflow — Foundations
+:navtitle: Module 0: Foundations
+
+*Duration:* 5 minutes
+
+Before diving into Lightwell's automation, this module establishes the foundational concepts that make the rest of the lab meaningful: what CVEs are and how severity is scored, what SBOMs are and how they enable precise impact analysis, and why traditional patch workflows take weeks.
+
+== What is a CVE?
+
+== What is an SBOM and Why Does it Matter?
+
+== The Traditional Patch Workflow — Why it Takes Weeks

@@ -1,0 +1,12 @@
+= Module 4: Build, Deploy, and Close the Loop
+:navtitle: Module 4: Build, Deploy, and Close the Loop
+
+*Duration:* 30 minutes
+
+Participants observe the Trusted Software Factory compile, sign, and verify patched container images, watch RHACM and OpenShift GitOps deploy them across the multi-cluster fleet, and verify that ServiceNow tickets are automatically closed.
+
+== Tracing the Build and Sign Pipeline in Trusted Software Factory
+
+== Deploying Patched Images via RHACM and OpenShift GitOps
+
+== Verifying End-to-End Closure and ServiceNow Resolution

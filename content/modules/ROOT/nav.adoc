@@ -1,1 +1,6 @@
 * xref:index.adoc[Lab Overview]
+* xref:module-00-concepts.adoc[Module 0: CVEs, SBOMs, and the Patch Workflow]
+* xref:module-01-patch-ingestion.adoc[Module 1: Patch Ingestion]
+* xref:module-02-vulnerability-analysis.adoc[Module 2: Vulnerability Analysis]
+* xref:module-03-ai-assisted-remediation.adoc[Module 3: AI-Assisted Remediation]
+* xref:module-04-build-deploy-close.adoc[Module 4: Build, Deploy, and Close the Loop]

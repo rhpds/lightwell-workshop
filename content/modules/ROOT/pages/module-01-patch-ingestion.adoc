@@ -1,0 +1,12 @@
+= Module 1: Patch Ingestion — From Lightwell to Artifactory to Ansible
+:navtitle: Module 1: Patch Ingestion
+
+*Duration:* 25 minutes
+
+Participants step into the role of Dinesh and orient to the pre-deployed environment, explore the Lightwell dashboard, and trace the automated ingestion pipeline from Lightwell patch delivery into JFrog Artifactory through to the Event-Driven Ansible trigger.
+
+== Morning Review: Orienting to the Pre-Deployed Environment
+
+== Navigating the Lightwell Dashboard
+
+== Tracing the EDA Trigger from Artifactory
