@@ -35,14 +35,13 @@ if [[ -n "${LIGHTWELL_RESET_GUID:-}" ]]; then
     local user="${LIGHTWELL_TENANT_USER:-user-${guid}}"
     echo "==> Removing tenant ${guid} (${user})..."
     oc delete application "lightwell-tenant-${guid}" -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
-    oc delete application "sdlc-tenant-${guid}" -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
     delete_tenant_cross_ns_rbac "$guid"
     oc delete clusterrolebinding "anyuid-nexus-${guid}" --ignore-not-found 2>/dev/null || true
-    for ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "${user}-app"; do
+    for ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "sdlc-${guid}" "${user}-app"; do
       oc delete namespace "$ns" --wait=false 2>/dev/null || true
     done
     if [[ "${LIGHTWELL_RESET_SDLC:-0}" == "1" ]]; then
-      oc delete namespace "sdlc-control-plane-${guid}" --ignore-not-found --wait=false 2>/dev/null || true
+      oc delete namespace "sdlc-control-plane" "sdlc-control-plane-${guid}" --ignore-not-found --wait=false 2>/dev/null || true
     fi
   }
   delete_one_tenant "${LIGHTWELL_RESET_GUID}"
@@ -68,14 +67,13 @@ delete_one_tenant() {
   local user="${LIGHTWELL_TENANT_USER:-user-${guid}}"
   echo "==> Removing tenant ${guid} (${user})..."
   oc delete application "lightwell-tenant-${guid}" -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
-  oc delete application "sdlc-tenant-${guid}" -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
   delete_tenant_cross_ns_rbac "$guid"
   oc delete clusterrolebinding "anyuid-nexus-${guid}" --ignore-not-found 2>/dev/null || true
-  for ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "${user}-app"; do
+  for ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "sdlc-${guid}" "${user}-app"; do
     oc delete namespace "$ns" --wait=false 2>/dev/null || true
   done
   if [[ "${LIGHTWELL_RESET_SDLC:-0}" == "1" ]]; then
-    oc delete namespace "sdlc-control-plane-${guid}" --ignore-not-found --wait=false 2>/dev/null || true
+    oc delete namespace "sdlc-control-plane" "sdlc-control-plane-${guid}" --ignore-not-found --wait=false 2>/dev/null || true
   fi
 }
 
@@ -91,7 +89,7 @@ if [[ "${LIGHTWELL_RESET_SDLC:-0}" == "1" ]]; then
   while IFS= read -r ns; do
     [[ -z "$ns" ]] && continue
     oc delete namespace "$ns" --wait=false 2>/dev/null || true
-  done < <(oc get ns -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -E '^sdlc-control-plane-' || true)
+  done < <(oc get ns -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -E '^sdlc-' || true)
 fi
 
 if [[ "${LIGHTWELL_RESET_TENANTS:-0}" == "1" ]]; then

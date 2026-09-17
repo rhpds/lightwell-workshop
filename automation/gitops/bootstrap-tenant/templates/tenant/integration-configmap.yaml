@@ -18,7 +18,11 @@ data:
   REMEDIATION_APP_GITLAB_PATH: {{ include "bootstrap-tenant.demoProjectPath" . | quote }}
   NEXUS_NAMESPACE: {{ include "bootstrap-tenant.nexusNamespace" . | quote }}
   NEXUS_WEBHOOK_REPOSITORIES: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
-  EDA_WEBHOOK_URL: {{ .Values.sdlc.edaWebhookUrl | quote }}
+  EDA_WEBHOOK_URL: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
+  EDA_WEBHOOK_ROUTE_URL: {{ include "bootstrap-tenant.edaWebhookRouteUrl" . | quote }}
+  GITLAB_WEBHOOK_TARGET_URL: {{ include "bootstrap-tenant.gitlabWebhookTargetUrl" . | quote }}
+  AAP_CONTROLLER_URL: {{ include "bootstrap-tenant.aapControllerUrl" . | quote }}
+  SDLC_NAMESPACE: {{ include "bootstrap-tenant.sdlcNamespace" . | quote }}
   EDA_PROJECT_NAME: {{ include "bootstrap-tenant.edaProjectName" . | quote }}
   EDA_PROJECT_SCM_URL: {{ .Values.sdlc.scmUrl | quote }}
   EDA_RULEBOOK_NAME: {{ .Values.sdlc.rulebookName | quote }}
@@ -26,7 +30,7 @@ data:
   EDA_DECISION_ENV_NAME: {{ .Values.sdlc.decisionEnvName | quote }}
   EDA_DECISION_ENV_IMAGE: {{ .Values.sdlc.decisionEnvImage | quote }}
   EDA_ORGANIZATION_NAME: {{ include "bootstrap-tenant.aapOrg" . | quote }}
-  OPENCODE_BASE_URL: {{ .Values.sdlc.opencodeBaseUrl | quote }}
+  OPENCODE_BASE_URL: {{ include "bootstrap-tenant.opencodeBaseUrl" . | quote }}
   OPENCODE_SERVER_USERNAME: {{ .Values.sdlc.opencodeServerUsername | quote }}
   NEXUS_URL: {{ include "bootstrap-tenant.nexusRouteUrl" . | quote }}
   AAP_ORG: {{ include "bootstrap-tenant.aapOrg" . | quote }}
@@ -40,5 +44,5 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 data:
   NEXUS_WEBHOOK_REPOSITORIES: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
-  EDA_WEBHOOK_URL: {{ .Values.sdlc.edaWebhookUrl | quote }}
-  SKIP_WEBHOOK_SETUP: {{ if .Values.sdlc.edaWebhookUrl }}"false"{{ else }}"true"{{ end }}
+  EDA_WEBHOOK_URL: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
+  SKIP_WEBHOOK_SETUP: {{ if .Values.sdlc.enabled }}"false"{{ else }}"true"{{ end }}

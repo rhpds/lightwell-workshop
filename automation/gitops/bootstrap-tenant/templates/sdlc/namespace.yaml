@@ -1,0 +1,11 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  labels:
+    lightwell.guid: {{ .Values.guid | quote }}
+    app.kubernetes.io/part-of: lightwell-bootstrap-tenant
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+{{- end }}

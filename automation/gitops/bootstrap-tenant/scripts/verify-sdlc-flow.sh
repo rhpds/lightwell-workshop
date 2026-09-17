@@ -18,7 +18,7 @@ SMOKE_RULES=false
 CLEANUP=false
 AAP_NS="${AAP_NAMESPACE:-aap}"
 GITLAB_NS="${GITLAB_NAMESPACE:-gitlab}"
-SDLC_NS="${SDLC_NAMESPACE:-sdlc-control-plane}"
+SDLC_NS="${SDLC_NAMESPACE:-}"
 STATE_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -66,6 +66,12 @@ cm_get() {
 }
 
 load_config() {
+  if [[ -z "${SDLC_NS}" ]]; then
+    SDLC_NS="$(cm_get SDLC_NAMESPACE)"
+  fi
+  if [[ -z "${SDLC_NS}" ]]; then
+    SDLC_NS="sdlc-${GUID}"
+  fi
   EDA_WEBHOOK_URL="$(cm_get EDA_WEBHOOK_URL)"
   EDA_ACTIVATION_NAME="$(cm_get EDA_ACTIVATION_NAME)"
   EDA_PROJECT_NAME="$(cm_get EDA_PROJECT_NAME)"

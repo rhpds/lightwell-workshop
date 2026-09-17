@@ -2,7 +2,7 @@
 
 Helm chart deployed on **shared lab clusters** via AgnosticV → Argo CD (cluster `ocp4_workload_gitops_bootstrap` → `lightwell-workshop`, this path).
 
-Supports the **lw-demo-test-agents** remediation loop with **shared** GitLab, AAP/EDA, and TPA. **Nexus is per-tenant** — see `../bootstrap-tenant/`.
+Supports the Lightwell SDLC demo with **shared** GitLab, AAP/EDA, and TPA. **Nexus and SDLC control plane are per-tenant** — see `../bootstrap-tenant/`.
 
 ## Components
 
@@ -24,7 +24,7 @@ Supports the **lw-demo-test-agents** remediation loop with **shared** GitLab, AA
 | `deployer.storageClass` | PVCs (GitLab, TPA DB, …) |
 | `admin.password` | Shared bootstrap password (AAP admin, TPA DB, Keycloak walker secret) |
 
-Nexus repo/webhook reconcile: `lw-demo-test-agents/gitops/nexus/` **per tenant** after `bootstrap-tenant` sync.
+Nexus webhooks and OpenCode: **`bootstrap-tenant`** chart (no separate SDLC Argo apps).
 
 ## Local validation
 

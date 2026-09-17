@@ -59,7 +59,7 @@ fi
 
 echo ""
 echo "Tenant checks (after bootstrap-tenant):"
-echo "  ./automation/gitops/scripts/verify-bootstrap-tenant.sh <guid>"
+echo "  ./automation/gitops/bootstrap-tenant/scripts/verify-bootstrap-tenant.sh <guid>"
 
 echo ""
 echo "Summary: $ok passed, $fail failed (some FAILs are expected while pods/operators are still starting)"

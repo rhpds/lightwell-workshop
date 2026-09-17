@@ -11,11 +11,13 @@ jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
 aap:
   namespace: aap
   org: "" # default user-{guid} via template helper
+  controllerUrl: "" # default https://aap-{namespace}.{deployer.domain}
 
 gitlab:
   namespace: gitlab
   group: lightwell
   demoProjectPath: "" # default lightwell/lw-demo-help-app-{guid}
+  pat: "" # optional; OpenCode uses password when unset
 
 keycloak:
   url: "" # default https://sso.{deployer.domain}
@@ -40,13 +42,19 @@ nexus:
 
 sdlc:
   enabled: true
+  namespace: "" # default sdlc-{guid}; set sdlc-control-plane only for legacy single-tenant labs
   scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git # must contain rulebooks/ for EDA import
   projectName: "" # default SDLC {guid}
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
   decisionEnvImage: quay.io/ansible/ansible-rulebook:main
   rulebookName: sdlc-remediation.yml
-  edaWebhookUrl: "" # set when known; empty skips Nexus webhooks (repos still created)
-  opencodeBaseUrl: http://opencode.sdlc-control-plane.svc.cluster.local:4096
+  edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
+  edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
+  gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
+  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-59ffb92
+  opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
+  llm:
+    apiKey: "" # when set, chart creates secret opencode-llm (optional for demos)
