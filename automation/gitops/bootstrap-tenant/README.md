@@ -49,6 +49,12 @@ Rulebooks, playbooks, and `gitops/sdlc-eda/bootstrap-aap-eda.py` live in the **s
 ## Validate
 
 ```bash
+./automation/gitops/scripts/verify-bootstrap-tenant.sh <guid>
+./automation/gitops/scripts/verify-sdlc-flow.sh <guid>           # OpenCode + EDA + webhooks + JTs
+./automation/gitops/scripts/verify-sdlc-flow.sh <guid> --smoke --smoke-rules --cleanup  # optional end-to-end probe
+```
+
+```bash
 helm lint automation/gitops/bootstrap-tenant/
 helm template tenant-test automation/gitops/bootstrap-tenant/ \
   --set guid=demo1 --set username=user-demo1 --set password=test \
