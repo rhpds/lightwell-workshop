@@ -42,6 +42,10 @@ sdlc:
   edaWebhookUrl: ""   # set after first EDA activation or from cluster-config
 ```
 
+## EDA SCM source (canonical repo)
+
+Rulebooks, playbooks, and `gitops/sdlc-eda/bootstrap-aap-eda.py` live in the **sibling clone** [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) under `lightwell-demo-lab` (remote `github.com/sshaaf/lw-sdlc-opencode`). Edit there, push `main`, then re-sync the tenant EDA project or re-run `eda-bootstrap`. Chart value `sdlc.scmUrl` points at that GitHub URL.
+
 ## Validate
 
 ```bash

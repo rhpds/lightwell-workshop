@@ -19,7 +19,7 @@
 {{- end -}}
 
 {{- define "bootstrap-tenant.tpaUrl" -}}
-{{- .Values.tpa.url | default (printf "https://trustify.%s" .Values.deployer.domain) -}}
+{{- .Values.tpa.url | default (printf "https://server-%s.%s" (.Values.tpa.namespace | default "lightwell-tpa") .Values.deployer.domain) -}}
 {{- end -}}
 
 {{- define "bootstrap-tenant.demoProjectPath" -}}

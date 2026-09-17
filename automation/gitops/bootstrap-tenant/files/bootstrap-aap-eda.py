@@ -70,8 +70,157 @@ def find_by_name(results: list, name: str) -> dict:
     return {}
 
 
+SDLC_JOB_TEMPLATES = [
+    ("SDLC Query TPA", "playbooks/query-tpa.yml"),
+    ("SDLC Trigger Impact Analyzer", "playbooks/trigger-impact-analyzer.yml"),
+    ("SDLC Trigger MR Verifier", "playbooks/trigger-mr-verifier.yml"),
+]
+
+
+def ensure_controller_playbooks(
+    user: str,
+    password: str,
+    base: str,
+    controller_org_id: int,
+    scm_url: str,
+    project_name: str,
+) -> tuple[int, int]:
+    """Create Controller SCM project + localhost job templates for run_job_template actions."""
+    code, invs = aap_request(
+        "GET",
+        "/api/controller/v2/inventories/?page_size=50",
+        user,
+        password,
+        base,
+    )
+    inventory_id = 0
+    if code == 200 and isinstance(invs, dict):
+        for inv in invs.get("results", []):
+            if inv.get("organization") == controller_org_id:
+                inventory_id = int(inv["id"])
+                break
+        if not inventory_id:
+            for inv in invs.get("results", []):
+                if inv.get("name") == "Demo Inventory":
+                    inventory_id = int(inv["id"])
+                    break
+        if not inventory_id and invs.get("results"):
+            inventory_id = int(invs["results"][0]["id"])
+    if not inventory_id:
+        inventory_id = 1
+
+    code, projects = aap_request(
+        "GET",
+        f"/api/controller/v2/projects/?search={urllib.parse.quote(project_name)}",
+        user,
+        password,
+        base,
+    )
+    project = find_by_name(projects.get("results", []) if isinstance(projects, dict) else [], project_name)
+    if not project:
+        code, created = aap_request(
+            "POST",
+            "/api/controller/v2/projects/",
+            user,
+            password,
+            base,
+            {
+                "name": project_name,
+                "description": "SDLC remediation playbooks (same SCM as EDA project)",
+                "organization": controller_org_id,
+                "scm_type": "git",
+                "scm_url": scm_url,
+                "scm_clean": True,
+                "scm_update_on_launch": True,
+            },
+        )
+        if code in (200, 201) and isinstance(created, dict):
+            project = created
+        elif code == 400:
+            code, projects = aap_request("GET", "/api/controller/v2/projects/", user, password, base)
+            project = find_by_name(projects.get("results", []), project_name)
+    project_id = int(project.get("id", 0))
+    if not project_id:
+        print("ERROR: Controller project missing", file=sys.stderr)
+        sys.exit(1)
+    aap_request("POST", f"/api/controller/v2/projects/{project_id}/update/", user, password, base)
+    for attempt in range(30):
+        code, st = aap_request("GET", f"/api/controller/v2/projects/{project_id}/", user, password, base)
+        if code == 200 and isinstance(st, dict) and st.get("status") in ("successful", "failed"):
+            break
+        time.sleep(2)
+
+    code, jts = aap_request("GET", "/api/controller/v2/job_templates/?page_size=200", user, password, base)
+    existing = {j.get("name"): j for j in (jts.get("results", []) if isinstance(jts, dict) else [])}
+    for jt_name, playbook in SDLC_JOB_TEMPLATES:
+        if jt_name in existing:
+            continue
+        code, created = aap_request(
+            "POST",
+            "/api/controller/v2/job_templates/",
+            user,
+            password,
+            base,
+            {
+                "name": jt_name,
+                "description": f"SDLC remediation — {playbook}",
+                "job_type": "run",
+                "inventory": inventory_id,
+                "project": project_id,
+                "playbook": playbook,
+                "organization": controller_org_id,
+                "ask_variables_on_launch": True,
+            },
+        )
+        if code not in (200, 201, 400):
+            print(f"WARNING: job template {jt_name}: {code} {created}", file=sys.stderr)
+    print(f"Controller project id={project_id}, inventory id={inventory_id}")
+    return project_id, inventory_id
+
+
+def ensure_eda_controller_credential(
+    user: str,
+    password: str,
+    base: str,
+    eda_org_id: int,
+    cred_name: str,
+) -> int:
+    code, creds = aap_request("GET", "/api/eda/v1/eda-credentials/", user, password, base)
+    cred = find_by_name(creds.get("results", []) if isinstance(creds, dict) else [], cred_name)
+    if cred.get("id"):
+        return int(cred["id"])
+    controller_host = base.rstrip("/") + "/api/controller/"
+    code, created = aap_request(
+        "POST",
+        "/api/eda/v1/eda-credentials/",
+        user,
+        password,
+        base,
+        {
+            "name": cred_name,
+            "credential_type_id": 4,
+            "organization_id": eda_org_id,
+            "inputs": {
+                "host": controller_host,
+                "username": user,
+                "password": password,
+                "verify_ssl": False,
+            },
+        },
+    )
+    if code in (200, 201) and isinstance(created, dict) and created.get("id"):
+        return int(created["id"])
+    if code == 400:
+        code, creds = aap_request("GET", "/api/eda/v1/eda-credentials/", user, password, base)
+        cred = find_by_name(creds.get("results", []), cred_name)
+        return int(cred.get("id", 0))
+    print(f"ERROR: EDA controller credential: {code} {created}", file=sys.stderr)
+    sys.exit(1)
+
+
 def build_extra_var_yaml() -> str:
     lines = [
+        f"aap_organization_name: {env('EDA_ORGANIZATION_NAME') or env('AAP_ORGANIZATION_NAME', 'Default')}",
         f"tpa_url: {env('TPA_URL')}",
         f"keycloak_url: {env('KEYCLOAK_URL')}",
         f"keycloak_tpa_realm: {env('KEYCLOAK_TPA_REALM', 'trusted-profile-analyzer')}",
@@ -197,6 +346,23 @@ def main() -> None:
     rulebook_id = rulebook["id"]
     print(f"Rulebook id={rulebook_id} ({rulebook_name})")
 
+    controller_org_id = int(env("CONTROLLER_ORGANIZATION_ID", "0") or "0")
+    if controller_org_id <= 0:
+        corg_name = org_name or env("AAP_ORGANIZATION_NAME", "Default")
+        code, corgs = aap_request("GET", "/api/controller/v2/organizations/", user, password, base)
+        if code == 200 and isinstance(corgs, dict):
+            for o in corgs.get("results", []):
+                if o.get("name") == corg_name:
+                    controller_org_id = int(o["id"])
+                    break
+    if controller_org_id <= 0:
+        controller_org_id = 1
+    ctrl_project_name = env("CONTROLLER_PROJECT_NAME", f"{project_name} Playbooks")
+    ensure_controller_playbooks(user, password, base, controller_org_id, scm_url, ctrl_project_name)
+    eda_cred_name = env("EDA_CONTROLLER_CREDENTIAL_NAME", "SDLC Controller")
+    eda_cred_id = ensure_eda_controller_credential(user, password, base, org_id, eda_cred_name)
+    print(f"EDA Controller credential id={eda_cred_id}")
+
     code, acts = aap_request("GET", "/api/eda/v1/activations/", user, password, base)
     activation = find_by_name(acts.get("results", []) if isinstance(acts, dict) else [], activation_name)
     extra_var = build_extra_var_yaml()
@@ -241,6 +407,7 @@ def main() -> None:
             "rulebook_id": rulebook_id,
             "extra_var": extra_var,
             "restart_count": 0,
+            "eda_credentials": [eda_cred_id],
         },
     )
     if code != 200:

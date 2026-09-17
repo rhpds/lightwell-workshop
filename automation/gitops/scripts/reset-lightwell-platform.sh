@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Reset shared Lightwell platform (bootstrap-infra) on a test cluster.
 # Tier 3: removes CRs, platform namespaces, and chart ClusterRoleBindings.
-# Does NOT remove: openshift-gitops, operators (subscriptions), or tenant namespaces
-# unless LIGHTWELL_RESET_TENANTS=1.
+# Does NOT remove: openshift-gitops, operators (subscriptions), or the shared
+# Keycloak namespace (SSO). Use LIGHTWELL_RESET_TENANTS=1 for tenant namespaces.
 #
 # Usage:
 #   ./reset-lightwell-platform.sh              # infra only
@@ -15,6 +15,9 @@ if ! oc whoami &>/dev/null; then
   echo "ERROR: oc not logged in" >&2
   exit 1
 fi
+
+# Prevent Argo CD from recreating platform/tenant apps during teardown.
+oc delete application lightwell-bootstrap-infra -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
 
 if [[ -n "${LIGHTWELL_RESET_GUID:-}" ]]; then
   delete_tenant_cross_ns_rbac() {

@@ -22,7 +22,8 @@ keycloak:
   tpaRealm: trusted-profile-analyzer
 
 tpa:
-  url: "" # default https://trustify.{deployer.domain}
+  namespace: lightwell-tpa
+  url: "" # default https://server-{tpa.namespace}.{deployer.domain}
   uiClientId: trustify-ui
   uploaderUsername: "" # default lightwell-uploader-{guid}
   sbomLabel: "" # default sdlc-demo-{guid}
@@ -39,7 +40,7 @@ nexus:
 
 sdlc:
   enabled: true
-  scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git
+  scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git # must contain rulebooks/ for EDA import
   projectName: "" # default SDLC {guid}
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
