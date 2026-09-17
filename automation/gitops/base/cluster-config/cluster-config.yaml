@@ -1,0 +1,42 @@
+# Non-secret integration values — replace CHANGE_ME before Argo sync.
+# Secrets: gitops/secrets/README.md (never commit real credentials).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sdlc-cluster-config
+  labels:
+    app.kubernetes.io/part-of: sdlc-remediation
+data:
+  CLUSTER_NAME: "CHANGE_ME"
+  ENVIRONMENT: "managed-openshift"
+  KEYCLOAK_URL: "https://CHANGE_ME-auth.example.com"
+  KEYCLOAK_TPA_REALM: "trusted-profile-analyzer"
+  TPA_URL: "https://CHANGE_ME-tpa.example.com"
+  TPA_OAUTH_CLIENT_ID: "trustify-ui"
+  TPA_SBOM_LABEL: "sdlc-demo-sbom"
+  TPA_UPLOADER_USERNAME: "CHANGE_ME-tpa-uploader"
+  AAP_CONTROLLER_URL: "https://CHANGE_ME-aap.example.com"
+  EDA_PROJECT_NAME: "SDLC OpenCode EDA"
+  EDA_PROJECT_SCM_URL: "https://github.com/sshaaf/sdlc-opencode.git"
+  EDA_RULEBOOK_NAME: "sdlc-remediation.yml"
+  EDA_ACTIVATION_NAME: "sdlc-remediation"
+  EDA_DECISION_ENV_NAME: "SDLC Decision Environment"
+  EDA_DECISION_ENV_IMAGE: "quay.io/ansible/ansible-rulebook:main"
+  EDA_ORGANIZATION_ID: "0"
+  EDA_WEBHOOK_URL: "http://CHANGE_ME-eda-webhook.CHANGE_ME-namespace.svc.cluster.local:5000/"
+  EDA_WEBHOOK_ROUTE_URL: "https://CHANGE_ME-eda-webhook.apps.CHANGE_ME.example.com/"
+  GITLAB_URL: "https://CHANGE_ME-gitlab.example.com"
+  REMEDIATION_APP_GITLAB_PATH: "lightwell/lw-demo-help-app"
+  GITLAB_WEBHOOK_TARGET_URL: "https://CHANGE_ME-eda-webhook.apps.CHANGE_ME.example.com/"
+  # Per-tenant Nexus: lightwell-nexus-<guid> (bootstrap-tenant), not cluster-wide lightwell-nexus
+  NEXUS_NAMESPACE: "lightwell-nexus-CHANGE_ME_GUID"
+  NEXUS_URL: "https://CHANGE_ME-nexus.apps.CHANGE_ME.example.com"
+  NEXUS_WEBHOOK_REPOSITORIES: "redhat-packages-validated,redhat-packages-remediated"
+  SKIP_REPOSITORY_SETUP: "false"
+  SKIP_WEBHOOK_SETUP: "false"
+  OPENCODE_IMAGE: "quay.io/sshaaf/sdlc-opencode:sha-REPLACE_ME"
+  OPENCODE_BASE_URL: "http://opencode.sdlc-control-plane.svc.cluster.local:4096"
+  OPENCODE_SERVER_USERNAME: "opencode"
+  GITLAB_MCP_URL: "http://gitlab-mcp.sdlc-mcp-servers.svc.cluster.local/mcp"
+  OPENCODE_LLM_PROVIDER: "anthropic"
+  VALIDATE_CERTS: "false"

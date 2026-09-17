@@ -1,0 +1,101 @@
+# OpenCode control plane — image set via kustomize replacement from sdlc-cluster-config OPENCODE_IMAGE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode
+  labels:
+    app: opencode
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencode
+  template:
+    metadata:
+      labels:
+        app: opencode
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      volumes:
+        - name: tmp-home
+          emptyDir: {}
+      containers:
+        - name: opencode
+          image: quay.io/sshaaf/sdlc-opencode:sha-REPLACE_ME
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_DATA_HOME
+              value: /tmp
+          volumeMounts:
+            - name: tmp-home
+              mountPath: /tmp
+          ports:
+            - name: http
+              containerPort: 4096
+              protocol: TCP
+          env:
+            - name: OPENCODE_SERVER_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: sdlc-cluster-config
+                  key: OPENCODE_SERVER_USERNAME
+            - name: OPENCODE_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opencode-server
+                  key: password
+            - name: GITLAB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-credentials
+                  key: url
+            - name: GITLAB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-credentials
+                  key: password
+            - name: GITLAB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-credentials
+                  key: username
+            - name: GITLAB_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-credentials
+                  key: token
+                  optional: true
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode
+  labels:
+    app: opencode
+spec:
+  selector:
+    app: opencode
+  ports:
+    - name: http
+      port: 4096
+      targetPort: http

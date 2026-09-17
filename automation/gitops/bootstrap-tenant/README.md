@@ -44,7 +44,7 @@ sdlc:
 
 ## EDA SCM source (canonical repo)
 
-Rulebooks, playbooks, and `gitops/sdlc-eda/bootstrap-aap-eda.py` live in the **sibling clone** [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) under `lightwell-demo-lab` (remote `github.com/sshaaf/lw-sdlc-opencode`). Edit there, push `main`, then re-sync the tenant EDA project or re-run `eda-bootstrap`. Chart value `sdlc.scmUrl` points at that GitHub URL.
+**SCM** (rulebooks/playbooks): [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) → `github.com/sshaaf/lw-sdlc-opencode`. **GitOps** (this chart, overlays, verify scripts): `lightwell-workshop/automation/gitops/`. EDA bootstrap script: `bootstrap-tenant/files/bootstrap-aap-eda.py`. Push SCM `main`, then re-sync the tenant EDA project or re-run `eda-bootstrap`.
 
 ## Validate
 

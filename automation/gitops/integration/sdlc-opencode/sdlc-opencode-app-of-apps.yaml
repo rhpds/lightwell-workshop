@@ -1,0 +1,31 @@
+# Parent Application — register SDLC demo on a Lightwell workshop cluster.
+# Apply in the Argo CD namespace (default openshift-gitops).
+# Workshop bootstrap (bootstrap-infra/tenant) stays in lightwell-workshop; this only adds sdlc-opencode.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sdlc-opencode-workshop
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: lightwell-workshop
+    app.kubernetes.io/component: sdlc-opencode
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sshaaf/sdlc-opencode.git
+    targetRevision: main
+    path: gitops/argocd/applications
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

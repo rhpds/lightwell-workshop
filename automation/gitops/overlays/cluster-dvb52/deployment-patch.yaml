@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: opencode
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_DATA_HOME
+              value: /tmp
+          volumeMounts:
+            - name: tmp-home
+              mountPath: /tmp
+      volumes:
+        - name: tmp-home
+          emptyDir: {}
