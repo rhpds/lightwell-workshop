@@ -12,7 +12,7 @@ Chart **v0.3.0** provisions T1–T4 in one release (T0 AgnosticV wiring is outsi
 | **GitLab** | User, `lightwell` group membership (Maintainer), demo project `lightwell/lw-demo-help-app-<guid>` |
 | **AAP** | Org `user-<guid>`, tenant user, org membership (best-effort gateway API) |
 | **Nexus** | Dedicated instance, Maven repos + optional EDA webhooks (`nexus-reconcile` Job) |
-| **TPA seed** | Keycloak uploader user + demo CycloneDX SBOM upload with label `sdlc-demo-<guid>` |
+| **TPA seed** | `trustify-ui` client (direct access + SBOM scopes), per-tenant uploader, demo SBOM upload (`deploy-tpa.yml` parity) |
 | **EDA** | `eda-bootstrap` Job — project, decision env, activation `sdlc-remediation-<guid>` in tenant org |
 
 ## Nexus URL

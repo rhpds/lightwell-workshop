@@ -10,6 +10,7 @@ data:
   KEYCLOAK_URL: {{ include "bootstrap-tenant.keycloakUrl" . | quote }}
   KEYCLOAK_TPA_REALM: {{ .Values.keycloak.tpaRealm | quote }}
   TPA_URL: {{ include "bootstrap-tenant.tpaUrl" . | quote }}
+  TPA_TRUSTIFY_URL: {{ include "bootstrap-tenant.tpaUrl" . | quote }}
   TPA_OAUTH_CLIENT_ID: {{ .Values.tpa.uiClientId | quote }}
   TPA_UPLOADER_USERNAME: {{ .Values.tpa.uploaderUsername | default (printf "lightwell-uploader-%s" .Values.guid) | quote }}
   TPA_SBOM_LABEL: {{ include "bootstrap-tenant.tpaSbomLabel" . | quote }}

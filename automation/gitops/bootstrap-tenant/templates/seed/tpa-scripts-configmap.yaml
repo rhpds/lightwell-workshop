@@ -1,0 +1,12 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tpa-seed-source
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  seed-tpa-keycloak.py: |
+{{ .Files.Get "files/seed-tpa-keycloak.py" | indent 4 }}
+{{- end }}
