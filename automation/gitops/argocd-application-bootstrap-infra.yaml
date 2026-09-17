@@ -1,0 +1,46 @@
+# Apply after pushing bootstrap-infra changes to your fork:
+#   kubectl apply -f automation/gitops/argocd-application-bootstrap-infra.yaml
+#
+# Edit repoURL / targetRevision to match your fork and branch.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lightwell-bootstrap-infra
+  namespace: openshift-gitops
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sshaaf/lightwell-workshop.git
+    targetRevision: demo-update
+    path: automation/gitops/bootstrap-infra
+    helm:
+      values: |
+        deployer:
+          domain: apps.cluster-{GUID}.dyn.redhatworkshops.io
+          storageClass: ocs-external-storagecluster-ceph-rbd-immediate
+        admin:
+          password: REPLACE_ME
+        gitlab:
+          rootPassword: REPLACE_ME
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true
+    automated:
+      prune: false
+      selfHeal: true
+  ignoreDifferences:
+    - group: operators.coreos.com
+      kind: Subscription
+      jqPathExpressions:
+        - .status
+    - group: operators.coreos.com
+      kind: InstallPlan
+      jqPathExpressions:
+        - .status

@@ -29,6 +29,8 @@ tpa:
   uiClientId: trustify-ui
   uploaderUsername: "" # default lightwell-uploader-{guid}
   sbomLabel: "" # default sdlc-demo-{guid}
+  adminUsername: admin # Keycloak realm user for platform admin (AAP/GitLab admin password)
+  adminPassword: "" # default tenant password; set to bootstrap-infra admin.password if different
 
 nexus:
   image: sonatype/nexus3:3.76.1

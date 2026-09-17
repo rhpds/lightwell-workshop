@@ -26,7 +26,8 @@ spec:
               ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
               REALM="{{ .Values.tpa.keycloakRealm }}"
               CLIENT_ID="{{ .Values.tpa.uiClientId }}"
-              REDIRECT_URI="https://trustify.{{ .Values.deployer.domain }}/*"
+              # Must match TrustedProfileAnalyzer route host (server-{tpa.namespace}.{domain})
+              REDIRECT_URI="https://server-{{ .Values.tpa.namespace }}.{{ .Values.deployer.domain }}/*"
 
               echo "Waiting for Keycloak admin API..."
               for i in $(seq 1 60); do

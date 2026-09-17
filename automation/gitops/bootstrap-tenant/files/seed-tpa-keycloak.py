@@ -155,7 +155,7 @@ def configure_trustify_client(
     else:
         print(f"WARN: client PUT HTTP {code}: {resp}", file=sys.stderr)
 
-    for scope_name in SBOM_DEFAULT_SCOPES:
+    for scope_name in TPA_SCOPE_NAMES:
         sid = scope_ids.get(scope_name)
         if not sid:
             continue
@@ -302,7 +302,19 @@ def main() -> None:
 
     scope_ids = ensure_client_scopes(realm_base, token)
     configure_trustify_client(realm_base, token, client_id, tpa_url, trustify_url, scope_ids)
-    ensure_uploader_user(realm_base, token, uploader, password)
+
+    tenant_user = env("LIGHTWELL_USERNAME", required=True)
+    tenant_password = env("LIGHTWELL_PASSWORD", required=True)
+    admin_user = env("TPA_ADMIN_USERNAME", "admin")
+    admin_password = env("TPA_ADMIN_PASSWORD", tenant_password)
+
+    for label, username, user_password in (
+        ("uploader", uploader, password),
+        ("tenant", tenant_user, tenant_password),
+        ("admin", admin_user, admin_password),
+    ):
+        ensure_uploader_user(realm_base, token, username, user_password)
+        print(f"Keycloak Trustify user ready ({label}): {username}")
 
     access = tpa_password_token(keycloak_url, realm, client_id, uploader, password)
     if not access:

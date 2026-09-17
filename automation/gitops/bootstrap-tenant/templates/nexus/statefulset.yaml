@@ -20,6 +20,8 @@ spec:
         app: nexus
     spec:
       serviceAccountName: nexus
+      securityContext:
+        fsGroup: 200
       initContainers:
         - name: volume-permissions
           image: registry.access.redhat.com/ubi9/ubi-minimal:latest
@@ -73,7 +75,6 @@ spec:
           securityContext:
             runAsUser: 200
             runAsGroup: 200
-            fsGroup: 200
       volumes:
         - name: nexus-data
           persistentVolumeClaim:

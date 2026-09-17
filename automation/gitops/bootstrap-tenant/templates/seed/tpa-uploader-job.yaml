@@ -23,6 +23,14 @@ spec:
           env:
             - name: TPA_UPLOADER_PASSWORD
               value: {{ .Values.password | quote }}
+            - name: LIGHTWELL_USERNAME
+              value: {{ .Values.username | quote }}
+            - name: LIGHTWELL_PASSWORD
+              value: {{ .Values.password | quote }}
+            - name: TPA_ADMIN_USERNAME
+              value: {{ .Values.tpa.adminUsername | quote }}
+            - name: TPA_ADMIN_PASSWORD
+              value: {{ .Values.tpa.adminPassword | default .Values.password | quote }}
             - name: TPA_TRUSTIFY_URL
               value: {{ include "bootstrap-tenant.tpaUrl" . | quote }}
             - name: TPA_SBOM_FILE
