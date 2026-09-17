@@ -16,48 +16,25 @@ if ! oc whoami &>/dev/null; then
   exit 1
 fi
 
-# Prevent Argo CD from recreating platform/tenant apps during teardown.
-oc delete application lightwell-bootstrap-infra -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
-
-if [[ -n "${LIGHTWELL_RESET_GUID:-}" ]]; then
-  delete_tenant_cross_ns_rbac() {
-    local guid="$1"
-    for ns in gitlab aap keycloak; do
-      for kind in role rolebinding; do
-        oc delete "${kind}" -n "$ns" "lightwell-tenant-gitlab-reader-${guid}" --ignore-not-found 2>/dev/null || true
-        oc delete "${kind}" -n "$ns" "lightwell-tenant-aap-reader-${guid}" --ignore-not-found 2>/dev/null || true
-        oc delete "${kind}" -n "$ns" "lightwell-tenant-keycloak-reader-${guid}" --ignore-not-found 2>/dev/null || true
-      done
-    done
-  }
-  delete_one_tenant() {
-    local guid="$1"
-    local user="${LIGHTWELL_TENANT_USER:-user-${guid}}"
-    echo "==> Removing tenant ${guid} (${user})..."
-    oc delete application "lightwell-tenant-${guid}" -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
-    delete_tenant_cross_ns_rbac "$guid"
-    oc delete clusterrolebinding "anyuid-nexus-${guid}" --ignore-not-found 2>/dev/null || true
-    for ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "sdlc-${guid}" "${user}-app"; do
-      oc delete namespace "$ns" --wait=false 2>/dev/null || true
-    done
-    if [[ "${LIGHTWELL_RESET_SDLC:-0}" == "1" ]]; then
-      oc delete namespace "sdlc-control-plane" "sdlc-control-plane-${guid}" --ignore-not-found --wait=false 2>/dev/null || true
-    fi
-  }
-  delete_one_tenant "${LIGHTWELL_RESET_GUID}"
-  echo ""
-  echo "Done (single tenant ${LIGHTWELL_RESET_GUID}). Wait for namespaces to terminate."
-  exit 0
-fi
+# True only for namespaces this script may delete (never keycloak, gitlab, aap, etc.).
+is_tenant_teardown_namespace() {
+  local name="$1"
+  [[ "$name" =~ ^lightwell-nexus- ]] && return 0
+  [[ "$name" =~ ^lightwell-tenant- ]] && return 0
+  [[ "$name" =~ ^sdlc- ]] && return 0
+  [[ "$name" =~ -app$ ]] && return 0
+  return 1
+}
 
 delete_tenant_cross_ns_rbac() {
   local guid="$1"
-  for ns in gitlab aap keycloak; do
-    oc delete role,rolebinding -n "$ns" -l "lightwell.guid=${guid}" --ignore-not-found 2>/dev/null || true
+  local platform_ns kind
+  for platform_ns in gitlab aap keycloak; do
+    oc delete role,rolebinding -n "$platform_ns" -l "lightwell.guid=${guid}" --ignore-not-found 2>/dev/null || true
     for kind in role rolebinding; do
-      oc delete "${kind}" -n "$ns" "lightwell-tenant-gitlab-reader-${guid}" --ignore-not-found 2>/dev/null || true
-      oc delete "${kind}" -n "$ns" "lightwell-tenant-aap-reader-${guid}" --ignore-not-found 2>/dev/null || true
-      oc delete "${kind}" -n "$ns" "lightwell-tenant-keycloak-reader-${guid}" --ignore-not-found 2>/dev/null || true
+      oc delete "${kind}" -n "$platform_ns" "lightwell-tenant-gitlab-reader-${guid}" --ignore-not-found 2>/dev/null || true
+      oc delete "${kind}" -n "$platform_ns" "lightwell-tenant-aap-reader-${guid}" --ignore-not-found 2>/dev/null || true
+      oc delete "${kind}" -n "$platform_ns" "lightwell-tenant-keycloak-reader-${guid}" --ignore-not-found 2>/dev/null || true
     done
   done
 }
@@ -65,17 +42,28 @@ delete_tenant_cross_ns_rbac() {
 delete_one_tenant() {
   local guid="$1"
   local user="${LIGHTWELL_TENANT_USER:-user-${guid}}"
+  local tenant_ns
   echo "==> Removing tenant ${guid} (${user})..."
   oc delete application "lightwell-tenant-${guid}" -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
   delete_tenant_cross_ns_rbac "$guid"
   oc delete clusterrolebinding "anyuid-nexus-${guid}" --ignore-not-found 2>/dev/null || true
-  for ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "sdlc-${guid}" "${user}-app"; do
-    oc delete namespace "$ns" --wait=false 2>/dev/null || true
+  for tenant_ns in "lightwell-nexus-${guid}" "lightwell-tenant-${guid}" "sdlc-${guid}" "${user}-app"; do
+    oc delete namespace "$tenant_ns" --wait=false 2>/dev/null || true
   done
   if [[ "${LIGHTWELL_RESET_SDLC:-0}" == "1" ]]; then
     oc delete namespace "sdlc-control-plane" "sdlc-control-plane-${guid}" --ignore-not-found --wait=false 2>/dev/null || true
   fi
 }
+
+# Prevent Argo CD from recreating platform/tenant apps during teardown.
+oc delete application lightwell-bootstrap-infra -n openshift-gitops --ignore-not-found --wait=false 2>/dev/null || true
+
+if [[ -n "${LIGHTWELL_RESET_GUID:-}" ]]; then
+  delete_one_tenant "${LIGHTWELL_RESET_GUID}"
+  echo ""
+  echo "Done (single tenant ${LIGHTWELL_RESET_GUID}). Wait for namespaces to terminate."
+  exit 0
+fi
 
 echo "==> Deleting platform custom resources..."
 oc delete ansibleautomationplatform aap -n aap --ignore-not-found --wait=false 2>/dev/null || true
@@ -93,15 +81,19 @@ if [[ "${LIGHTWELL_RESET_SDLC:-0}" == "1" ]]; then
 fi
 
 if [[ "${LIGHTWELL_RESET_TENANTS:-0}" == "1" ]]; then
-  echo "==> Removing tenant namespaces (lightwell-nexus-*, *-app, lightwell-tenant-*)..."
-  while IFS= read -r ns; do
-    [[ -z "$ns" ]] && continue
+  echo "==> Removing tenant namespaces (lightwell-nexus-*, lightwell-tenant-*, sdlc-*, *-app)..."
+  while IFS= read -r tenant_ns; do
+    [[ -z "$tenant_ns" ]] && continue
+    if ! is_tenant_teardown_namespace "$tenant_ns"; then
+      echo "WARN: skipping namespace ${tenant_ns} (not a tenant teardown target)" >&2
+      continue
+    fi
     guid=""
-    if [[ "$ns" =~ ^lightwell-nexus-(.+)$ ]]; then guid="${BASH_REMATCH[1]}"; fi
-    if [[ "$ns" =~ ^lightwell-tenant-(.+)$ ]]; then guid="${BASH_REMATCH[1]}"; fi
+    if [[ "$tenant_ns" =~ ^lightwell-nexus-(.+)$ ]]; then guid="${BASH_REMATCH[1]}"; fi
+    if [[ "$tenant_ns" =~ ^lightwell-tenant-(.+)$ ]]; then guid="${BASH_REMATCH[1]}"; fi
     if [[ -n "$guid" ]]; then delete_tenant_cross_ns_rbac "$guid"; fi
-    oc delete namespace "$ns" --wait=false 2>/dev/null || true
-  done < <(oc get ns -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -E '^lightwell-nexus-|^lightwell-tenant-|-app$' || true)
+    oc delete namespace "$tenant_ns" --wait=false 2>/dev/null || true
+  done < <(oc get ns -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -E '^lightwell-nexus-|^lightwell-tenant-|^sdlc-|.+-app$' || true)
   while IFS= read -r crb; do
     [[ -z "$crb" ]] && continue
     oc delete clusterrolebinding "$crb" --ignore-not-found 2>/dev/null || true
@@ -123,6 +115,9 @@ oc delete clusterrole gitlab-token-reader --ignore-not-found 2>/dev/null || true
 
 echo "==> Remaining Lightwell-related namespaces (may still be Terminating):"
 oc get ns 2>/dev/null | grep -iE 'gitlab|aap|lightwell|nexus|sdlc' || echo "  (none listed)"
+if oc get ns keycloak &>/dev/null; then
+  echo "  keycloak namespace: present (SSO left intact)"
+fi
 
 echo ""
 echo "Done. Wait for namespaces to finish terminating before redeploying bootstrap-infra."
