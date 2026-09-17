@@ -1,0 +1,60 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eda-bootstrap
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      initContainers:
+        - name: copy-script
+          image: busybox:1.36
+          command: ["sh", "-c", "cp /source/bootstrap-aap-eda.py /work/bootstrap-aap-eda.py && chmod 755 /work/bootstrap-aap-eda.py"]
+          volumeMounts:
+            - name: scripts-source
+              mountPath: /source
+              readOnly: true
+            - name: scripts-work
+              mountPath: /work
+      containers:
+        - name: bootstrap
+          image: {{ .Values.jobAnsibleImage }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              AAP_NS="{{ .Values.aap.namespace }}"
+              for i in $(seq 1 60); do
+                ROUTE_HOST=$(oc get route -n "${AAP_NS}" -l app.kubernetes.io/managed-by=aap-operator -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+                if [ -n "${ROUTE_HOST}" ]; then export AAP_CONTROLLER_URL="https://${ROUTE_HOST}"; break; fi
+                sleep 10
+              done
+              if [ -z "${AAP_CONTROLLER_URL:-}" ]; then echo "ERROR: AAP gateway route not found"; exit 1; fi
+              export AAP_USERNAME=admin
+              export AAP_PASSWORD=$(oc get secret aap-admin-password -n "${AAP_NS}" -o jsonpath='{.data.password}' | base64 -d)
+              export TPA_UPLOADER_PASSWORD="{{ .Values.password }}"
+              export OPENCODE_SERVER_PASSWORD="{{ .Values.sdlc.opencodeServerPassword | default .Values.password }}"
+              exec python3 /work/bootstrap-aap-eda.py
+          envFrom:
+            - configMapRef:
+                name: tenant-integration
+          volumeMounts:
+            - name: scripts-work
+              mountPath: /work
+              readOnly: true
+      volumes:
+        - name: scripts-source
+          configMap:
+            name: eda-bootstrap-source
+        - name: scripts-work
+          emptyDir: {}
+{{- end }}

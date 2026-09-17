@@ -1,0 +1,97 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-aap-tenant
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      containers:
+        - name: create-aap-tenant
+          image: {{ .Values.jobAnsibleImage }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              AAP_NS="{{ .Values.aap.namespace }}"
+              ORG="{{ include "bootstrap-tenant.aapOrg" . }}"
+              USERNAME="{{ .Values.username }}"
+              PASSWORD="{{ .Values.password }}"
+
+              for i in $(seq 1 60); do
+                ROUTE_HOST=$(oc get route -n "${AAP_NS}" -l app.kubernetes.io/managed-by=aap-operator -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+                if [ -n "${ROUTE_HOST}" ]; then GATEWAY_HOST="https://${ROUTE_HOST}"; break; fi
+                sleep 10
+              done
+              if [ -z "${GATEWAY_HOST}" ]; then echo "ERROR: Gateway route not found"; exit 1; fi
+
+              ADMIN_PASS=$(oc get secret aap-admin-password -n "${AAP_NS}" -o jsonpath='{.data.password}' | base64 -d)
+              for i in $(seq 1 60); do
+                STATUS=$(curl -sk -o /dev/null -w '%{http_code}' -u "admin:${ADMIN_PASS}" "${GATEWAY_HOST}/api/controller/v2/ping/" 2>/dev/null || true)
+                if [ "${STATUS}" = "200" ]; then break; fi
+                sleep 10
+              done
+              if [ "${STATUS}" != "200" ]; then echo "ERROR: Controller API not ready"; exit 1; fi
+
+              curl -sk -u "admin:${ADMIN_PASS}" -H "Content-Type: application/json" \
+                -X POST "${GATEWAY_HOST}/api/gateway/v1/organizations/" -d "{\"name\":\"${ORG}\"}" || true
+
+              curl -sk -u "admin:${ADMIN_PASS}" -H "Content-Type: application/json" \
+                -X POST "${GATEWAY_HOST}/api/gateway/v1/users/" \
+                -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\",\"is_superuser\":false,\"force_basic_auth\":true}" || true
+
+              export GATEWAY_HOST ADMIN_PASS ORG USERNAME
+              python3 <<'PY'
+              import json, os, ssl, urllib.request, base64
+              gateway = os.environ["GATEWAY_HOST"]
+              admin = os.environ["ADMIN_PASS"]
+              org = os.environ["ORG"]
+              username = os.environ["USERNAME"]
+              ctx = ssl._create_unverified_context()
+              auth = base64.b64encode(f"admin:{admin}".encode()).decode()
+
+              def req(method, path, body=None):
+                  url = gateway + path
+                  data = json.dumps(body).encode() if body else None
+                  r = urllib.request.Request(url, data=data, method=method, headers={
+                      "Authorization": f"Basic {auth}",
+                      "Accept": "application/json",
+                      "Content-Type": "application/json",
+                  })
+                  with urllib.request.urlopen(r, context=ctx, timeout=60) as resp:
+                      return json.loads(resp.read().decode() or "null")
+
+              orgs = req("GET", "/api/gateway/v1/organizations/")
+              org_id = next((o["id"] for o in orgs.get("results", []) if o.get("name") == org), None)
+              users = req("GET", f"/api/gateway/v1/users/?username={username}")
+              user_id = next((u["id"] for u in users.get("results", []) if u.get("username") == username), None)
+              if not org_id or not user_id:
+                  print(f"WARN: org_id={org_id} user_id={user_id} — skip role assignment")
+                  raise SystemExit(0)
+              roles = req("GET", "/api/gateway/v1/role_definitions/")
+              member = next((r for r in roles.get("results", []) if "member" in r.get("name", "").lower() and "organization" in r.get("name", "").lower()), None)
+              if not member:
+                  member = next((r for r in roles.get("results", []) if r.get("name") == "Organization Member"), None)
+              if not member:
+                  print("WARN: Organization Member role not found; user may not see org in UI")
+                  raise SystemExit(0)
+              try:
+                  req("POST", "/api/gateway/v1/role_user_assignments/", {
+                      "user": user_id,
+                      "role_definition": member["id"],
+                      "object_id": org_id,
+                      "content_type": "organization",
+                  })
+                  print(f"Assigned user {username} to org {org} (member)")
+              except Exception as e:
+                  print(f"WARN: role assignment failed: {e}")
+              PY
+              echo "AAP tenant provisioning complete"

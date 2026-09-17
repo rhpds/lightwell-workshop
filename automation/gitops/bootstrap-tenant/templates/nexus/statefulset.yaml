@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nexus
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  labels:
+    app: nexus
+    lightwell.guid: {{ .Values.guid | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceName: nexus
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexus
+  template:
+    metadata:
+      labels:
+        app: nexus
+    spec:
+      serviceAccountName: nexus
+      initContainers:
+        - name: volume-permissions
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 200:200 /nexus-data
+              chmod -R 755 /nexus-data
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: nexus-data
+              mountPath: /nexus-data
+      containers:
+        - name: nexus
+          image: {{ .Values.nexus.image }}
+          env:
+            - name: NEXUS_SECURITY_RANDOMPASSWORD
+              value: "false"
+            - name: INSTALL4J_ADD_VM_PARAMS
+              value: "-Xms1g -Xmx2g -XX:MaxDirectMemorySize=2g -Dnexus.security.randompassword=false"
+          ports:
+            - containerPort: 8081
+              name: http
+          volumeMounts:
+            - name: nexus-data
+              mountPath: /nexus-data
+            - name: admin-password
+              mountPath: /nexus-data/admin.password
+              subPath: password
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 180
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 180
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          securityContext:
+            runAsUser: 200
+            runAsGroup: 200
+            fsGroup: 200
+      volumes:
+        - name: nexus-data
+          persistentVolumeClaim:
+            claimName: nexus-data-pvc
+        - name: admin-password
+          secret:
+            secretName: nexus-admin-secret
+            items:
+              - key: password
+                path: password

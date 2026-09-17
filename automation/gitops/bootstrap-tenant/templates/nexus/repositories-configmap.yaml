@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lightwell-repositories
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  lightwell-repositories.json: |
+    [
+      {
+        "name": "{{ include "bootstrap-tenant.nexusRepoValidated" . }}",
+        "type": "proxy",
+        "remote_url": "https://packages.redhat.com/lightwell/java/validated/",
+        "description": "Lightwell validated packages (tenant {{ .Values.guid }})",
+        "requires_auth": true,
+        "version_policy": "RELEASE",
+        "layout_policy": "STRICT"
+      },
+      {
+        "name": "{{ include "bootstrap-tenant.nexusRepoRemediated" . }}",
+        "type": "proxy",
+        "remote_url": "https://packages.redhat.com/lightwell/java/remediated/",
+        "description": "Lightwell remediated packages (tenant {{ .Values.guid }})",
+        "requires_auth": true,
+        "version_policy": "RELEASE",
+        "layout_policy": "STRICT"
+      },
+      {
+        "name": "maven-central-{{ .Values.guid }}",
+        "type": "proxy",
+        "remote_url": "https://repo1.maven.org/maven2/",
+        "description": "Maven Central",
+        "requires_auth": false,
+        "version_policy": "RELEASE",
+        "layout_policy": "STRICT"
+      },
+      {
+        "name": "maven-releases-{{ .Values.guid }}",
+        "type": "hosted",
+        "description": "Hosted Maven releases",
+        "write_policy": "ALLOW",
+        "version_policy": "RELEASE",
+        "layout_policy": "STRICT"
+      }
+    ]

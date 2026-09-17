@@ -1,0 +1,79 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-tpa-uploader
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      containers:
+        - name: seed-tpa
+          image: {{ .Values.jobAnsibleImage }}
+          envFrom:
+            - configMapRef:
+                name: tenant-integration
+          env:
+            - name: TPA_UPLOADER_PASSWORD
+              value: {{ .Values.password | quote }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              KC_BASE="${KEYCLOAK_URL}"
+              REALM="${KEYCLOAK_TPA_REALM}"
+              UPLOADER="${TPA_UPLOADER_USERNAME}"
+              TPA_API="${TPA_URL}"
+              SBOM_LABEL="${TPA_SBOM_LABEL}"
+
+              ADMIN_USER=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.username}' | base64 -d)
+              ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
+              TOKEN=$(curl -sk -X POST "${KC_BASE}/realms/master/protocol/openid-connect/token" \
+                -d "client_id=admin-cli" -d "username=${ADMIN_USER}" -d "password=${ADMIN_PASS}" \
+                -d "grant_type=password" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+              [ -n "${TOKEN}" ] || { echo "ERROR: Keycloak admin token"; exit 1; }
+
+              EXISTS=$(curl -sk -H "Authorization: Bearer ${TOKEN}" \
+                "${KC_BASE}/admin/realms/${REALM}/users?username=${UPLOADER}" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
+              if [ "${EXISTS}" = "0" ]; then
+                curl -sk -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+                  -X POST "${KC_BASE}/admin/realms/${REALM}/users" \
+                  -d "{\"username\":\"${UPLOADER}\",\"enabled\":true,\"emailVerified\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"${TPA_UPLOADER_PASSWORD}\",\"temporary\":false}]}"
+                echo "Created Keycloak user ${UPLOADER}"
+              else
+                echo "Keycloak user ${UPLOADER} already exists"
+              fi
+
+              TOKEN_TPA=$(curl -sk -X POST "${KC_BASE}/realms/${REALM}/protocol/openid-connect/token" \
+                -d "grant_type=password&client_id=${TPA_OAUTH_CLIENT_ID}&username=${UPLOADER}&password=${TPA_UPLOADER_PASSWORD}" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+              if [ -z "${TOKEN_TPA}" ]; then echo "WARN: TPA OAuth token failed"; exit 0; fi
+
+              SBOM_FILE="/seed/demo-sbom.cyclonedx.json"
+              if [ ! -f "${SBOM_FILE}" ]; then echo "WARN: no demo SBOM at ${SBOM_FILE}"; exit 0; fi
+              CODE=$(curl -sk -o /tmp/tpa-upload.json -w '%{http_code}' \
+                -H "Authorization: Bearer ${TOKEN_TPA}" -H "Content-Type: application/json" \
+                -X POST "${TPA_API}/api/v2/sbom?labels.name=${SBOM_LABEL}&format=cyclonedx" \
+                --data-binary "@${SBOM_FILE}")
+              if [ "${CODE}" = "200" ] || [ "${CODE}" = "201" ]; then
+                echo "Uploaded demo SBOM to TPA with label ${SBOM_LABEL}"
+              else
+                echo "WARN: TPA SBOM upload HTTP ${CODE}"; cat /tmp/tpa-upload.json
+              fi
+          volumeMounts:
+            - name: demo-sbom
+              mountPath: /seed
+              readOnly: true
+      volumes:
+        - name: demo-sbom
+          configMap:
+            name: demo-sbom
+{{- end }}

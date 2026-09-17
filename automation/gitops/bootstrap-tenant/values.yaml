@@ -1,4 +1,51 @@
+guid: CHANGEME
+username: user-CHANGEME
+password: changeme
+
 deployer:
   domain: apps.example.com
+  storageClass: ocs-external-storagecluster-ceph-rbd-immediate
 
-username: user1
+jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
+
+aap:
+  namespace: aap
+  org: "" # default user-{guid} via template helper
+
+gitlab:
+  namespace: gitlab
+  group: lightwell
+  demoProjectPath: "" # default lightwell/lw-demo-help-app-{guid}
+
+keycloak:
+  url: "" # default https://sso.{deployer.domain}
+  tpaRealm: trusted-profile-analyzer
+
+tpa:
+  url: "" # default https://trustify.{deployer.domain}
+  uiClientId: trustify-ui
+  uploaderUsername: "" # default lightwell-uploader-{guid}
+  sbomLabel: "" # default sdlc-demo-{guid}
+
+nexus:
+  image: sonatype/nexus3:3.76.1
+  storageSize: 20Gi
+  adminPassword: ""
+  repoValidated: ""
+  repoRemediated: ""
+  lightwellNetwork:
+    username: CHANGE_ME
+    password: CHANGE_ME
+
+sdlc:
+  enabled: true
+  scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git
+  projectName: "" # default SDLC {guid}
+  activationName: "" # default sdlc-remediation-{guid}
+  decisionEnvName: "SDLC Decision Environment"
+  decisionEnvImage: quay.io/ansible/ansible-rulebook:main
+  rulebookName: sdlc-remediation.yml
+  edaWebhookUrl: "" # set when known; empty skips Nexus webhooks (repos still created)
+  opencodeBaseUrl: http://opencode.sdlc-control-plane.svc.cluster.local:4096
+  opencodeServerUsername: opencode
+  opencodeServerPassword: "" # default tenant password if empty
