@@ -293,11 +293,11 @@ def main() -> None:
     sbom_label = env("TPA_SBOM_LABEL", required=True)
     sbom_file = env("TPA_SBOM_FILE", "/seed/demo-sbom.cyclonedx.json")
 
-    admin_user = env("KEYCLOAK_ADMIN_USER", required=True)
-    admin_pass = env("KEYCLOAK_ADMIN_PASSWORD", required=True)
+    kc_admin_user = env("KEYCLOAK_ADMIN_USER", required=True)
+    kc_admin_pass = env("KEYCLOAK_ADMIN_PASSWORD", required=True)
 
     realm_base = f"{keycloak_url.rstrip('/')}/admin/realms/{realm}"
-    token = admin_token(keycloak_url, admin_user, admin_pass)
+    token = admin_token(keycloak_url, kc_admin_user, kc_admin_pass)
     print("Keycloak admin token obtained")
 
     scope_ids = ensure_client_scopes(realm_base, token)
@@ -305,13 +305,13 @@ def main() -> None:
 
     tenant_user = env("LIGHTWELL_USERNAME", required=True)
     tenant_password = env("LIGHTWELL_PASSWORD", required=True)
-    admin_user = env("TPA_ADMIN_USERNAME", "admin")
-    admin_password = env("TPA_ADMIN_PASSWORD", tenant_password)
+    tpa_admin_user = env("TPA_ADMIN_USERNAME", "admin")
+    tpa_admin_password = env("TPA_ADMIN_PASSWORD", tenant_password)
 
     for label, username, user_password in (
         ("uploader", uploader, password),
         ("tenant", tenant_user, tenant_password),
-        ("admin", admin_user, admin_password),
+        ("admin", tpa_admin_user, tpa_admin_password),
     ):
         ensure_uploader_user(realm_base, token, username, user_password)
         print(f"Keycloak Trustify user ready ({label}): {username}")

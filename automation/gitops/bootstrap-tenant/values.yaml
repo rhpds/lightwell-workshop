@@ -18,6 +18,11 @@ gitlab:
   group: lightwell
   demoProjectPath: "" # default lightwell/lw-demo-help-app-{guid}
   pat: "" # optional; OpenCode uses password when unset
+  helpAppSeed:
+    enabled: true # clone sourceRepo into the tenant GitLab project (force-push defaultBranch)
+    sourceRepo: https://github.com/sshaaf/lw-demo-help-app.git
+    sourceRef: main # branch or tag to clone
+    defaultBranch: main # branch name on the tenant GitLab project
 
 keycloak:
   url: "" # default https://sso.{deployer.domain}
@@ -39,8 +44,12 @@ nexus:
   repoValidated: ""
   repoRemediated: ""
   lightwellNetwork:
-    username: CHANGE_ME
-    password: CHANGE_ME
+    # Do not commit real credentials. Use one of:
+    # - AgnosticV ocp4_workload_gitops_bootstrap_helm_values (vault-backed, not in git)
+    # - nexus.lightwellNetwork.existingSecret + oc create secret (see bootstrap-tenant/README.md)
+    username: ""
+    password: ""
+    existingSecret: "" # e.g. redhat-packages-credentials — chart skips creating that Secret
 
 sdlc:
   enabled: true
@@ -54,9 +63,10 @@ sdlc:
   edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
-  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-59ffb92
+  opencodeImage: quay.io/sshaaf/sdlc-opencode:gitlab-cli-20260918b
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
   llm:
     apiKey: "" # when set, chart creates secret opencode-llm (optional for demos)
+    existingSecret: "" # e.g. opencode-llm — chart skips creating that Secret; still wires OPENAI_API_KEY

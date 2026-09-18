@@ -384,6 +384,8 @@ def main() -> None:
                 "is_enabled": False,
                 "organization_id": org_id,
                 "extra_var": extra_var,
+                # Required when rulebook uses run_job_template (RH AAP / Controller credential)
+                "eda_credentials": [eda_cred_id] if eda_cred_id else [],
             },
         )
         if code not in (200, 201):

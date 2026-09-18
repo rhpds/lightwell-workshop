@@ -9,7 +9,7 @@ Chart **v0.4.0** provisions T1–T4 plus the **SDLC control plane** (OpenCode, E
 | Layer | Resources |
 |-------|-----------|
 | **OpenShift** | `{{ username }}-app`, `lightwell-tenant-<guid>`, `lightwell-nexus-<guid>`, `sdlc-<guid>`; user `edit` on app + nexus NS, `view` on job NS |
-| **GitLab** | User, `lightwell` group membership (Maintainer), demo project `lightwell/lw-demo-help-app-<guid>` |
+| **GitLab** | User, `lightwell` group membership (Maintainer), demo project `lightwell/lw-demo-help-app-<guid>`, MR webhook → EDA (`GITLAB_WEBHOOK_TARGET_URL`) |
 | **AAP** | Org `user-<guid>`, tenant user, org membership (best-effort gateway API) |
 | **Nexus** | Dedicated instance, Maven repos + EDA webhooks (`nexus-reconcile` Job) |
 | **TPA seed** | `trustify-ui` client (direct access + SBOM scopes), per-tenant uploader, demo SBOM upload (`deploy-tpa.yml` parity) |
@@ -38,20 +38,59 @@ deployer:
   storageClass: <cluster default or injected>
 nexus:
   lightwellNetwork:
-    username: ...
-    password: ...
+    existingSecret: redhat-packages-credentials   # preferred: secret created outside git
+```
+
+**Lightwell Network credentials (never in git)**
+
+| Where | When |
+|-------|------|
+| **AgnosticV / RHDP** `ocp4_workload_gitops_bootstrap_helm_values` → `nexus.lightwellNetwork.username/password` | Workshop orders; values live in vault/CI, not the public repo |
+| **Pre-created OpenShift Secret** + `nexus.lightwellNetwork.existingSecret: redhat-packages-credentials` | Labs / manual clusters; chart does not render the Secret |
+| **Local `.env.secrets`** + `scripts/inject-env-secrets.sh` | Dev clusters; file is gitignored |
+
+```bash
+# lightwell-workshop/.env.secrets (gitignored) — see .env.secrets.example
+GUID=<guid> ./automation/gitops/bootstrap-tenant/scripts/inject-env-secrets.sh
+```
+
+```bash
+NS=lightwell-nexus-<guid>
+oc create secret generic redhat-packages-credentials -n "${NS}" \
+  --from-literal=username='YOUR_SERVICE_ACCOUNT' \
+  --from-literal=password='YOUR_TOKEN'
+```
+
+**OpenCode LLM:** same inject script writes `opencode-llm` (`api_key`) in `sdlc-<guid>` and sets `sdlc.llm.existingSecret: opencode-llm` on the Argo Application so the key never lands in git.
+Argo Application helm values (only on the cluster / in AgnosticV, not committed):
+
+```yaml
+nexus:
+  lightwellNetwork:
+    existingSecret: redhat-packages-credentials
+```
+
+Re-run reconcile after the secret exists: `oc delete job nexus-reconcile -n "${NS}"` and sync the tenant app.
+
+For local `helm template` only (do not commit real passwords), pass `--set nexus.lightwellNetwork.username=... --set nexus.lightwellNetwork.password=...` or use `existingSecret` as above.
+
+```yaml
 sdlc:
   enabled: true
   opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-<tag>
-  # namespace: sdlc-control-plane   # only for legacy single-tenant labs
 ```
 
 ## SCM vs GitOps
 
 | Repo | Role |
 |------|------|
-| [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) | Rulebooks, playbooks, OpenCode container source (`github.com/sshaaf/lw-sdlc-opencode`) |
+| [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) | Rulebooks, playbooks, OpenCode agents/skills, container source (`github.com/sshaaf/lw-sdlc-opencode`). Demo A: blast radius → help-app MR — see `docs/DEMO-A-SMOKE.md` |
 | **This chart** | All tenant + SDLC Kubernetes/GitOps (Helm only under `automation/gitops/bootstrap-*`) |
+
+Integration ConfigMap `tenant-integration` includes `REMEDIATION_APP_GITLAB_PATH` (default `lightwell/lw-demo-help-app-<guid>`), `TPA_SBOM_LABEL` (`sdlc-demo-<guid>`), `OPENCODE_BASE_URL`, and EDA SCM URL (`sdlc.scmUrl`).
+
+**Help-app GitLab seed:** with `gitlab.helpAppSeed.enabled` (default `true`), Job `create-gitlab-tenant` clones `gitlab.helpAppSeed.sourceRepo` (default `https://github.com/sshaaf/lw-demo-help-app.git` at `sourceRef`, default `main`) and force-pushes that branch into the tenant GitLab project. No app sources are vendored in this chart.
+
 
 EDA bootstrap script: `files/bootstrap-aap-eda.py`. After SCM changes, re-sync the tenant Argo app or re-run the `eda-bootstrap` Job.
 

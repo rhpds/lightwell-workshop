@@ -29,12 +29,12 @@ spec:
             - name: LIGHTWELL_NETWORK_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: redhat-packages-credentials
+                  name: {{ include "bootstrap-tenant.lightwellNetworkSecretName" . }}
                   key: username
             - name: LIGHTWELL_NETWORK_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: redhat-packages-credentials
+                  name: {{ include "bootstrap-tenant.lightwellNetworkSecretName" . }}
                   key: password
             - name: NEXUS_WEBHOOK_REPOSITORIES
               valueFrom:

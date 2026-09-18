@@ -23,8 +23,9 @@ spec:
           storageClass: ocs-external-storagecluster-ceph-rbd-immediate
         nexus:
           lightwellNetwork:
-            username: REPLACE_ME
-            password: REPLACE_ME
+            # Do not commit real credentials. Either inject via AgnosticV helm_values (vault)
+            # or create Secret redhat-packages-credentials in the tenant Nexus NS and set:
+            existingSecret: redhat-packages-credentials
   destination:
     server: https://kubernetes.default.svc
     namespace: openshift-gitops

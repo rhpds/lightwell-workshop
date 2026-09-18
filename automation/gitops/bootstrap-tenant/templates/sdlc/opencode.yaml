@@ -28,6 +28,13 @@ spec:
         - name: opencode
           image: {{ .Values.sdlc.opencodeImage | quote }}
           imagePullPolicy: IfNotPresent
+          command: ["opencode"]
+          args:
+            - serve
+            - --hostname=0.0.0.0
+            - --port=4096
+            - --print-logs
+            - --log-level={{ .Values.sdlc.opencodeLogLevel | default "INFO" }}
           env:
             - name: HOME
               value: /tmp
@@ -61,11 +68,11 @@ spec:
                   name: gitlab-credentials
                   key: token
                   optional: true
-            {{- if .Values.sdlc.llm.apiKey }}
+            {{- if or .Values.sdlc.llm.apiKey .Values.sdlc.llm.existingSecret }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: opencode-llm
+                  name: {{ include "bootstrap-tenant.opencodeLlmSecretName" . }}
                   key: api_key
             {{- end }}
           volumeMounts:

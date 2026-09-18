@@ -89,3 +89,11 @@
 {{- define "bootstrap-tenant.opencodeServerPassword" -}}
 {{- .Values.sdlc.opencodeServerPassword | default .Values.password -}}
 {{- end -}}
+
+{{- define "bootstrap-tenant.lightwellNetworkSecretName" -}}
+{{- .Values.nexus.lightwellNetwork.existingSecret | default "redhat-packages-credentials" -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.opencodeLlmSecretName" -}}
+{{- .Values.sdlc.llm.existingSecret | default "opencode-llm" -}}
+{{- end -}}
