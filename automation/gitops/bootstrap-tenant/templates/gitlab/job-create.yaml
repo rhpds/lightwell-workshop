@@ -103,7 +103,8 @@ spec:
                 curl -sk -o /dev/null -X DELETE -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
                   "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/protected_branches/${DEFAULT_BRANCH}" || true
                 WORK=$(mktemp -d)
-                git -c http.sslVerify=false clone --depth 1 --branch "${SEED_REF}" "${SEED_REPO}" "${WORK}/src"
+                # Full clone: GitLab rejects force-push of a shallow history ("shallow update not allowed")
+                git -c http.sslVerify=false clone --branch "${SEED_REF}" "${SEED_REPO}" "${WORK}/src"
                 cd "${WORK}/src"
                 # Detach from GitHub remotes; push a single default branch into tenant GitLab
                 git remote remove origin 2>/dev/null || true
