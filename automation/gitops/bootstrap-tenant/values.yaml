@@ -63,7 +63,7 @@ sdlc:
   edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
-  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-64ee23b
+  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-540f353
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
