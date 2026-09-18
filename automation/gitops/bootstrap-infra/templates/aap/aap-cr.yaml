@@ -8,7 +8,7 @@ metadata:
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   admin_password_secret: aap-admin-password
-  postgres_storage_class: {{ .Values.deployer.storageClass }}
+  # Note: aap.ansible.com/v1alpha1 has no postgres_storage_class (SSA rejects it).
   controller:
     disabled: false
     replicas: 1

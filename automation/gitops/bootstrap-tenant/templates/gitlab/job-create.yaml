@@ -126,13 +126,7 @@ spec:
               if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
                 echo "Ensuring GitLab MR webhook → ${GITLAB_WEBHOOK_URL}..."
                 HOOK_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
-                  "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/hooks" | python3 -c "
-import json,sys
-target=sys.argv[1].rstrip('/')
-for h in json.load(sys.stdin):
-  if (h.get('url') or '').rstrip('/') == target and h.get('merge_requests_events'):
-    print(h['id']); break
-" "${GITLAB_WEBHOOK_URL}" || true)
+                  "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/hooks" | python3 -c 'import json,sys; t=sys.argv[1].rstrip("/"); h=next((x for x in json.load(sys.stdin) if (x.get("url") or "").rstrip("/")==t and x.get("merge_requests_events")), None); print(h["id"] if h else "")' "${GITLAB_WEBHOOK_URL}" || true)
                 if [ -n "${HOOK_ID}" ]; then
                   echo "GitLab MR webhook already present (id=${HOOK_ID})"
                 else
