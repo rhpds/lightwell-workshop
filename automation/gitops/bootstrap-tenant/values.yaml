@@ -17,7 +17,7 @@ gitlab:
   namespace: gitlab
   group: lightwell
   demoProjectPath: "" # default lightwell/lw-demo-help-app-{guid}
-  pat: "" # optional; OpenCode uses password when unset
+  pat: "" # unused by OpenCode; sync-gitlab-pat copies the GitLab root PAT into Secret gitlab-root-pat
   helpAppSeed:
     enabled: true # clone sourceRepo into the tenant GitLab project (force-push defaultBranch)
     sourceRepo: https://github.com/sshaaf/lw-demo-help-app.git

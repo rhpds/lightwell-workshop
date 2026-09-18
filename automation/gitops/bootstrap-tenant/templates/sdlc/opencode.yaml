@@ -19,6 +19,7 @@ spec:
       labels:
         app: opencode
     spec:
+      serviceAccountName: opencode
       securityContext:
         runAsNonRoot: true
       volumes:
@@ -65,9 +66,8 @@ spec:
             - name: GITLAB_PAT
               valueFrom:
                 secretKeyRef:
-                  name: gitlab-credentials
+                  name: gitlab-root-pat
                   key: token
-                  optional: true
             {{- if or .Values.sdlc.llm.apiKey .Values.sdlc.llm.existingSecret }}
             - name: OPENAI_API_KEY
               valueFrom:

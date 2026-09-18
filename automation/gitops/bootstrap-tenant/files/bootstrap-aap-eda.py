@@ -218,6 +218,45 @@ def ensure_eda_controller_credential(
     sys.exit(1)
 
 
+def _norm_yaml(text: str) -> str:
+    return "\n".join(line.rstrip() for line in (text or "").splitlines() if line.strip())
+
+
+def _rulebook_id(activation: dict):
+    if activation.get("rulebook_id"):
+        return activation.get("rulebook_id")
+    rulebook = activation.get("rulebook")
+    if isinstance(rulebook, dict):
+        return rulebook.get("id")
+    return None
+
+
+def _credential_ids(activation: dict) -> list:
+    ids = []
+    for cred in activation.get("eda_credentials") or []:
+        if isinstance(cred, dict):
+            cid = cred.get("id")
+        else:
+            cid = cred
+        if cid:
+            ids.append(int(cid))
+    return sorted(ids)
+
+
+def activation_matches(activation: dict, rulebook_id, extra_var: str, eda_cred_id) -> bool:
+    """True when a running activation already has the desired spec (skip restart)."""
+    if not isinstance(activation, dict):
+        return False
+    if activation.get("status") != "running" or not activation.get("is_enabled", True):
+        return False
+    if _rulebook_id(activation) != rulebook_id:
+        return False
+    if _norm_yaml(activation.get("extra_var") or "") != _norm_yaml(extra_var):
+        return False
+    expected = sorted([int(eda_cred_id)]) if eda_cred_id else []
+    return _credential_ids(activation) == expected
+
+
 def build_extra_var_yaml() -> str:
     lines = [
         f"aap_organization_name: {env('EDA_ORGANIZATION_NAME') or env('AAP_ORGANIZATION_NAME', 'Default')}",
@@ -396,6 +435,15 @@ def main() -> None:
     if not activation_id:
         print("ERROR: no activation id", file=sys.stderr)
         sys.exit(1)
+
+    # Re-running this Job on every Argo sync used to disable/enable the activation,
+    # which restarts the webhook listener and drops in-flight GitLab MR events.
+    if activation_matches(activation, rulebook_id, extra_var, eda_cred_id):
+        print(
+            "Activation already running with current rulebook, credentials, and extra vars — not restarting."
+        )
+        print(f"Webhook listener (inventory): {env('EDA_WEBHOOK_URL')}")
+        return
 
     aap_request("POST", f"/api/eda/v1/activations/{activation_id}/disable/", user, password, base)
     time.sleep(2)
