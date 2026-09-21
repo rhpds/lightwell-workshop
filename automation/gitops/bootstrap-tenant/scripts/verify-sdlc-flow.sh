@@ -400,8 +400,12 @@ run_smoke_rules() {
   # fine. tpa_results mirrors the body query-tpa.yml posts back (package_info
   # needs purl/artifact_id, affected_repos needs gitlab_path/repo_url); the MR
   # payload carries both git_http_url and http_url, as GitLab itself does.
+  #
+  # The Nexus CREATED version must carry the .rhlw- suffix: the rulebook matches
+  # that suffix so ordinary proxy cache-fills do not trigger the pipeline, and a
+  # payload without it is silently ignored rather than reported as a failure.
   payloads=(
-    'Nexus CREATED|{"action":"CREATED","component":{"name":"org.lightwell.verify:probe","version":"0.0.0-verify","format":"maven2"}}'
+    'Nexus CREATED|{"action":"CREATED","component":{"name":"org.lightwell.verify:probe","version":"0.0.0.rhlw-verify","format":"maven2"}}'
     'tpa_results|{"type":"tpa_results","query":"org.lightwell.verify:probe","affected_repos":[{"repo_url":"https://verify.local/lightwell/probe.git","gitlab_path":"lightwell/probe","sbom_id":"verify","sbom_label":"verify","match_reason":"verify","app_classification":"demo","deployment_env":"development"}],"package_info":{"purl":"org.lightwell.verify:probe","artifact_id":"org.lightwell.verify:probe","vulnerable_version":"0.0.0","fix_version":"0.0.0-verify","new_version":"0.0.0-verify","cve_id":"CVE-VERIFY"},"blast_radius":{"mode":"single_app_demo_a","count":1}}'
     'GitLab MR|{"object_kind":"merge_request","project":{"id":1,"path_with_namespace":"lightwell/probe","web_url":"https://verify.local/lightwell/probe","git_http_url":"https://verify.local/lightwell/probe.git","http_url":"https://verify.local/lightwell/probe"},"object_attributes":{"iid":99999,"state":"opened","source_branch":"update-artifact-verify-0.0.0","target_branch":"main"}}'
   )

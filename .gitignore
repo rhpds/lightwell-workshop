@@ -6,3 +6,10 @@ www/
 .env.secrets
 .env.secrets.*
 !.env.secrets.example
+
+# Downloaded kubeconfigs — these carry live cluster credentials and land in the
+# repo root, where a `git add -A` would sweep them in.
+lightwell-demo
+lightwell-tenant-config
+kubeconfig
+*.kubeconfig
