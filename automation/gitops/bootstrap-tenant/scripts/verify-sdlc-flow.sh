@@ -173,6 +173,51 @@ print(r[0]['id'] if r else 0)
 " 2>/dev/null || echo "0"
 }
 
+controller_jobs_since() {
+  aap_curl GET "/api/controller/v2/jobs/?order_by=-id&page_size=50" | python3 -c "
+import json,sys
+base=int(sys.argv[1])
+ids=[str(x['id']) for x in json.load(sys.stdin).get('results',[]) if int(x['id'])>base]
+print(','.join(sorted(ids, key=int)))
+" "${1}" 2>/dev/null || true
+}
+
+# Poll one Controller job to a terminal state. Echoes "<status> <name>".
+controller_job_result() {
+  local id="$1"
+  local polls="${SMOKE_JOB_POLLS:-36}"
+  local st="unknown" line=""
+  for _ in $(seq 1 "${polls}"); do
+    line="$(aap_curl GET "/api/controller/v2/jobs/${id}/" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d.get('status','unknown'), d.get('name','?'))
+" 2>/dev/null || echo "unknown ?")"
+    st="${line%% *}"
+    case "${st}" in
+      successful|failed|error|canceled) break ;;
+    esac
+    sleep 5
+  done
+  echo "${line}"
+}
+
+# Argo deletes wave hooks on success (hook-delete-policy: HookSucceeded), so an
+# absent Job is the normal steady state — only a Job that is present and not
+# succeeded is worth flagging.
+check_hook_job() {
+  local job="$1" ns="$2" effect="$3"
+  if ! oc get job "${job}" -n "${ns}" &>/dev/null; then
+    echo "NOTE job ${job} absent — deleted by Argo after success; ${effect}"
+    return 0
+  fi
+  if [[ "$(oc get job "${job}" -n "${ns}" -o jsonpath='{.status.succeeded}' 2>/dev/null)" == "1" ]]; then
+    log_ok "job ${job}"
+  else
+    log_warn "job ${job} present but not succeeded (sync may still be running)"
+  fi
+}
+
 cleanup_state() {
   if [[ ! -f "${STATE_FILE}" ]]; then
     log_warn "no state file ${STATE_FILE} (nothing to clean)"
@@ -318,15 +363,7 @@ for h in json.load(sys.stdin):
 
   echo ""
   echo "=== Nexus reconcile ==="
-  if oc get job nexus-reconcile -n "${NS_NEXUS}" &>/dev/null; then
-    if [[ "$(oc get job nexus-reconcile -n "${NS_NEXUS}" -o jsonpath='{.status.succeeded}')" == "1" ]]; then
-      log_ok "job nexus-reconcile"
-    else
-      log_warn "job nexus-reconcile not succeeded"
-    fi
-  else
-    log_warn "job nexus-reconcile missing"
-  fi
+  check_hook_job nexus-reconcile "${NS_NEXUS}" "repos and webhooks checked below"
   if [[ -n "${NEXUS_URL}" ]]; then
     code="$(curl -sk -o /dev/null -w '%{http_code}' "${NEXUS_URL}/" 2>/dev/null || echo "000")"
     if [[ "${code}" =~ ^(200|302|401)$ ]]; then
@@ -338,11 +375,7 @@ for h in json.load(sys.stdin):
 
   echo ""
   echo "=== Tenant bootstrap ==="
-  if [[ "$(oc get job eda-bootstrap -n "${NS_TENANT}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")" == "1" ]]; then
-    log_ok "job eda-bootstrap"
-  else
-    log_warn "job eda-bootstrap not succeeded (activation may still be OK if configured manually)"
-  fi
+  check_hook_job eda-bootstrap "${NS_TENANT}" "activation and job templates checked above"
 }
 
 run_smoke() {
@@ -362,32 +395,54 @@ run_smoke_rules() {
   baseline="$(max_controller_job_id)"
   echo "    baseline max job id: ${baseline}"
 
+  # Payloads must mirror what the real producers send, otherwise the rule fires
+  # and the job template then dies on a missing key while the POST still looks
+  # fine. tpa_results mirrors the body query-tpa.yml posts back (package_info
+  # needs purl/artifact_id, affected_repos needs gitlab_path/repo_url); the MR
+  # payload carries both git_http_url and http_url, as GitLab itself does.
   payloads=(
     'Nexus CREATED|{"action":"CREATED","component":{"name":"org.lightwell.verify:probe","version":"0.0.0-verify","format":"maven2"}}'
-    'tpa_results|{"type":"tpa_results","affected_repos":[{"repo_url":"https://verify.local/none.git"}],"package_info":{"cve_id":"CVE-VERIFY"}}'
-    'GitLab MR|{"object_kind":"merge_request","project":{"id":1,"git_http_url":"https://verify.local/g/a"},"object_attributes":{"iid":99999,"state":"opened","source_branch":"update-artifact-verify-0.0.0","target_branch":"main"}}'
+    'tpa_results|{"type":"tpa_results","query":"org.lightwell.verify:probe","affected_repos":[{"repo_url":"https://verify.local/lightwell/probe.git","gitlab_path":"lightwell/probe","sbom_id":"verify","sbom_label":"verify","match_reason":"verify","app_classification":"demo","deployment_env":"development"}],"package_info":{"purl":"org.lightwell.verify:probe","artifact_id":"org.lightwell.verify:probe","vulnerable_version":"0.0.0","fix_version":"0.0.0-verify","new_version":"0.0.0-verify","cve_id":"CVE-VERIFY"},"blast_radius":{"mode":"single_app_demo_a","count":1}}'
+    'GitLab MR|{"object_kind":"merge_request","project":{"id":1,"path_with_namespace":"lightwell/probe","web_url":"https://verify.local/lightwell/probe","git_http_url":"https://verify.local/lightwell/probe.git","http_url":"https://verify.local/lightwell/probe"},"object_attributes":{"iid":99999,"state":"opened","source_branch":"update-artifact-verify-0.0.0","target_branch":"main"}}'
   )
   for item in "${payloads[@]}"; do
     label="${item%%|*}"
     body="${item#*|}"
     if eda_post "${EDA_WEBHOOK_URL}" "${body}"; then
-      log_ok "smoke payload: ${label}"
+      log_ok "smoke payload accepted: ${label}"
     else
-      log_fail "smoke payload: ${label}"
+      log_fail "smoke payload accepted: ${label}"
     fi
     sleep 2
   done
 
   sleep 8
-  new_ids="$(aap_curl GET "/api/controller/v2/jobs/?order_by=-id&page_size=20" | python3 -c "
-import json,sys
-base=int(sys.argv[1])
-ids=[]
-for x in json.load(sys.stdin).get('results',[]):
-  if int(x['id'])>base:
-    ids.append(str(x['id']))
-print(','.join(ids))
-" "${baseline}" 2>/dev/null || true)"
+  launched="$(controller_jobs_since "${baseline}")"
+
+  # A 200 from the webhook only proves EDA accepted the payload — assert that the
+  # rules actually launched job templates and that those jobs finished cleanly.
+  echo ""
+  if [[ -z "${launched}" ]]; then
+    log_fail "no Controller jobs launched (no rule matched the smoke payloads)"
+  else
+    echo "    waiting for launched Controller jobs: ${launched}"
+    IFS=',' read -r -a job_ids <<< "${launched}"
+    for id in "${job_ids[@]}"; do
+      [[ -z "${id}" ]] && continue
+      result="$(controller_job_result "${id}")"
+      status="${result%% *}"
+      jname="${result#* }"
+      if [[ "${status}" == "successful" ]]; then
+        log_ok "controller job ${id} '${jname}': ${status}"
+      else
+        log_fail "controller job ${id} '${jname}': ${status}"
+      fi
+    done
+  fi
+
+  # Re-read afterwards so cascaded jobs (Query TPA posting tpa_results back) are
+  # recorded for --cleanup too.
+  new_ids="$(controller_jobs_since "${baseline}")"
 
   {
     echo "VERIFY_JOB_IDS=${new_ids}"

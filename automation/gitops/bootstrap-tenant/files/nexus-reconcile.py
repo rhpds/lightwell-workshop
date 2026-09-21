@@ -165,11 +165,44 @@ def create_hosted(base: str, user: str, password: str, item: dict) -> None:
         print(f"ERROR creating hosted {name}: {code} {resp}", file=sys.stderr)
 
 
+def extdirect(
+    base: str,
+    user: str,
+    password: str,
+    method: str,
+    data: Any,
+    tid: int,
+) -> tuple[int, Any]:
+    """Call the capability_Capability ExtDirect endpoint the Nexus UI uses."""
+    url = f"{base.rstrip('/')}/service/extdirect"
+    body = {
+        "action": "capability_Capability",
+        "method": method,
+        "data": data,
+        "type": "rpc",
+        "tid": tid,
+    }
+    return request("POST", url, user, password, body)
+
+
 def list_capabilities(base: str, user: str, password: str) -> list:
+    """List capabilities, preferring ExtDirect.
+
+    /service/rest/v1/capabilities is Pro-only and 404s on Nexus OSS. Falling back
+    to an empty list there makes webhook_exists() always false, so every rerun of
+    this job creates a duplicate webhook and verify_webhooks() can never confirm
+    anything. Read over ExtDirect first, which works on both editions.
+    """
+    code, data = extdirect(base, user, password, "read", None, 100)
+    if code == 200 and isinstance(data, dict):
+        result = data.get("result") or {}
+        if result.get("success") and isinstance(result.get("data"), list):
+            return result["data"]
+
     url = f"{base.rstrip('/')}/service/rest/v1/capabilities"
     code, data = request("GET", url, user, password)
     if code != 200:
-        print(f"WARNING: capabilities GET returned {code}", file=sys.stderr)
+        print(f"WARNING: could not list capabilities (REST HTTP {code})", file=sys.stderr)
         return []
     if isinstance(data, list):
         return data
@@ -195,35 +228,31 @@ def create_webhook_extdirect(
     notes: str,
     tid: int,
 ) -> None:
-    url = f"{base.rstrip('/')}/service/extdirect"
-    body = {
-        "action": "capability_Capability",
-        "method": "create",
-        "data": [
-            {
-                "typeId": "webhook.repository",
-                "enabled": True,
-                "notes": notes,
-                "properties": {
-                    "repository": repository,
-                    "names": "component",
-                    "url": eda_url,
-                    "secret": "",
-                },
-            }
-        ],
-        "type": "rpc",
-        "tid": tid,
-    }
-    code, resp = request("POST", url, user, password, body)
-    if code == 200:
+    data = [
+        {
+            "typeId": "webhook.repository",
+            "enabled": True,
+            "notes": notes,
+            "properties": {
+                "repository": repository,
+                "names": "component",
+                "url": eda_url,
+                "secret": "",
+            },
+        }
+    ]
+    code, resp = extdirect(base, user, password, "create", data, tid)
+    # ExtDirect answers 200 even when the RPC itself failed, so check result.success.
+    ok = code == 200 and isinstance(resp, dict) and (resp.get("result") or {}).get("success")
+    if ok:
         print(f"Webhook created for {repository}")
     else:
-        print(f"Webhook {repository}: HTTP {code} {resp}", file=sys.stderr)
+        print(f"ERROR creating webhook {repository}: HTTP {code} {resp}", file=sys.stderr)
 
 
-def verify_webhooks(caps: list, repos: list[str]) -> None:
+def verify_webhooks(caps: list, repos: list[str]) -> bool:
     print("--- Webhook verification ---")
+    all_ok = True
     for repo in repos:
         matches = [
             c
@@ -233,11 +262,15 @@ def verify_webhooks(caps: list, repos: list[str]) -> None:
         ]
         if not matches:
             print(f"  {repo}: not found")
+            all_ok = False
             continue
         cap = matches[0]
         state = cap.get("state", "unknown")
         err = cap.get("error", False)
-        print(f"  {repo}: state={state} error={err}")
+        print(f"  {repo}: state={state} error={err} (x{len(matches)})")
+        if err or state not in ("active", "unknown"):
+            all_ok = False
+    return all_ok
 
 
 def main() -> None:
@@ -299,7 +332,9 @@ def main() -> None:
         tid += 1
 
     caps = list_capabilities(nexus_url, nexus_user, nexus_pass)
-    verify_webhooks(caps, repo_list)
+    if not verify_webhooks(caps, repo_list):
+        print("ERROR: EDA webhooks are not in place — SDLC flow will not fire", file=sys.stderr)
+        sys.exit(1)
     print("Nexus reconcile complete.")
 
 

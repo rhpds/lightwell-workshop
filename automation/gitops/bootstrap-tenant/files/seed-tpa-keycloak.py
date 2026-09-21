@@ -5,6 +5,7 @@ Idempotent: trustify-ui client, TPA API scopes, per-tenant uploader user, demo S
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import ssl
@@ -79,19 +80,30 @@ def admin_token(keycloak_url: str, admin_user: str, admin_pass: str) -> str:
         return json.loads(resp.read().decode())["access_token"]
 
 
-def ensure_client_scopes(realm_base: str, token: str) -> dict[str, str]:
-    """Create TPA scopes if missing; return name -> id."""
+def list_client_scopes(realm_base: str, token: str) -> dict[str, str]:
+    """Return every realm client scope as name -> id."""
     code, existing = kc_request("GET", f"{realm_base}/client-scopes", token)
-    by_name: dict[str, str] = {}
-    if code == 200 and isinstance(existing, list):
-        for item in existing:
-            if item.get("name"):
-                by_name[item["name"]] = item["id"]
+    if code != 200 or not isinstance(existing, list):
+        print(f"ERROR: list client-scopes HTTP {code}: {existing}", file=sys.stderr)
+        sys.exit(1)
+    return {i["name"]: i["id"] for i in existing if i.get("name") and i.get("id")}
 
+
+def ensure_client_scopes(realm_base: str, token: str) -> dict[str, str]:
+    """Create TPA scopes if missing; return name -> id.
+
+    Keycloak answers POST /client-scopes with 201 and an *empty* body, so the new
+    scope id is never in the response. Always re-read the realm after creating
+    rather than trusting what POST returned, otherwise on a fresh realm every id
+    stays unresolved and the scopes silently never get attached to trustify-ui.
+    """
+    by_name = list_client_scopes(realm_base, token)
+
+    created_any = False
     for name in TPA_SCOPE_NAMES:
         if name in by_name:
             continue
-        code, created = kc_request(
+        code, resp = kc_request(
             "POST",
             f"{realm_base}/client-scopes",
             token,
@@ -105,18 +117,20 @@ def ensure_client_scopes(realm_base: str, token: str) -> dict[str, str]:
             },
         )
         if code in (201, 409):
-            if code == 201 and isinstance(created, dict) and created.get("id"):
-                by_name[name] = created["id"]
-            elif code == 409:
-                code2, all_scopes = kc_request("GET", f"{realm_base}/client-scopes", token)
-                if code2 == 200 and isinstance(all_scopes, list):
-                    for item in all_scopes:
-                        if item.get("name") == name:
-                            by_name[name] = item["id"]
             print(f"Client scope {name}: HTTP {code}")
+            created_any = True
         else:
-            print(f"WARN: client scope {name}: HTTP {code} {created}", file=sys.stderr)
-    return by_name
+            print(f"ERROR: client scope {name}: HTTP {code} {resp}", file=sys.stderr)
+            sys.exit(1)
+
+    if created_any:
+        by_name = list_client_scopes(realm_base, token)
+
+    missing = [n for n in TPA_SCOPE_NAMES if n not in by_name]
+    if missing:
+        print(f"ERROR: unresolved TPA client scopes: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(1)
+    return {n: by_name[n] for n in TPA_SCOPE_NAMES}
 
 
 def configure_trustify_client(
@@ -158,7 +172,8 @@ def configure_trustify_client(
     for scope_name in TPA_SCOPE_NAMES:
         sid = scope_ids.get(scope_name)
         if not sid:
-            continue
+            print(f"ERROR: no scope id for {scope_name}", file=sys.stderr)
+            sys.exit(1)
         code, _ = kc_request(
             "PUT",
             f"{realm_base}/clients/{internal_id}/default-client-scopes/{sid}",
@@ -167,7 +182,8 @@ def configure_trustify_client(
         if code in (204, 409):
             print(f"Default scope on {client_id}: {scope_name}")
         else:
-            print(f"WARN: attach scope {scope_name}: HTTP {code}", file=sys.stderr)
+            print(f"ERROR: attach scope {scope_name}: HTTP {code}", file=sys.stderr)
+            sys.exit(1)
 
 
 def ensure_uploader_user(
@@ -256,10 +272,21 @@ def tpa_password_token(
         return ""
 
 
+def token_scopes(access_token: str) -> set[str] | None:
+    """Scopes carried by a JWT access token; None if it cannot be decoded."""
+    try:
+        claims_b64 = access_token.split(".")[1]
+        claims_b64 += "=" * (-len(claims_b64) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(claims_b64))
+    except (IndexError, ValueError, json.JSONDecodeError):
+        return None
+    return set((claims.get("scope") or "").split())
+
+
 def upload_sbom(tpa_url: str, token: str, label: str, path: str) -> None:
     if not os.path.isfile(path):
-        print(f"WARN: SBOM file missing: {path}")
-        return
+        print(f"ERROR: SBOM file missing: {path}", file=sys.stderr)
+        sys.exit(1)
     q = urllib.parse.urlencode({"labels.name": label, "format": "cyclonedx"})
     url = f"{tpa_url.rstrip('/')}/api/v2/sbom?{q}"
     with open(path, "rb") as f:
@@ -279,7 +306,13 @@ def upload_sbom(tpa_url: str, token: str, label: str, path: str) -> None:
             print(f"TPA SBOM upload OK HTTP {resp.status} label={label}")
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")
-        print(f"WARN: TPA upload HTTP {e.code}: {err}", file=sys.stderr)
+        if e.code == 409:
+            print(f"TPA SBOM already present (HTTP 409) label={label}")
+            return
+        # A failed upload leaves the demo with an empty blast radius, so fail the
+        # hook here instead of letting Argo report the sync as healthy.
+        print(f"ERROR: TPA upload HTTP {e.code}: {err}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main() -> None:
@@ -320,6 +353,20 @@ def main() -> None:
     if not access:
         sys.exit(1)
     print("TPA uploader OAuth token obtained")
+
+    granted = token_scopes(access)
+    if granted is None:
+        print("WARN: could not decode uploader token; skipping scope check", file=sys.stderr)
+    else:
+        unattached = [s for s in TPA_SCOPE_NAMES if s not in granted]
+        if unattached:
+            print(
+                f"ERROR: uploader token missing TPA scopes: {', '.join(unattached)}\n"
+                f"       granted: {' '.join(sorted(granted)) or '(none)'}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print(f"TPA uploader token carries all {len(TPA_SCOPE_NAMES)} TPA scopes")
 
     upload_sbom(tpa_url, access, sbom_label, sbom_file)
     print("TPA seed complete")
