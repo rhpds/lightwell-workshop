@@ -94,18 +94,8 @@ def repo_exists(base: str, user: str, password: str, name: str) -> bool:
     return any(r.get("name") == name for r in data)
 
 
-def create_proxy(
-    base: str,
-    user: str,
-    password: str,
-    item: dict,
-    lw_user: str,
-    lw_pass: str,
-) -> None:
+def proxy_body(item: dict, lw_user: str, lw_pass: str) -> dict[str, Any]:
     name = item["name"]
-    if repo_exists(base, user, password, name):
-        print(f"Skip proxy repo (exists): {name}")
-        return
     body: dict[str, Any] = {
         "name": name,
         "online": True,
@@ -131,12 +121,44 @@ def create_proxy(
             "username": lw_user,
             "password": lw_pass,
         }
-    url = f"{base.rstrip('/')}/service/rest/v1/repositories/maven/proxy"
-    code, resp = request("POST", url, user, password, body)
+    return body
+
+
+def create_proxy(
+    base: str,
+    user: str,
+    password: str,
+    item: dict,
+    lw_user: str,
+    lw_pass: str,
+) -> None:
+    name = item["name"]
+    body = proxy_body(item, lw_user, lw_pass)
+    repo_url = f"{base.rstrip('/')}/service/rest/v1/repositories/maven/proxy"
+
+    if repo_exists(base, user, password, name):
+        if not item.get("requires_auth"):
+            print(f"Skip proxy repo (exists): {name}")
+            return
+        # Nexus never returns a stored password, so credential drift is impossible
+        # to detect by reading. Skipping an existing repo means credentials supplied
+        # after the first deploy — real Lightwell Network creds replacing the
+        # placeholder — never reach the repository, and every upstream fetch keeps
+        # 401ing. Push the desired auth on every run instead.
+        code, resp = request("PUT", f"{repo_url}/{name}", user, password, body)
+        if code in (200, 204):
+            print(f"Proxy repo {name}: credentials reconciled (HTTP {code})")
+        else:
+            print(f"ERROR updating proxy {name}: {code} {resp}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    code, resp = request("POST", repo_url, user, password, body)
     if code in (201, 400):
         print(f"Proxy repo {name}: HTTP {code}")
     else:
         print(f"ERROR creating proxy {name}: {code} {resp}", file=sys.stderr)
+        sys.exit(1)
 
 
 def create_hosted(base: str, user: str, password: str, item: dict) -> None:
@@ -163,6 +185,7 @@ def create_hosted(base: str, user: str, password: str, item: dict) -> None:
         print(f"Hosted repo {name}: HTTP {code}")
     else:
         print(f"ERROR creating hosted {name}: {code} {resp}", file=sys.stderr)
+        sys.exit(1)
 
 
 def extdirect(
