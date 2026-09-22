@@ -116,4 +116,34 @@ spec:
     - name: http
       port: 4096
       targetPort: http
+{{- if .Values.sdlc.exposeUi }}
+---
+# The OpenCode server ships an embedded web UI at / that renders each agent
+# session as a readable transcript — the only place the agent's reasoning and
+# tool calls are visible. AAP job output shows just the five tasks that launch
+# the agent, and the pod log shows only server startup. Worth exposing for
+# demos and debugging; the server enforces its own basic auth (opencode /
+# sdlc.opencodeServerPassword), so the route is not anonymous.
+#
+# Sessions live in an emptyDir under $HOME=/tmp, so they do not survive a pod
+# restart. Avoid rolling this Deployment mid-demo.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: opencode-ui
+  namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  labels:
+    app: opencode
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  to:
+    kind: Service
+    name: opencode
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
 {{- end }}
