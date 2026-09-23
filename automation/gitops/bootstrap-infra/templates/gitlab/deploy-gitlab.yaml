@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab
+  namespace: {{ .Values.gitlab.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gitlab
+  template:
+    metadata:
+      labels:
+        app: gitlab
+    spec:
+      serviceAccountName: gitlab
+      containers:
+        - name: gitlab
+          image: {{ .Values.gitlab.image }}
+          envFrom:
+            - configMapRef:
+                name: gitlab-cm
+            - secretRef:
+                name: gitlab-secret
+          ports:
+            - containerPort: 22
+              name: ssh
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+          # The omnibus image reruns a full Chef reconfigure + Rails boot on
+          # every container start, which can take well over the old fixed
+          # liveness delay on a busy shared cluster. A startupProbe gates
+          # liveness/readiness until the app is actually up, so a slow boot
+          # is never mistaken for a hung one and killed mid-startup.
+          #
+          # /-/readiness and /-/liveness 404 on this rebuilt image
+          # (quay.io/redhat-gpte/gitlab), even once GitLab is fully up.
+          # /users/sign_in reliably returns 200 once Puma has booted, so it's
+          # used as the health-check path instead.
+          startupProbe:
+            httpGet:
+              path: /users/sign_in
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /users/sign_in
+              port: 80
+            periodSeconds: 15
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /users/sign_in
+              port: 80
+            periodSeconds: 30
+            failureThreshold: 5
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /home/git/data
+              name: gitlab-persistent-storage
+            - mountPath: /scripts
+              name: create-root-pat-vol
+      volumes:
+        - name: gitlab-persistent-storage
+          persistentVolumeClaim:
+            claimName: gitlab-persistent-storage
+        - name: create-root-pat-vol
+          configMap:
+            name: cm-create-root-pat
+            defaultMode: 0777

@@ -1,0 +1,146 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-gitlab-tenant
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      containers:
+        - name: create-gitlab-tenant
+          image: {{ .Values.jobAnsibleImage }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              GITLAB_NS="{{ .Values.gitlab.namespace }}"
+              GITLAB_HOST="{{ include "bootstrap-tenant.gitlabHost" . }}"
+              USERNAME="{{ .Values.username }}"
+              PASSWORD="{{ .Values.password }}"
+              GROUP="{{ .Values.gitlab.group }}"
+              PROJECT_PATH="{{ include "bootstrap-tenant.demoProjectPath" . }}"
+              SEED_ENABLED="{{ .Values.gitlab.helpAppSeed.enabled }}"
+              SEED_REPO="{{ .Values.gitlab.helpAppSeed.sourceRepo | default "https://github.com/sshaaf/lw-demo-help-app.git" }}"
+              SEED_REF="{{ .Values.gitlab.helpAppSeed.sourceRef | default "main" }}"
+              DEFAULT_BRANCH="{{ .Values.gitlab.helpAppSeed.defaultBranch | default "main" }}"
+              {{- if .Values.sdlc.enabled }}
+              GITLAB_WEBHOOK_URL="{{ include "bootstrap-tenant.gitlabWebhookTargetUrl" . }}"
+              {{- else }}
+              GITLAB_WEBHOOK_URL=""
+              {{- end }}
+
+              ROOT_TOKEN=$(oc get secret root-user-personal-token -n "${GITLAB_NS}" -o jsonpath='{.data.token}' | base64 -d)
+
+              echo "Waiting for GitLab API..."
+              for i in $(seq 1 60); do
+                STATUS=$(curl -sk -o /dev/null -w '%{http_code}' -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" "${GITLAB_HOST}/api/v4/projects" 2>/dev/null || true)
+                if [ "${STATUS}" = "200" ]; then break; fi
+                echo "Attempt $i/60 - API returned ${STATUS} (10s)..."
+                sleep 10
+              done
+              if [ "${STATUS}" != "200" ]; then echo "ERROR: GitLab API not ready"; exit 1; fi
+
+              echo "Ensuring group ${GROUP}..."
+              CODE=$(curl -sk -o /tmp/grp.json -w '%{http_code}' \
+                -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/groups" \
+                -d "{\"name\":\"${GROUP}\",\"path\":\"${GROUP}\",\"visibility\":\"private\"}")
+              if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
+                echo "WARN: group create HTTP ${CODE}"; cat /tmp/grp.json
+              fi
+
+              echo "Creating user ${USERNAME}..."
+              CODE=$(curl -sk -o /tmp/user.json -w '%{http_code}' \
+                -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/users" \
+                -d "{\"username\":\"${USERNAME}\",\"name\":\"${USERNAME}\",\"email\":\"${USERNAME}@lightwell.example.com\",\"password\":\"${PASSWORD}\",\"skip_confirmation\":true}")
+              if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
+                echo "ERROR: user create failed (HTTP ${CODE})"; cat /tmp/user.json; exit 1
+              fi
+
+              USER_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" "${GITLAB_HOST}/api/v4/users?username=${USERNAME}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+              GROUP_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" "${GITLAB_HOST}/api/v4/groups/${GROUP}" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+
+              CODE=$(curl -sk -o /tmp/member.json -w '%{http_code}' \
+                -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/groups/${GROUP_ID}/members" \
+                -d "{\"user_id\":${USER_ID},\"access_level\":40}")
+              if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
+                echo "ERROR: group membership failed (HTTP ${CODE})"; cat /tmp/member.json; exit 1
+              fi
+
+              PROJECT_NAME="${PROJECT_PATH##*/}"
+              echo "Creating project ${PROJECT_PATH}..."
+              CODE=$(curl -sk -o /tmp/proj.json -w '%{http_code}' \
+                -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/projects" \
+                -d "{\"name\":\"${PROJECT_NAME}\",\"path\":\"${PROJECT_NAME}\",\"namespace_id\":${GROUP_ID},\"visibility\":\"private\",\"initialize_with_readme\":false,\"default_branch\":\"${DEFAULT_BRANCH}\"}")
+              if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
+                echo "WARN: project create HTTP ${CODE}"; cat /tmp/proj.json
+              fi
+
+              PROJECT_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${PROJECT_PATH}")
+              PROJECT_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                "${GITLAB_HOST}/api/v4/projects/${PROJECT_ENC}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
+              if [ -z "${PROJECT_ID}" ]; then
+                echo "ERROR: could not resolve project id for ${PROJECT_PATH}"; exit 1
+              fi
+
+              if [ "${SEED_ENABLED}" = "true" ]; then
+                echo "Seeding ${PROJECT_PATH} from ${SEED_REPO} (ref ${SEED_REF})..."
+                if ! command -v git >/dev/null 2>&1; then
+                  echo "ERROR: git not available in job image"; exit 1
+                fi
+                # Default branch is protected after first push; unprotect so seed can force-push idempotently
+                curl -sk -o /dev/null -X DELETE -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                  "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/protected_branches/${DEFAULT_BRANCH}" || true
+                WORK=$(mktemp -d)
+                # Full clone: GitLab rejects force-push of a shallow history ("shallow update not allowed")
+                git -c http.sslVerify=false clone --branch "${SEED_REF}" "${SEED_REPO}" "${WORK}/src"
+                cd "${WORK}/src"
+                # Detach from GitHub remotes; push a single default branch into tenant GitLab
+                git remote remove origin 2>/dev/null || true
+                git checkout -B "${DEFAULT_BRANCH}"
+                git config user.email "lightwell-seed@example.com"
+                git config user.name "lightwell-tenant-seed"
+                # Ensure at least one commit exists on DEFAULT_BRANCH (clone already has history)
+                PUSH_URL="${GITLAB_HOST}/${PROJECT_PATH}.git"
+                PUSH_URL_AUTH="$(echo "${PUSH_URL}" | sed "s#https://#https://oauth2:${ROOT_TOKEN}@#" | sed "s#http://#http://oauth2:${ROOT_TOKEN}@#")"
+                git remote add gitlab "${PUSH_URL_AUTH}"
+                git -c http.sslVerify=false push -u gitlab "${DEFAULT_BRANCH}" --force
+                # Re-protect default branch for demo realism
+                curl -sk -o /dev/null -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                  -X POST "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/protected_branches" \
+                  -d "{\"name\":\"${DEFAULT_BRANCH}\",\"push_access_level\":40,\"merge_access_level\":40}" || true
+                echo "Help-app seed from ${SEED_REPO}@${SEED_REF} complete"
+              fi
+
+              # GitLab (external) → EDA route: MR opened on update-artifact-* branches fires mr-verifier.
+              if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
+                echo "Ensuring GitLab MR webhook → ${GITLAB_WEBHOOK_URL}..."
+                HOOK_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                  "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/hooks" | python3 -c 'import json,sys; t=sys.argv[1].rstrip("/"); h=next((x for x in json.load(sys.stdin) if (x.get("url") or "").rstrip("/")==t and x.get("merge_requests_events")), None); print(h["id"] if h else "")' "${GITLAB_WEBHOOK_URL}" || true)
+                if [ -n "${HOOK_ID}" ]; then
+                  echo "GitLab MR webhook already present (id=${HOOK_ID})"
+                else
+                  CODE=$(curl -sk -o /tmp/hook.json -w '%{http_code}' \
+                    -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                    -X POST "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/hooks" \
+                    -d "{\"url\":\"${GITLAB_WEBHOOK_URL}\",\"push_events\":false,\"merge_requests_events\":true,\"enable_ssl_verification\":false}")
+                  if [ "${CODE}" = "201" ]; then
+                    echo "GitLab MR webhook created"
+                  else
+                    echo "ERROR: GitLab webhook create failed (HTTP ${CODE})"; cat /tmp/hook.json; exit 1
+                  fi
+                fi
+              fi
+
+              echo "GitLab tenant provisioning complete"

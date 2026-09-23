@@ -1,0 +1,28 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lightwell-tenant-keycloak-reader-{{ .Values.guid }}
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["keycloak-initial-admin"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lightwell-tenant-keycloak-reader-{{ .Values.guid }}
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lightwell-tenant-keycloak-reader-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-tenant-jobs
+    namespace: {{ include "bootstrap-tenant.jobNamespace" . }}

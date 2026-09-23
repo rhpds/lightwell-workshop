@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-integration
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  GUID: {{ .Values.guid | quote }}
+  KEYCLOAK_URL: {{ include "bootstrap-tenant.keycloakUrl" . | quote }}
+  KEYCLOAK_TPA_REALM: {{ .Values.keycloak.tpaRealm | quote }}
+  TPA_URL: {{ include "bootstrap-tenant.tpaUrl" . | quote }}
+  TPA_TRUSTIFY_URL: {{ include "bootstrap-tenant.tpaUrl" . | quote }}
+  TPA_OAUTH_CLIENT_ID: {{ .Values.tpa.uiClientId | quote }}
+  TPA_UPLOADER_USERNAME: {{ .Values.tpa.uploaderUsername | default (printf "lightwell-uploader-%s" .Values.guid) | quote }}
+  TPA_SBOM_LABEL: {{ include "bootstrap-tenant.tpaSbomLabel" . | quote }}
+  GITLAB_URL: {{ include "bootstrap-tenant.gitlabHost" . | quote }}
+  REMEDIATION_APP_GITLAB_PATH: {{ include "bootstrap-tenant.demoProjectPath" . | quote }}
+  NEXUS_NAMESPACE: {{ include "bootstrap-tenant.nexusNamespace" . | quote }}
+  NEXUS_WEBHOOK_REPOSITORIES: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
+  EDA_WEBHOOK_URL: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
+  EDA_WEBHOOK_ROUTE_URL: {{ include "bootstrap-tenant.edaWebhookRouteUrl" . | quote }}
+  GITLAB_WEBHOOK_TARGET_URL: {{ include "bootstrap-tenant.gitlabWebhookTargetUrl" . | quote }}
+  AAP_CONTROLLER_URL: {{ include "bootstrap-tenant.aapControllerUrl" . | quote }}
+  SDLC_NAMESPACE: {{ include "bootstrap-tenant.sdlcNamespace" . | quote }}
+  EDA_PROJECT_NAME: {{ include "bootstrap-tenant.edaProjectName" . | quote }}
+  EDA_PROJECT_SCM_URL: {{ .Values.sdlc.scmUrl | quote }}
+  EDA_RULEBOOK_NAME: {{ .Values.sdlc.rulebookName | quote }}
+  EDA_ACTIVATION_NAME: {{ include "bootstrap-tenant.edaActivationName" . | quote }}
+  EDA_DECISION_ENV_NAME: {{ .Values.sdlc.decisionEnvName | quote }}
+  EDA_DECISION_ENV_IMAGE: {{ .Values.sdlc.decisionEnvImage | quote }}
+  EDA_ORGANIZATION_NAME: {{ include "bootstrap-tenant.aapOrg" . | quote }}
+  OPENCODE_BASE_URL: {{ include "bootstrap-tenant.opencodeBaseUrl" . | quote }}
+  OPENCODE_SERVER_USERNAME: {{ .Values.sdlc.opencodeServerUsername | quote }}
+  NEXUS_URL: {{ include "bootstrap-tenant.nexusRouteUrl" . | quote }}
+  AAP_ORG: {{ include "bootstrap-tenant.aapOrg" . | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-integration
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  NEXUS_WEBHOOK_REPOSITORIES: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
+  EDA_WEBHOOK_URL: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
+  SKIP_WEBHOOK_SETUP: {{ if .Values.sdlc.enabled }}"false"{{ else }}"true"{{ end }}

@@ -1,0 +1,12 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-sbom
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  demo-sbom.cyclonedx.json: |
+{{ .Files.Get "files/demo-sbom.cyclonedx.json" | indent 4 }}
+{{- end }}

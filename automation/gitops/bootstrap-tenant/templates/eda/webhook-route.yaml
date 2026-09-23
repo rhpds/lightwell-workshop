@@ -1,0 +1,25 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "bootstrap-tenant.edaActivationName" . }}
+  namespace: {{ .Values.aap.namespace }}
+  labels:
+    app: eda
+    lightwell.guid: {{ .Values.guid | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    # Activation Service is created by EDA when the activation starts; Route may briefly 503 until then.
+spec:
+  host: {{ printf "%s-%s.%s" (include "bootstrap-tenant.edaActivationName" .) .Values.aap.namespace .Values.deployer.domain }}
+  to:
+    kind: Service
+    name: {{ include "bootstrap-tenant.edaActivationName" . }}
+    weight: 100
+  port:
+    targetPort: {{ printf "%s-5000" (include "bootstrap-tenant.edaActivationName" .) }}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+{{- end }}

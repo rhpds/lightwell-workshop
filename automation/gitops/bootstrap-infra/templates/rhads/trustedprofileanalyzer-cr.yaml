@@ -1,0 +1,52 @@
+apiVersion: rhtpa.io/v1
+kind: TrustedProfileAnalyzer
+metadata:
+  name: trustedprofileanalyzer-sample
+  namespace: {{ .Values.tpa.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  partOf: trustify
+  replicas: 1
+  appDomain: "-{{ .Values.tpa.namespace }}.{{ .Values.deployer.domain }}"
+  tracing:
+    enabled: false
+  metrics:
+    enabled: false
+  storage:
+    type: filesystem
+    size: "{{ .Values.tpa.storageSize }}"
+  oidc:
+    issuerUrl: "https://sso.{{ .Values.deployer.domain }}/realms/{{ .Values.tpa.keycloakRealm }}"
+    clients:
+      frontend:
+        clientId: "{{ .Values.tpa.uiClientId }}"
+      walker:
+        clientId: walker
+        clientSecret: "{{ .Values.admin.password }}"
+  database:
+    host: tpa-postgresql.{{ .Values.tpa.namespace }}.svc.cluster.local
+    name: tpa
+    username: tpa
+    password: "{{ .Values.admin.password }}"
+    port: "5432"
+  createDatabase:
+    host: tpa-postgresql.{{ .Values.tpa.namespace }}.svc.cluster.local
+    name: tpa
+    username: tpa
+    password: "{{ .Values.admin.password }}"
+    port: "5432"
+  migrateDatabase:
+    host: tpa-postgresql.{{ .Values.tpa.namespace }}.svc.cluster.local
+    name: tpa
+    username: tpa
+    password: "{{ .Values.admin.password }}"
+    port: "5432"
+  modules:
+    createDatabase:
+      enabled: true
+    migrateDatabase:
+      enabled: true
+    createImporters:
+      enabled: false

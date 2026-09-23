@@ -1,0 +1,93 @@
+{{- if .Values.sdlc.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opencode
+  namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sdlc-sandboxes
+  labels:
+    lightwell.guid: {{ .Values.guid | quote }}
+    app.kubernetes.io/part-of: lightwell-bootstrap-tenant
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+---
+# Tenant jobs copy the GitLab root PAT into this namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lightwell-sync-gitlab-pat-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lightwell-sync-gitlab-pat-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lightwell-sync-gitlab-pat-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-tenant-jobs
+    namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+---
+# mr-verifier runs oc from the OpenCode pod: Jobs in sdlc-sandboxes, namespaces pr-test-mr-*.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lightwell-opencode-namespaces-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lightwell-opencode-namespaces-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lightwell-opencode-namespaces-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: opencode
+    namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lightwell-opencode-edit-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: opencode
+    namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+{{- end }}

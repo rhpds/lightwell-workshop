@@ -1,0 +1,53 @@
+{{- if .Values.sdlc.enabled }}
+# Copies the GitLab root PAT into sdlc namespace Secret gitlab-root-pat.
+# OpenCode mounts that key as GITLAB_PAT. Username/password are not enough for the CLI.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sync-gitlab-pat
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 8
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      containers:
+        - name: sync-gitlab-pat
+          image: {{ .Values.jobAnsibleImage }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              GITLAB_NS="{{ .Values.gitlab.namespace }}"
+              SDLC_NS="{{ include "bootstrap-tenant.sdlcNamespace" . }}"
+              TOKEN_B64=""
+              for i in $(seq 1 60); do
+                TOKEN_B64=$(oc get secret root-user-personal-token -n "${GITLAB_NS}" -o jsonpath='{.data.token}' 2>/dev/null || true)
+                if [ -n "${TOKEN_B64}" ]; then break; fi
+                echo "Waiting for GitLab root PAT (${i}/60)..."
+                sleep 10
+              done
+              if [ -z "${TOKEN_B64}" ]; then
+                echo "ERROR: secret/${GITLAB_NS}/root-user-personal-token missing"
+                exit 1
+              fi
+              CURRENT=$(oc get secret gitlab-root-pat -n "${SDLC_NS}" -o jsonpath='{.data.token}' 2>/dev/null || true)
+              if [ "${CURRENT}" = "${TOKEN_B64}" ]; then
+                echo "gitlab-root-pat already matches root PAT"
+                exit 0
+              fi
+              RAW=$(printf '%s' "${TOKEN_B64}" | base64 -d)
+              oc create secret generic gitlab-root-pat -n "${SDLC_NS}" \
+                --from-literal=token="${RAW}" \
+                --dry-run=client -o yaml | oc apply -f -
+              echo "gitlab-root-pat updated in ${SDLC_NS}"
+              if oc get deploy opencode -n "${SDLC_NS}" >/dev/null 2>&1; then
+                oc rollout restart deploy/opencode -n "${SDLC_NS}"
+              fi
+{{- end }}

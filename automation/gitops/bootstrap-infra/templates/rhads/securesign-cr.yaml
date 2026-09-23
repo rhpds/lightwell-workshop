@@ -1,0 +1,40 @@
+apiVersion: rhtas.redhat.com/v1alpha1
+kind: Securesign
+metadata:
+  name: securesign-sample
+  namespace: {{ .Values.rhtas.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  rekor:
+    externalAccess:
+      enabled: true
+  fulcio:
+    externalAccess:
+      enabled: true
+    certificate:
+      organizationName: RedHat
+      organizationEmail: lightwell@redhat.com
+    config:
+      OIDCIssuers:
+        - ClientID: "trusted-artifact-signer"
+          IssuerURL: "https://sso.{{ .Values.deployer.domain }}/realms/trusted-artifact-signer"
+          Issuer: "https://sso.{{ .Values.deployer.domain }}/realms/trusted-artifact-signer"
+          Type: email
+  ctlog: {}
+  tuf:
+    externalAccess:
+      enabled: true
+    # This chart does not deploy a TimestampAuthority (spec.tsa is unset), so the
+    # tsa.certchain.pem key the operator otherwise defaults in has no backing
+    # secret — Tuf sits Pending on `Secret "" not found` and never goes Ready.
+    # Explicitly list only the 3 keys that have real backing components so the
+    # operator's defaulting webhook doesn't re-add tsa.certchain.pem.
+    keys:
+      - name: rekor.pub
+      - name: ctfe.pub
+      - name: fulcio_v1.crt.pem
+  trillian:
+    database:
+      create: true

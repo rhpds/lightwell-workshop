@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nexus-reconcile
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: reconcile
+          image: python:3.12-alpine
+          command: ["python3", "/scripts/nexus-reconcile.py"]
+          env:
+            - name: NEXUS_URL
+              value: "http://nexus:8081"
+            - name: NEXUS_USER
+              value: admin
+            - name: NEXUS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-admin-secret
+                  key: password
+            - name: LIGHTWELL_NETWORK_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bootstrap-tenant.lightwellNetworkSecretName" . }}
+                  key: username
+            - name: LIGHTWELL_NETWORK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bootstrap-tenant.lightwellNetworkSecretName" . }}
+                  key: password
+            - name: NEXUS_WEBHOOK_REPOSITORIES
+              valueFrom:
+                configMapKeyRef:
+                  name: tenant-integration
+                  key: NEXUS_WEBHOOK_REPOSITORIES
+            - name: EDA_WEBHOOK_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tenant-integration
+                  key: EDA_WEBHOOK_URL
+            - name: SKIP_WEBHOOK_SETUP
+              valueFrom:
+                configMapKeyRef:
+                  name: tenant-integration
+                  key: SKIP_WEBHOOK_SETUP
+            - name: NEXUS_REPOSITORIES_FILE
+              value: /config/lightwell-repositories.json
+          volumeMounts:
+            - mountPath: /config
+              name: repos-config
+              readOnly: true
+            - mountPath: /scripts
+              name: scripts
+              readOnly: true
+      volumes:
+        - name: repos-config
+          configMap:
+            name: lightwell-repositories
+        - name: scripts
+          configMap:
+            name: nexus-reconcile-source
+            defaultMode: 0555

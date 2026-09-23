@@ -1,0 +1,65 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:lightwell-help-im-vulnerable-demo",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "help-im-vulnerable",
+      "version": "1.0.0",
+      "purl": "pkg:maven/com.redhat.tpa/help-im-vulnerable@1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "group": "com.fasterxml.woodstox",
+      "name": "woodstox-core",
+      "version": "6.0.3",
+      "purl": "pkg:maven/com.fasterxml.woodstox/woodstox-core@6.0.3"
+    },
+    {
+      "type": "library",
+      "group": "org.json",
+      "name": "json",
+      "version": "20220320",
+      "purl": "pkg:maven/org.json/json@20220320"
+    },
+    {
+      "type": "library",
+      "group": "com.jayway.jsonpath",
+      "name": "json-path",
+      "version": "2.8.0",
+      "purl": "pkg:maven/com.jayway.jsonpath/json-path@2.8.0"
+    },
+    {
+      "type": "library",
+      "group": "org.apache.httpcomponents",
+      "name": "httpclient",
+      "version": "4.5.12",
+      "purl": "pkg:maven/org.apache.httpcomponents/httpclient@4.5.12"
+    },
+    {
+      "type": "library",
+      "group": "net.minidev",
+      "name": "json-smart",
+      "version": "2.4.8",
+      "purl": "pkg:maven/net.minidev/json-smart@2.4.8"
+    },
+    {
+      "type": "library",
+      "group": "commons-fileupload",
+      "name": "commons-fileupload",
+      "version": "1.4",
+      "purl": "pkg:maven/commons-fileupload/commons-fileupload@1.4"
+    },
+    {
+      "type": "library",
+      "group": "commons-io",
+      "name": "commons-io",
+      "version": "2.11.0",
+      "purl": "pkg:maven/commons-io/commons-io@2.11.0"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+# One Argo CD Application per tenant order (duplicate or use ApplicationSet).
+# Apply after pushing bootstrap-tenant to your fork.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lightwell-tenant-REPLACE_GUID
+  namespace: openshift-gitops
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sshaaf/lightwell-workshop.git
+    targetRevision: demo-update
+    path: automation/gitops/bootstrap-tenant
+    helm:
+      values: |
+        guid: REPLACE_GUID
+        username: user-REPLACE_GUID
+        password: REPLACE_ME
+        deployer:
+          domain: apps.cluster-dvb52.dyn.redhatworkshops.io
+          storageClass: ocs-external-storagecluster-ceph-rbd-immediate
+        nexus:
+          lightwellNetwork:
+            # Do not commit real credentials. Either inject via AgnosticV helm_values (vault)
+            # or create Secret redhat-packages-credentials in the tenant Nexus NS and set:
+            existingSecret: redhat-packages-credentials
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

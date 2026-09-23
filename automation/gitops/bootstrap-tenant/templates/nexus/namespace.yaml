@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  labels:
+    app: nexus
+    lightwell.guid: {{ .Values.guid | quote }}
+    lightwell.username: {{ .Values.username | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"

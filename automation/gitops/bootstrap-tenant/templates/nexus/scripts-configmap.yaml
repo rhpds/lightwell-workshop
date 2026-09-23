@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-reconcile-source
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  nexus-reconcile.py: |
+{{ .Files.Get "files/nexus-reconcile.py" | indent 4 }}
