@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snow-mock
+  namespace: {{ include "bootstrap-tenant.snowNamespace" . }}
+  labels:
+    app: snow-mock
+    lightwell.guid: {{ .Values.guid | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: snow-mock
+  template:
+    metadata:
+      labels:
+        app: snow-mock
+    spec:
+      containers:
+      - name: snow-mock
+        image: quay.io/redhat-ads-tech/snow-mock:1.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP

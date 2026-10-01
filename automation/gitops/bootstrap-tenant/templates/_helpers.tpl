@@ -90,6 +90,10 @@
 {{- .Values.sdlc.opencodeServerPassword | default .Values.password -}}
 {{- end -}}
 
+{{- define "bootstrap-tenant.snowNamespace" -}}
+{{- printf "snow-%s" .Values.guid -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.lightwellNetworkSecretName" -}}
 {{- .Values.nexus.lightwellNetwork.existingSecret | default "redhat-packages-credentials" -}}
 {{- end -}}
