@@ -16,6 +16,7 @@ Chart **v0.5.3** provisions T1–T4 plus the **SDLC control plane** (OpenCode, E
 | **EDA** | `eda-bootstrap` Job — project, decision env, activation `sdlc-remediation-<guid>`, Controller JTs |
 | **OpenCode** | Deployment + Service in `sdlc-<guid>`; SA `opencode` (verifier RBAC); `GITLAB_PAT` from Job **`sync-gitlab-pat`** → Secret `gitlab-root-pat`; optional LLM via `opencode-llm` / `inject-env-secrets.sh` |
 | **Demo dashboard** | Deployment + Service + authenticated Route in `sdlc-<guid>`; Secret references for GitLab, OpenCode/Keycloak, AAP, and Lightwell; sync Jobs copy the shared AAP password and Nexus upstream credentials into the tenant namespace |
+| **ServiceNow mock** | Namespace `snow-<guid>`, Deployment + Service + edge Route; lightweight CRUD/UI stand-in for ServiceNow ITSM (`quay.io/redhat-ads-tech/snow-mock:1.0.0`). Source: [`redhat-ads-tech/snow-mock`](https://github.com/redhat-ads-tech/snow-mock) |
 
 Integration URLs (`EDA_WEBHOOK_URL`, `OPENCODE_BASE_URL`, Nexus route, and so on) are rendered into ConfigMap `tenant-integration` in `lightwell-tenant-<guid>` — no separate `cluster-config` overlay.
 
