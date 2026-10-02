@@ -74,7 +74,11 @@ sdlc:
     apiKey: "" # when set, chart creates secret opencode-llm (optional for demos)
     existingSecret: "" # e.g. opencode-llm — chart skips creating that Secret; still wires OPENAI_API_KEY
   dashboard:
-    enabled: true
+    # Off by default. The dashboard ships a credential-sync hook at sync-wave 3
+    # that polls 10 minutes for the Lightwell Network Secret and then fails,
+    # blocking waves 4-5 (eda-bootstrap, nexus-reconcile) and failing the whole
+    # tenant sync. Enable only once nexus.lightwellNetwork is populated.
+    enabled: false
     image: quay.io/bluesman/lightwell-demo-dashboard:v0.5.3
     imagePullPolicy: IfNotPresent
     aapUser: admin

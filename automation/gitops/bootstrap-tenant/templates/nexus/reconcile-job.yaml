@@ -26,16 +26,21 @@ spec:
                 secretKeyRef:
                   name: nexus-admin-secret
                   key: password
+            # optional: an operator may point existingSecret at a Secret that
+            # does not exist yet. Without this the pod sticks in
+            # CreateContainerConfigError instead of running in degraded mode.
             - name: LIGHTWELL_NETWORK_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: {{ include "bootstrap-tenant.lightwellNetworkSecretName" . }}
                   key: username
+                  optional: true
             - name: LIGHTWELL_NETWORK_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "bootstrap-tenant.lightwellNetworkSecretName" . }}
                   key: password
+                  optional: true
             - name: NEXUS_WEBHOOK_REPOSITORIES
               valueFrom:
                 configMapKeyRef:

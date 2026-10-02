@@ -49,7 +49,23 @@ nexus:
 |-------|------|
 | **AgnosticV / RHDP** `ocp4_workload_gitops_bootstrap_helm_values` → `nexus.lightwellNetwork.username/password` | Workshop orders; values live in vault/CI, not the public repo |
 | **Pre-created OpenShift Secret** + `nexus.lightwellNetwork.existingSecret: redhat-packages-credentials` | Labs / manual clusters; chart does not render the Secret |
-| **Local `.env.secrets`** + `scripts/inject-env-secrets.sh` | Dev clusters; file is gitignored |
+| **Local `.env.secrets`** + `scripts/inject-env-secrets.sh` | Dev clusters; file is gitignored. Lightwell and `OPENAI_API_KEY` are independent — supply either or both |
+| **Nothing at all** | Tenant still deploys, degraded — see below |
+
+**Deploying without credentials.** Supplying none of the above is supported: the
+chart renders `redhat-packages-credentials` with empty values, and
+`nexus-reconcile` skips the two `requires_auth` proxy repos
+(`redhat-packages-validated-<guid>`, `redhat-packages-remediated-<guid>`) and
+their EDA webhooks, logs `DEGRADED: ...`, and exits 0. Every other wave
+completes, so the Argo Application reaches Synced/Healthy. Maven Central, the
+hosted release repo, AAP, GitLab, TPA and OpenCode all come up. What does not
+work until credentials are added: pulling Lightwell validated/remediated
+artifacts, and the Nexus→EDA webhook that drives the remediation flow.
+
+Add them later with `scripts/inject-env-secrets.sh` (above). Note it also flips
+the Argo Application to `existingSecret:` refs, which is what stops Argo
+reverting the Secret on the next sync — so prefer the script over a bare
+`oc create secret`, or make the same `existingSecret` edit yourself.
 
 ```bash
 # From lightwell-workshop/:
@@ -92,6 +108,13 @@ and GitLab perform the remaining stages. Nexus gets Lightwell credentials from
 `nexus.lightwellNetwork.username/password` in protected Helm values or from
 `nexus.lightwellNetwork.existingSecret`. The chart copies that Secret to the
 dashboard namespace before the Deployment starts.
+
+The dashboard is **disabled by default** (`sdlc.dashboard.enabled: false`). Its
+credential-sync hook runs at sync-wave 3 and polls 10 minutes for the Lightwell
+Network Secret before failing; because it is a `Sync` hook it blocks waves 4-5
+(`eda-bootstrap`, `nexus-reconcile`) and fails the entire tenant sync. Set
+`sdlc.dashboard.enabled: true` only once `nexus.lightwellNetwork` is populated.
+
 Argo Application helm values (only on the cluster / in AgnosticV, not committed):
 
 ```yaml

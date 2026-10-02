@@ -314,6 +314,11 @@ def main() -> None:
     wait_for_nexus(nexus_url, nexus_user, nexus_pass)
     enable_anonymous(nexus_url, nexus_user, nexus_pass)
 
+    # Repos needing Lightwell Network credentials we may not have yet. The
+    # tenant still has to deploy, so skip them (and their webhooks below) and
+    # exit 0. Populate the Secret and re-run this Job to create them.
+    skipped_repos = []
+
     if not skip_repos:
         with open(repos_file, encoding="utf-8") as f:
             repositories = json.load(f)
@@ -321,15 +326,22 @@ def main() -> None:
             if item["type"] == "proxy":
                 if item.get("requires_auth") and (not lw_user or not lw_pass):
                     print(
-                        f"ERROR: {item['name']} requires LIGHTWELL_NETWORK_USERNAME/PASSWORD",
-                        file=sys.stderr,
+                        f"SKIP {item['name']}: LIGHTWELL_NETWORK_USERNAME/PASSWORD not set yet"
                     )
-                    sys.exit(1)
+                    skipped_repos.append(item["name"])
+                    continue
                 create_proxy(nexus_url, nexus_user, nexus_pass, item, lw_user, lw_pass)
             elif item["type"] == "hosted":
                 create_hosted(nexus_url, nexus_user, nexus_pass, item)
             else:
                 print(f"Skip unknown repo type: {item}")
+
+    if skipped_repos:
+        print(
+            "DEGRADED: no Lightwell Network credentials; skipped "
+            + ", ".join(skipped_repos)
+            + ". Populate the credentials Secret and re-run this Job."
+        )
 
     if skip_webhooks or not eda_url:
         if not eda_url:
@@ -338,6 +350,12 @@ def main() -> None:
 
     caps = list_capabilities(nexus_url, nexus_user, nexus_pass)
     repo_list = [r.strip() for r in webhook_repos.split(",") if r.strip()]
+    # Never attach a webhook to a repo we skipped — it does not exist, so
+    # creation and the verify below would both fail and sink the whole sync.
+    repo_list = [r for r in repo_list if r not in skipped_repos]
+    if not repo_list:
+        print("SKIP webhooks: no reconciled repositories to attach them to.")
+        sys.exit(0)
     tid = 1
     for repo in repo_list:
         if webhook_exists(caps, repo, eda_url):
