@@ -1,7 +1,11 @@
 {{- if .Values.sdlc.enabled }}
-{{- if or .Values.sdlc.llm.baseUrl .Values.sdlc.llm.model }}
+{{- /*
+  model is the opt-in switch for LLM wiring. baseUrl ships with a default, so
+  gating on it would force every credential-free tenant to supply a model and
+  key just to render.
+*/}}
+{{- if .Values.sdlc.llm.model }}
 {{- $_ := required "Set sdlc.llm.baseUrl for LiteLLM" .Values.sdlc.llm.baseUrl }}
-{{- $_ := required "Set sdlc.llm.model for LiteLLM" .Values.sdlc.llm.model }}
 {{- if not (or .Values.sdlc.llm.apiKey .Values.sdlc.llm.existingSecret) }}
 {{- fail "Set sdlc.llm.apiKey or sdlc.llm.existingSecret for LiteLLM" }}
 {{- end }}
@@ -82,7 +86,7 @@ spec:
                   name: {{ include "bootstrap-tenant.opencodeLlmSecretName" . }}
                   key: api_key
             {{- end }}
-            {{- if .Values.sdlc.llm.baseUrl }}
+            {{- if .Values.sdlc.llm.model }}
             - name: OPENCODE_CONFIG_CONTENT
               value: {{ dict "model" (printf "litellm/%s" .Values.sdlc.llm.model) "provider" (dict "litellm" (dict "npm" "@ai-sdk/openai-compatible" "name" "LiteLLM" "options" (dict "baseURL" .Values.sdlc.llm.baseUrl "apiKey" "{env:OPENAI_API_KEY}") "models" (dict .Values.sdlc.llm.model (dict "name" .Values.sdlc.llm.model)))) | toJson | quote }}
             {{- end }}

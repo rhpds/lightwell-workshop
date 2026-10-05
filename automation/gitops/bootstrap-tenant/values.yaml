@@ -69,7 +69,11 @@ sdlc:
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
   llm:
-    baseUrl: "" # LiteLLM OpenAI-compatible API endpoint, including /v1
+    # Shared RHDP MaaS gateway. AgnosticV overrides this with the per-tenant
+    # endpoint the litellm_virtual_keys role exports. `model` is the switch
+    # that turns LLM wiring on, not this — a default baseUrl alone must not
+    # make the chart demand a model and key.
+    baseUrl: https://maas-rhdp.apps.maas.redhatworkshops.io/v1
     model: "" # model ID exposed by LiteLLM; used as litellm/{model}
     apiKey: "" # when set, chart creates secret opencode-llm (optional for demos)
     existingSecret: "" # e.g. opencode-llm — chart skips creating that Secret; still wires OPENAI_API_KEY
