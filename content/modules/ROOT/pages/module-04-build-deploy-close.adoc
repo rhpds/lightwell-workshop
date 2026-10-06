@@ -3,10 +3,10 @@
 
 *Duration:* 30 minutes
 
-Participants observe the Trusted Software Factory compile, sign, and verify patched container images, watch RHACM and OpenShift GitOps deploy them across the multi-cluster fleet, and verify that ServiceNow tickets are automatically closed.
+Participants follow the DevSecOps pipeline as Red Hat Trusted Software Supply Chain (TSSC) compiles, signs, and verifies the patched container image, watch OpenShift GitOps roll it out, and verify that the originating ServiceNow ticket is closed automatically.
 
-== Tracing the Build and Sign Pipeline in Trusted Software Factory
+== Tracing the DevSecOps Pipeline: Build, Sign, and Attest with TSSC
 
-== Deploying Patched Images via RHACM and OpenShift GitOps
+== Deploying the Patched Image with OpenShift GitOps
 
 == Verifying End-to-End Closure and ServiceNow Resolution

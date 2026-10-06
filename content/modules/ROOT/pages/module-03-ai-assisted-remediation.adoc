@@ -3,9 +3,9 @@
 
 *Duration:* 30 minutes
 
-Participants act as expert reviewers: examining the Lightwell Deep Agent's risk rationale, inspecting AI-generated merge requests in GitLab, evaluating whether proposed changes are safe, and completing the approval workflow.
+Participants act as expert reviewers: examining the Lightwell OpenCode Agents' risk rationale, inspecting AI-generated merge requests in GitLab, evaluating whether proposed changes are safe, and completing the approval workflow.
 
-== Reviewing Deep Agent Risk Assessments
+== Reviewing Lightwell OpenCode Agent Risk Assessments
 
 == Examining AI-Generated Merge Requests in GitLab
 

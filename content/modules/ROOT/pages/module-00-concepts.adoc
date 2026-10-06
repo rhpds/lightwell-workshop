@@ -3,10 +3,161 @@
 
 *Duration:* 5 minutes
 
-Before diving into Lightwell's automation, this module establishes the foundational concepts that make the rest of the lab meaningful: what CVEs are and how severity is scored, what SBOMs are and how they enable precise impact analysis, and why traditional patch workflows take weeks.
+Before diving into Lightwell's automation, this module establishes the foundational concepts that make the rest of the lab meaningful: what CVEs are and how severity is scored, what SBOMs and VEX documents are and how they enable precise impact analysis, and why traditional patch workflows take weeks.
+
+There is nothing to run here. Read it through, then start Module 1.
 
 == What is a CVE?
 
+A *CVE* (Common Vulnerabilities and Exposures) is a public identifier for one specific flaw in one specific piece of software — for example `CVE-2023-24998`, a denial-of-service in Apache Commons FileUpload. The identifier is just a label; the useful part is the metadata attached to it.
+
+Severity is scored with *CVSS* (Common Vulnerability Scoring System), which produces a number from 0.0 to 10.0 and a band:
+
+[cols="1,1,3",options="header"]
+|===
+| Band | CVSS | Typical expectation
+| Critical | 9.0–10.0 | Patch immediately, out of cycle
+| High | 7.0–8.9 | Patch in days
+| Medium | 4.0–6.9 | Patch in the next scheduled release
+| Low | 0.1–3.9 | Patch opportunistically
+|===
+
+The crucial thing to understand is that *CVSS scores a flaw, not your risk*. The score is computed once, globally, by someone who has never seen your environment. A critical CVE in a library you ship but never call is not a critical risk to you. A medium CVE in your internet-facing payment path may well be. Everything in this lab exists to close that gap — to move from "a CVE exists somewhere in our estate" to "this CVE affects these three applications, and here is the patch".
+
 == What is an SBOM and Why Does it Matter?
 
+A *Software Bill of Materials* is a machine-readable inventory of everything inside a build: every direct dependency, every transitive dependency, their versions, and their licences. Think of it as the ingredients list for a container image. The two common formats are *CycloneDX* and *SPDX*; this lab uses CycloneDX.
+
+SBOMs matter because modern applications are mostly other people's code. A Java service with twenty declared dependencies routinely resolves to several hundred actual artifacts. When a CVE lands against one of those transitive dependencies, the question "are we affected?" is genuinely hard to answer without an inventory.
+
+Without SBOMs, answering it means grepping build files across every repository, and you will miss things — transitive dependencies do not appear in your `pom.xml`. With SBOMs, it is a database query: *which SBOMs contain `commons-fileupload` at a version below 1.5?*
+
+.Only the top row is visible in your build file. The CVE is two levels down.
+[mermaid]
+----
+flowchart TD
+  App["payments-api"]
+  D1["spring-boot-starter-web<br/>declared"]
+  D2["internal-doc-lib<br/>declared"]
+  T1["spring-web<br/>transitive"]
+  T2["commons-fileupload 1.4.0<br/>transitive — CVE-2023-24998"]
+  App --> D1
+  App --> D2
+  D1 --> T1
+  D2 --> T2
+  style T2 fill:#f8d7da,stroke:#b02a37,stroke-width:2px
+  style App fill:#cfe2ff,stroke:#0d6efd
+----
+
+In this lab, SBOMs are stored and queried in *Red Hat Trusted Profile Analyzer* (RHTPA), which you will use in Module 2 to turn a CVE identifier into a concrete list of affected applications.
+
+=== VEX: the other half of the answer
+
+An SBOM tells you a component is *present*. It does not tell you whether the vulnerable code is *reachable*. That distinction is what *VEX* (Vulnerability Exploitability eXchange) carries.
+
+A VEX document is a supplier's statement about a specific CVE in a specific product, with one of four statuses:
+
+[cols="1,3",options="header"]
+|===
+| Status | Meaning
+| `affected` | The product is vulnerable. Remediation is required.
+| `not_affected` | The component is present, but the vulnerable code path cannot be reached.
+| `fixed` | The product contains a fix for this CVE.
+| `under_investigation` | Not yet determined.
+|===
+
+VEX is what prevents SBOM data from drowning you in false positives. Typically a large majority of component matches turn out to be `not_affected` — the vulnerable function is never invoked, or the component is only present at build time and not at runtime. Without VEX, every match becomes a ticket. With it, teams can act on the ones that genuinely matter.
+
+Red Hat publishes VEX documents for its products, and RHTPA consumes both SBOM and VEX data together. That is why Module 2 shows you not just "which applications contain this component" but "which applications are actually affected".
+
+.VEX turns a long list of component matches into a short list of real work.
+[mermaid]
+----
+flowchart LR
+  CVE["CVE published"] --> SBOM["SBOM query<br/>which builds contain it?"]
+  SBOM --> M["Component matches<br/>often dozens"]
+  M --> VEX{"VEX status?"}
+  VEX -->|not_affected| N["No action<br/>code path unreachable"]
+  VEX -->|fixed| F["Already patched"]
+  VEX -->|affected| A["Remediate<br/>the real work"]
+  style A fill:#f8d7da,stroke:#b02a37,stroke-width:2px
+  style N fill:#d1e7dd,stroke:#146c43
+  style F fill:#d1e7dd,stroke:#146c43
+----
+
 == The Traditional Patch Workflow — Why it Takes Weeks
+
+A CVE is published. Here is what usually happens next:
+
+. *Discovery* — a scanner flags it, or someone reads a mailing list. Days can pass.
+. *Triage* — an engineer manually works out which applications pull the component in, often by searching repositories by hand. Transitive dependencies get missed.
+. *Sourcing* — someone finds a fixed upstream version, then checks whether it is compatible, whether the licence changed, and whether it is itself trustworthy.
+. *Change request* — a ticket is raised, assigned, queued behind other work, and waits for a change window.
+. *Patch and build* — a developer bumps the version, fixes whatever broke, and pushes. CI builds and signs.
+. *Deploy* — the change rolls through environments, each with its own approval gate.
+. *Close* — someone remembers to update the ticket and evidence the fix for audit.
+
+Each step is individually reasonable. Together they routinely take *weeks* — and most of that time is not technical work, it is waiting, searching, and re-establishing context. Meanwhile the vulnerability is live in production.
+
+Three things make it slow, and Lightwell attacks all three:
+
+* *Finding what is affected is manual.* Solved by SBOM and VEX data in RHTPA — a query, not an investigation.
+* *Sourcing a trustworthy fix is manual.* Solved by the *Lightwell Network*, which publishes remediated, signed builds of open source components. You will see these as versions carrying an `.rhlw-NNNNN` suffix, for example `1.4.0.rhlw-00001` — a remediated build of `1.4.0` that keeps the original API.
+* *Producing and shipping the change is manual.* Solved by the pipeline you are about to watch: an event-driven trigger, an AI agent that proposes the change, and a signed build-and-deploy path with automatic ticket closure.
+
+.The same seven steps, with the waiting removed.
+[mermaid]
+----
+flowchart LR
+  subgraph T["Traditional — weeks"]
+    direction LR
+    t1["Discover"] --> t2["Triage<br/>by hand"] --> t3["Source<br/>a fix"] --> t4["Ticket<br/>and queue"] --> t5["Patch<br/>and build"] --> t6["Deploy"] --> t7["Close"]
+  end
+  subgraph L["Lightwell — minutes"]
+    direction LR
+    l1["Remediated build<br/>arrives"] --> l2["SBOM + VEX<br/>query"] --> l3["Agent proposes<br/>the change"] --> l4["You review<br/>and approve"] --> l5["Build, sign,<br/>deploy"] --> l6["Ticket closed"]
+  end
+  style T fill:#fff3cd,stroke:#997404
+  style L fill:#d1e7dd,stroke:#146c43
+  style l4 fill:#cfe2ff,stroke:#0d6efd,stroke-width:2px
+----
+
+Note the one blue step: *you* remain the approval gate. Lightwell removes the searching and the waiting, not the judgement.
+
+== What You Will See in This Lab
+
+The remaining modules follow one CVE through that automated pipeline end to end:
+
+.The pipeline you are about to follow, and where each module joins it.
+[mermaid]
+----
+flowchart TD
+  LW["Lightwell Network<br/>remediated build 1.4.0.rhlw-00001"]
+  NX["Nexus<br/>caches the artifact"]
+  EDA["Event-Driven Ansible<br/>fires on the cache event"]
+  TPA["Trusted Profile Analyzer<br/>SBOM + VEX — who is affected?"]
+  OC["Lightwell OpenCode Agents<br/>analyse and propose"]
+  MR["GitLab merge request<br/>you review and approve"]
+  TSSC["TSSC DevSecOps pipeline<br/>build, sign, attest"]
+  GO["OpenShift GitOps<br/>deploy"]
+  SN["ServiceNow<br/>ticket closed"]
+  LW --> NX --> EDA --> TPA --> OC --> MR --> TSSC --> GO --> SN
+  M1["Module 1"] -.-> NX
+  M2["Module 2"] -.-> TPA
+  M3["Module 3"] -.-> MR
+  M4["Module 4"] -.-> TSSC
+  style MR fill:#cfe2ff,stroke:#0d6efd,stroke-width:2px
+----
+
+[cols="1,4",options="header"]
+|===
+| Module | What happens
+| 1 | A remediated artifact arrives from the Lightwell Network, is cached by the tenant's Nexus repository, and fires an Event-Driven Ansible trigger.
+| 2 | RHTPA is queried with SBOM and VEX data to establish which applications are genuinely affected.
+| 3 | The Lightwell OpenCode Agents analyse the impact, propose the dependency bump, and open a merge request you review and approve.
+| 4 | The DevSecOps pipeline builds and signs the patched application with TSSC, OpenShift GitOps deploys it, and the originating ticket is closed automatically.
+|===
+
+The whole sequence runs in minutes rather than weeks, and — importantly — every step leaves evidence: a signed artifact, an SBOM, a merge request, a closed ticket.
+
+Continue to xref:module-01-patch-ingestion.adoc[Module 1: Patch Ingestion].
