@@ -150,8 +150,20 @@ def ensure_controller_playbooks(
             break
         time.sleep(2)
 
-    code, jts = aap_request("GET", "/api/controller/v2/job_templates/?page_size=200", user, password, base)
+    # Scope the lookup to THIS tenant's organization. Template names are unique
+    # per organization, not per Controller, and every tenant creates the same
+    # three names. A Controller-wide check made the first tenant win and every
+    # later one skip creation, leaving its org empty while EDA -- which resolves
+    # run_job_template by (name, organization) -- failed with "does not exist".
+    code, jts = aap_request(
+        "GET",
+        f"/api/controller/v2/job_templates/?organization={controller_org_id}&page_size=200",
+        user,
+        password,
+        base,
+    )
     existing = {j.get("name"): j for j in (jts.get("results", []) if isinstance(jts, dict) else [])}
+    missing = []
     for jt_name, playbook in SDLC_JOB_TEMPLATES:
         if jt_name in existing:
             continue
@@ -172,8 +184,19 @@ def ensure_controller_playbooks(
                 "ask_variables_on_launch": True,
             },
         )
-        if code not in (200, 201, 400):
-            print(f"WARNING: job template {jt_name}: {code} {created}", file=sys.stderr)
+        if code not in (200, 201):
+            # Do not treat 400 as success: a duplicate-name rejection here means
+            # the template is absent from this org and the tenant cannot run a
+            # remediation. Fail loudly rather than leaving a broken activation.
+            print(f"ERROR: job template {jt_name}: {code} {created}", file=sys.stderr)
+            missing.append(jt_name)
+    if missing:
+        print(
+            f"ERROR: job templates not created in org id={controller_org_id}: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+        sys.exit(1)
     print(f"Controller project id={project_id}, inventory id={inventory_id}")
     return project_id, inventory_id
 
