@@ -45,11 +45,16 @@ spec:
                 secretKeyRef:
                   name: dashboard-lightwell-network
                   key: username
+                  # optional: the sync hook skips creating this Secret when no
+                  # Lightwell credentials exist. Without this the pod sticks in
+                  # CreateContainerConfigError instead of starting degraded.
+                  optional: true
             - name: LW_LIGHTWELL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: dashboard-lightwell-network
                   key: password
+                  optional: true
             - name: LW_AAP_URL
               value: {{ include "bootstrap-tenant.aapControllerUrl" . | quote }}
             - name: LW_TPA_URL
