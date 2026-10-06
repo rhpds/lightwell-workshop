@@ -88,7 +88,13 @@ spec:
             {{- end }}
             {{- if .Values.sdlc.llm.model }}
             - name: OPENCODE_CONFIG_CONTENT
-              value: {{ dict "model" (printf "litellm/%s" .Values.sdlc.llm.model) "provider" (dict "litellm" (dict "npm" "@ai-sdk/openai-compatible" "name" "LiteLLM" "options" (dict "baseURL" .Values.sdlc.llm.baseUrl "apiKey" "{env:OPENAI_API_KEY}") "models" (dict .Values.sdlc.llm.model (dict "name" .Values.sdlc.llm.model)))) | toJson | quote }}
+              {{- /*
+                permission must be set explicitly. OpenCode defaults bash to
+                "ask", and in a headless pod nobody answers -- the agent stops
+                mid-run waiting on a prompt only the web UI can satisfy, which
+                looks like a hang rather than a failure.
+              */}}
+              value: {{ dict "model" (printf "litellm/%s" .Values.sdlc.llm.model) "permission" .Values.sdlc.opencodePermission "provider" (dict "litellm" (dict "npm" "@ai-sdk/openai-compatible" "name" "LiteLLM" "options" (dict "baseURL" .Values.sdlc.llm.baseUrl "apiKey" "{env:OPENAI_API_KEY}") "models" (dict .Values.sdlc.llm.model (dict "name" .Values.sdlc.llm.model)))) | toJson | quote }}
             {{- end }}
           volumeMounts:
             - name: tmp-home

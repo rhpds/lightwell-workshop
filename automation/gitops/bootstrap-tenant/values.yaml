@@ -66,6 +66,10 @@ sdlc:
   exposeUi: true # Route to the OpenCode embedded web UI (agent transcripts); basic-auth protected
   opencodeImage: quay.io/bluesman/sdlc-opencode:sha-f44c241
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
+  # OpenCode tool permission: ask | allow | deny, or a per-tool map.
+  # Must be "allow" for the EDA-driven flow: the agent runs unattended, and
+  # OpenCode's default of "ask" for bash parks it on a prompt forever.
+  opencodePermission: allow
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
   llm:
