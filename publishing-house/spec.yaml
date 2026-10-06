@@ -30,7 +30,7 @@ spec:
   - id: module-00
     title: "CVEs, SBOMs, and the Patch Workflow \u2014 Foundations"
     duration_min: 5
-    status: not_started
+    status: in_progress
   - id: module-01
     title: "Patch Ingestion \u2014 From Lightwell to Artifactory to Ansible"
     duration_min: 25
