@@ -25,7 +25,7 @@ data:
   SDLC_NAMESPACE: {{ include "bootstrap-tenant.sdlcNamespace" . | quote }}
   EDA_PROJECT_NAME: {{ include "bootstrap-tenant.edaProjectName" . | quote }}
   EDA_PROJECT_SCM_URL: {{ .Values.sdlc.scmUrl | quote }}
-  EDA_RULEBOOK_NAME: {{ .Values.sdlc.rulebookName | quote }}
+  EDA_RULEBOOK_NAME: {{ include "bootstrap-tenant.edaRulebookName" . | quote }}
   EDA_ACTIVATION_NAME: {{ include "bootstrap-tenant.edaActivationName" . | quote }}
   EDA_DECISION_ENV_NAME: {{ .Values.sdlc.decisionEnvName | quote }}
   EDA_DECISION_ENV_IMAGE: {{ .Values.sdlc.decisionEnvImage | quote }}
@@ -34,6 +34,14 @@ data:
   OPENCODE_SERVER_USERNAME: {{ .Values.sdlc.opencodeServerUsername | quote }}
   NEXUS_URL: {{ include "bootstrap-tenant.nexusRouteUrl" . | quote }}
   AAP_ORG: {{ include "bootstrap-tenant.aapOrg" . | quote }}
+  AO_ENABLED: {{ include "bootstrap-tenant.orchestratorEnabled" . | quote }}
+  AO_BASE_URL: {{ include "bootstrap-tenant.aoBaseUrl" . | quote }}
+  AO_PROJECT_NAME: {{ include "bootstrap-tenant.aoProjectName" . | quote }}
+  AO_START_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoStartWebhookPath" . | quote }}
+  AO_RESUME_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoResumeWebhookPath" . | quote }}
+  {{- /* Prefer existingSecret on the eda-bootstrap Job; these are fallbacks for lab/dev only. */}}
+  AO_CLIENT_ID: {{ (.Values.sdlc.orchestrator).clientId | default "" | quote }}
+  AO_CLIENT_SECRET: {{ (.Values.sdlc.orchestrator).clientSecret | default "" | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap

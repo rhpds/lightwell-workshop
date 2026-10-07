@@ -54,17 +54,19 @@ nexus:
 sdlc:
   enabled: true
   namespace: "" # default sdlc-{guid}; set sdlc-control-plane only for legacy single-tenant labs
-  scmUrl: https://github.com/blues-man/lw-sdlc-opencode.git # must contain rulebooks/ for EDA import
+  scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git # must contain rulebooks/ for EDA import
   projectName: "" # default SDLC {guid}
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
   decisionEnvImage: quay.io/ansible/ansible-rulebook:main
-  rulebookName: sdlc-remediation.yml
+  # AO path (default): sdlc-remediation.yml — EDA bridges to Automation Orchestrator.
+  # Pre-AO chain: set orchestrator.enabled=false (uses sdlc-remediation-legacy.yml) or override rulebookName.
+  rulebookName: "" # default from orchestrator.enabled
   edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
   exposeUi: true # Route to the OpenCode embedded web UI (agent transcripts); basic-auth protected
-  opencodeImage: quay.io/bluesman/sdlc-opencode:sha-f44c241
+  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-6071dd6
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.
   # Must be "allow" for the EDA-driven flow: the agent runs unattended, and
@@ -72,6 +74,27 @@ sdlc:
   opencodePermission: allow
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
+  # Automation Orchestrator — overall flow controller after Nexus→EDA filter.
+  # Install AO on the shared AAP platform (bootstrap-infra); wire webhook paths + SA here.
+  # https://docs.redhat.com/en/documentation/automation_orchestrator/2026.8/
+  orchestrator:
+    # Student goto: Automation Orchestrator owns the remediation canvas after
+    # Nexus→EDA filter. Requires AO installed on the shared platform (see
+    # bootstrap-infra README). Each tenant gets an isolated AO *project*
+    # (lightwell-{guid}), local user, EDA SA, and guid-scoped webhook paths so
+    # students do not see each other's workflows/executions.
+    # Set enabled=false only for pre-AO / legacy EDA-owned chains.
+    enabled: true # true → sdlc-remediation.yml (AO); false → sdlc-remediation-legacy.yml
+    namespace: automation-orchestrator # AO install namespace (admin secret + route)
+    # Empty → https://ao.<deployer.domain> (infra Route). No AgnosticV AO knobs needed.
+    baseUrl: ""
+    projectName: "" # default lightwell-{guid}
+    # Empty → lightwell-remediation-{start,resume}-{guid} (recommended for multi-tenant)
+    startWebhookPath: ""
+    resumeWebhookPath: ""
+    clientId: "" # filled by ao-bootstrap Job into existingSecret (do not commit)
+    clientSecret: "" # do not commit real values
+    existingSecret: automation-orchestrator # keys: client_id, client_secret [, project_name]
   llm:
     # Shared RHDP MaaS gateway. AgnosticV overrides this with the per-tenant
     # endpoint the litellm_virtual_keys role exports. `model` is the switch

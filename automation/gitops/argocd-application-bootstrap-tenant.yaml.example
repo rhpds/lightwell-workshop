@@ -26,6 +26,10 @@ spec:
             # Do not commit real credentials. Either inject via AgnosticV helm_values (vault)
             # or create Secret redhat-packages-credentials in the tenant Nexus NS and set:
             existingSecret: redhat-packages-credentials
+        sdlc:
+          enabled: true
+          scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git
+          # orchestrator.enabled defaults true; AO_BASE_URL = https://ao.<deployer.domain>
   destination:
     server: https://kubernetes.default.svc
     namespace: openshift-gitops

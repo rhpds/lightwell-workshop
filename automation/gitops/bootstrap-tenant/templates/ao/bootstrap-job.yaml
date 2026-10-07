@@ -1,0 +1,76 @@
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ao-bootstrap
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      initContainers:
+        - name: copy-script
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - cp /source/bootstrap-ao-tenant.py /work/bootstrap-ao-tenant.py && chmod 755 /work/bootstrap-ao-tenant.py
+          volumeMounts:
+            - name: scripts-source
+              mountPath: /source
+              readOnly: true
+            - name: scripts-work
+              mountPath: /work
+      containers:
+        - name: bootstrap
+          image: {{ .Values.jobAnsibleImage }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              AO_NS="{{ .Values.sdlc.orchestrator.namespace | default "automation-orchestrator" }}"
+              for i in $(seq 1 60); do
+                ROUTE_HOST=$(oc get route -n "${AO_NS}" automation-orchestrator -o jsonpath='{.spec.host}' 2>/dev/null || true)
+                if [ -n "${ROUTE_HOST}" ]; then break; fi
+                sleep 10
+              done
+              export AO_BASE_URL="{{ include "bootstrap-tenant.aoBaseUrl" . }}"
+              if [ -z "${ROUTE_HOST:-}" ] && [ -z "${AO_BASE_URL}" ]; then
+                echo "ERROR: Automation Orchestrator route not found in ${AO_NS}"
+                exit 1
+              fi
+              # Prefer live Route host when present (handles domain drift).
+              if [ -n "${ROUTE_HOST:-}" ]; then
+                export AO_BASE_URL="https://${ROUTE_HOST}"
+              fi
+              export AO_ADMIN_USERNAME=admin
+              export AO_ADMIN_PASSWORD=$(oc get secret ao-admin-password -n "${AO_NS}" -o jsonpath='{.data.password}' | base64 -d)
+              export GUID="{{ .Values.guid }}"
+              export USERNAME="{{ .Values.username }}"
+              export PASSWORD="{{ .Values.password }}"
+              export AO_PROJECT_NAME="{{ include "bootstrap-tenant.aoProjectName" . }}"
+              export AO_START_WEBHOOK_PATH="{{ include "bootstrap-tenant.aoStartWebhookPath" . }}"
+              export AO_RESUME_WEBHOOK_PATH="{{ include "bootstrap-tenant.aoResumeWebhookPath" . }}"
+              export AO_SECRET_NAME="{{ include "bootstrap-tenant.aoSecretName" . }}"
+              export AO_SECRET_NAMESPACE="{{ include "bootstrap-tenant.jobNamespace" . }}"
+              export VALIDATE_CERTS=false
+              echo "Bootstrapping AO project=${AO_PROJECT_NAME} base=${AO_BASE_URL}"
+              exec python3 /work/bootstrap-ao-tenant.py
+          volumeMounts:
+            - name: scripts-work
+              mountPath: /work
+              readOnly: true
+      volumes:
+        - name: scripts-source
+          configMap:
+            name: ao-bootstrap-source
+        - name: scripts-work
+          emptyDir: {}
+{{- end }}

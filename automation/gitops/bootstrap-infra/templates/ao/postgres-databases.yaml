@@ -1,0 +1,29 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: temporal
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  name: temporal
+  owner: temporal
+  cluster:
+    name: orchestrator-postgres
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: temporal-visibility
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  name: temporal_visibility
+  owner: temporal
+  cluster:
+    name: orchestrator-postgres
+{{- end }}

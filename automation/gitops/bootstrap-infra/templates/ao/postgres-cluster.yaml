@@ -1,0 +1,33 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: orchestrator-postgres
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  instances: {{ .Values.orchestrator.postgres.instances }}
+  imageName: {{ .Values.orchestrator.postgres.image | quote }}
+  storage:
+    size: {{ .Values.orchestrator.postgres.storageSize | quote }}
+    storageClass: {{ .Values.deployer.storageClass | quote }}
+  bootstrap:
+    initdb:
+      database: orchestrator
+      owner: orchestrator
+      secret:
+        name: orchestrator-postgres-secret
+      # Superuser: create pgcrypto and transfer ownership so AO migrations can COMMENT ON it.
+      postInitSQL:
+        - CREATE EXTENSION IF NOT EXISTS pgcrypto;
+        - UPDATE pg_extension SET extowner = (SELECT oid FROM pg_authid WHERE rolname = 'orchestrator') WHERE extname = 'pgcrypto';
+  managed:
+    roles:
+      - name: temporal
+        ensure: present
+        login: true
+        passwordSecret:
+          name: temporal-postgres-secret
+{{- end }}

@@ -1,0 +1,28 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: aap.ansible.com/v1alpha1
+kind: AutomationOrchestrator
+metadata:
+  name: automation-orchestrator
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  postgres:
+    host: orchestrator-postgres-rw.{{ .Values.orchestrator.namespace }}.svc
+    port: 5432
+    sslMode: {{ .Values.orchestrator.postgres.sslMode | quote }}
+    backendDatabase:
+      secretRef:
+        name: orchestrator-pg-credentials
+    temporalDatabase:
+      secretRef:
+        name: temporal-pg-credentials
+  ingress:
+    type: Route
+    # Must be ao.<apps-domain> (e.g. ao.apps.cluster-x.example.com), not ao-apps.…
+    host: {{ printf "ao.%s" .Values.deployer.domain | quote }}
+  secrets:
+    initialAdminPasswordSecretRef:
+      name: ao-admin-password
+{{- end }}

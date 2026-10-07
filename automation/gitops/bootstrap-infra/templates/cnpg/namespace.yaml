@@ -1,0 +1,8 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.cnpg.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+{{- end }}

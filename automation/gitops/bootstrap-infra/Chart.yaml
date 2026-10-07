@@ -1,8 +1,8 @@
 apiVersion: v2
 name: bootstrap-infra
 description: >-
-  Shared cluster platform for the Lightwell lab — GitLab, AAP/EDA, RHTPA/RHTAS, Quay.
-  Per-tenant Nexus lives in bootstrap-tenant. Synced by AgnosticV cluster GitOps bootstrap.
+  Shared cluster platform for the Lightwell lab — GitLab, AAP/EDA, Automation
+  Orchestrator (+ CNPG), RHTPA/RHTAS, Quay. Per-tenant Nexus lives in bootstrap-tenant.
 type: application
-version: 0.3.0
+version: 0.4.0
 appVersion: "1.0.0"

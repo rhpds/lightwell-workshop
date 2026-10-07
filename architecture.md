@@ -46,7 +46,8 @@ flowchart LR
 
   subgraph shared["Shared cluster services"]
     direction TB
-    AAP["AAP 2.5 — namespace aap<br/>controller behind gateway"]
+    AAP["AAP 2.7 — namespace aap<br/>controller behind gateway"]
+    AO["Automation Orchestrator<br/>flow controller (AAP add-on)"]
     EDA["EDA activation sdlc-remediation-{guid}<br/>Job pod in aap + Service :5000 + Route"]
     GL["GitLab — namespace gitlab<br/>project lightwell/lw-demo-help-app-{guid}"]
     TPA["Trusted Profile Analyzer<br/>namespace lightwell-tpa"]
@@ -54,13 +55,16 @@ flowchart LR
     ARGO["OpenShift GitOps — namespace openshift-gitops"]
     SBX["Namespace sdlc-sandboxes<br/>verify Jobs land here"]
     AAP --- EDA
+    AAP --- AO
     TPA --- KC
   end
 
   ARGO ==> tenant
   RR -- "component CREATED webhook" --> EDA
   RV -- "component CREATED webhook" --> EDA
-  EDA -- "run_job_template" --> AAP
+  EDA -- "bridge JT Start/Resume Orchestrator" --> AAP
+  AAP -- "POST AO EDA trigger" --> AO
+  AO -- "Launch JT Query TPA / Impact / Verifier" --> AAP
   AAP -- "HTTP :4096 session + prompt_async" --> OC
   AAP -- "query SBOM / CVE" --> TPA
   OC -- "MR, notes" --> GL
@@ -69,6 +73,9 @@ flowchart LR
   SBX -- "Maven resolves via" --> NX
   EPH -- "builder stage resolves via" --> NX
 ```
+
+**Automation Orchestrator** is the overall flow controller (shared platform). **EDA** only
+filters Nexus/GitLab events and bridges into AO. OpenCode remains the async worker.
 
 Note the **activation is per tenant but lives in the shared `aap` namespace**:
 EDA runs each activation as a Kubernetes Job pod there, fronted by a Service on
@@ -83,8 +90,15 @@ the demo.
 
 ## 2. Demo flow
 
-The authentic path, from the artifact fetch to the verification note on the
-merge request.
+The authentic path when `sdlc.orchestrator.enabled=true`: Nexus → EDA filter →
+**Automation Orchestrator** owns the run → worker JTs / OpenCode → MR note.
+AO is installed by **bootstrap-infra** (Route `ao.<deployer.domain>`).
+Each tenant gets an isolated AO **project** (`lightwell-{guid}`) plus
+guid-scoped EDA webhook paths so students do not see each other's canvas;
+`AO_BASE_URL` defaults from `deployer.domain` in the tenant chart.
+
+Set `sdlc.orchestrator.enabled=false` to use `sdlc-remediation-legacy.yml`,
+where EDA still chains Query TPA → Impact → Verifier directly.
 
 ```mermaid
 sequenceDiagram
@@ -92,6 +106,8 @@ sequenceDiagram
     participant Dev as Maven client
     participant NX as Nexus lightwell-nexus-{guid}
     participant EDA as EDA sdlc-remediation-{guid}
+    participant Bridge as AAP JT Start/Resume Orchestrator
+    participant AO as Automation Orchestrator
     participant AAP as AAP controller
     participant TPA as TPA lightwell-tpa
     participant OC as opencode sdlc-{guid}
@@ -103,21 +119,29 @@ sequenceDiagram
     NX->>NX: proxy redhat-packages-remediated-{guid} caches from<br/>packages.redhat.com/lightwell/java/remediated/
     NX-->>EDA: webhook.repository, names=component — action CREATED
 
-    Note over EDA: rulebook condition — action == CREATED<br/>AND version contains rhlw-
+    Note over EDA: rulebook — action == CREATED AND version contains rhlw-<br/>EDA is sensor only; does not own the chain
 
-    EDA->>AAP: run_job_template — SDLC Query TPA
+    EDA->>Bridge: run_job_template — SDLC Start Orchestrator
+    Bridge->>AO: OAuth + POST /api/v1/webhooks/eda/{startPath}
+    Note over AO: AO run starts — overall flow controller
+
+    AO->>AAP: Launch JT — SDLC Query TPA
     AAP->>TPA: query SBOM label for CVE / package context
-    TPA-->>AAP: affected repos + package_info
-    AAP-->>EDA: POST tpa_results back to the EDA webhook
+    TPA-->>AO: affected repos + package_info + blast_radius
+    AO->>AO: Condition blast_radius.count >= 1
 
-    EDA->>AAP: run_job_template — SDLC Trigger Impact Analyzer
-    AAP->>OC: POST /session then /session/id/prompt_async<br/>agent impact-analyzer
-    Note right of AAP: the job returns here — the agent work<br/>is asynchronous and not in the job output
+    AO->>AAP: Launch JT — SDLC Trigger Impact Analyzer
+    AAP->>OC: POST /session then prompt_async<br/>agent impact-analyzer
+    Note right of AAP: the job returns here — agent work is async
     OC->>GL: bump pom.xml, push branch update-artifact-{version}
     OC->>GL: open MR with agent-handoff JSON in the description
-    GL-->>EDA: merge_request opened webhook
 
-    EDA->>AAP: run_job_template — SDLC Trigger MR Verifier
+    GL-->>EDA: merge_request opened webhook
+    EDA->>Bridge: run_job_template — SDLC Resume Orchestrator
+    Bridge->>AO: POST /api/v1/webhooks/eda/{resumePath}
+    Note over AO: preferred long-term: Wait/Approval inside same AO run
+
+    AO->>AAP: Launch JT — SDLC Trigger MR Verifier
     AAP->>OC: POST /session then prompt_async, agent mr-verifier
     OC->>GL: read MR, parse agent-handoff block
     OC->>SBX: create Job verify-mr-{iid} — mvn clean verify
@@ -130,14 +154,16 @@ sequenceDiagram
     OC->>EPH: smoke test GET /api/status
     EPH-->>OC: per-library status incl. lightwellFix version
     OC->>GL: post verification note on the MR
+    AO-->>AO: workflow run complete
 ```
 
 Steps worth understanding rather than just watching:
 
-- **The AAP jobs are launchers, not the work.** `SDLC Trigger Impact Analyzer`
+- **EDA is not the orchestrator.** It filters `*.rhlw-*` / MR events and runs the
+  Start/Resume bridge JTs. The AO canvas is the spine learners should watch.
+- **Worker AAP jobs are launchers, not the work.** `SDLC Trigger Impact Analyzer`
   and `SDLC Trigger MR Verifier` only create an opencode session and fire
-  `prompt_async`. Their job output is a handful of tasks; none of the agent's
-  reasoning, file edits, or `oc` calls appear there.
+  `prompt_async`. Agent reasoning lives in the OpenCode UI.
 - **Two agents, deliberately disjoint.** `/app/opencode.json` defines
   `impact-analyzer` (the default) and `mr-verifier` as primary agents.
   `impact-analyzer` denies the `mr-verify-ephemeral` skill; `mr-verifier` denies
@@ -221,8 +247,14 @@ restart**, so avoid rolling the `opencode` Deployment mid-demo.
 | OpenCode UI Route | `opencode-ui-sdlc-{guid}.<apps-domain>` |
 | AAP organization | `user-{guid}` |
 
-AAP job templates, in execution order: `SDLC Query TPA` →
-`SDLC Trigger Impact Analyzer` → `SDLC Trigger MR Verifier`.
+AAP job templates:
 
-AAP 2.5 fronts the controller behind its gateway, so controller API calls use
+| Role | Templates |
+|------|-----------|
+| EDA → AO bridge | `SDLC Start Orchestrator`, `SDLC Resume Orchestrator` |
+| AO canvas workers | `SDLC Query TPA` → `SDLC Trigger Impact Analyzer` → `SDLC Trigger MR Verifier` |
+
+AAP 2.7 fronts the controller behind its gateway, so controller API calls use
 the `/api/controller/v2/...` path rather than the pre-2.5 `/api/v2/...`.
+Automation Orchestrator EDA triggers use `/api/v1/webhooks/eda/{path}` on the
+AO host (see Red Hat Automation Orchestrator 2026.8 docs).
