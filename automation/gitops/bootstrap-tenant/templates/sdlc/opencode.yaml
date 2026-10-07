@@ -59,6 +59,24 @@ spec:
                 secretKeyRef:
                   name: opencode-server
                   key: password
+            {{- /*
+              Tenant identity, passed explicitly. The verify skill used to
+              discover these with `oc get cm tenant-integration -A` and take
+              items[0] -- which on a shared cluster can resolve a DIFFERENT
+              tenant. Env removes the lookup, and with it the cross-tenant risk.
+            */}}
+            - name: LIGHTWELL_GUID
+              value: {{ .Values.guid | quote }}
+            - name: TENANT_NAMESPACE
+              value: {{ include "bootstrap-tenant.jobNamespace" . | quote }}
+            - name: SDLC_SANDBOX_NAMESPACE
+              value: {{ include "bootstrap-tenant.sandboxNamespace" . | quote }}
+            - name: EPHEMERAL_NS_PREFIX
+              value: {{ include "bootstrap-tenant.ephemeralNsPrefix" . | quote }}
+            - name: NEXUS_NAMESPACE
+              value: {{ include "bootstrap-tenant.nexusNamespace" . | quote }}
+            - name: NEXUS_REPOSITORIES
+              value: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
             - name: GITLAB_URL
               valueFrom:
                 secretKeyRef:

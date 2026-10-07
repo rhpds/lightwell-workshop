@@ -90,6 +90,25 @@
 {{- .Values.sdlc.opencodeServerPassword | default .Values.password -}}
 {{- end -}}
 
+{{- /*
+  Build sandbox for the MR verifier. Per-tenant: the agent writes this
+  tenant's GitLab PAT into it as Secret gitlab-pat, and keys verify-Job
+  idempotency on mr-iid -- which restarts at 1 per project. A cluster-wide
+  namespace therefore leaks credentials between tenants and lets one
+  tenant's lookup find (and delete) another's Job.
+*/ -}}
+{{- define "bootstrap-tenant.sandboxNamespace" -}}
+{{- printf "sdlc-sandboxes-%s" .Values.guid -}}
+{{- end -}}
+
+{{- /*
+  Prefix for the ephemeral per-MR test namespaces. Same collision reason:
+  two tenants both verifying !1 would otherwise both want pr-test-mr-1.
+*/ -}}
+{{- define "bootstrap-tenant.ephemeralNsPrefix" -}}
+{{- printf "pr-test-mr-%s" .Values.guid -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.snowNamespace" -}}
 {{- printf "snow-%s" .Values.guid -}}
 {{- end -}}

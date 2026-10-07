@@ -23,6 +23,8 @@ data:
   GITLAB_WEBHOOK_TARGET_URL: {{ include "bootstrap-tenant.gitlabWebhookTargetUrl" . | quote }}
   AAP_CONTROLLER_URL: {{ include "bootstrap-tenant.aapControllerUrl" . | quote }}
   SDLC_NAMESPACE: {{ include "bootstrap-tenant.sdlcNamespace" . | quote }}
+  SDLC_SANDBOX_NAMESPACE: {{ include "bootstrap-tenant.sandboxNamespace" . | quote }}
+  EPHEMERAL_NS_PREFIX: {{ include "bootstrap-tenant.ephemeralNsPrefix" . | quote }}
   EDA_PROJECT_NAME: {{ include "bootstrap-tenant.edaProjectName" . | quote }}
   EDA_PROJECT_SCM_URL: {{ .Values.sdlc.scmUrl | quote }}
   EDA_RULEBOOK_NAME: {{ .Values.sdlc.rulebookName | quote }}
