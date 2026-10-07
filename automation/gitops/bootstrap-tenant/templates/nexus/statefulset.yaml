@@ -53,18 +53,22 @@ spec:
             - name: admin-password
               mountPath: /nexus-data/admin.password
               subPath: password
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8081
+            periodSeconds: 10
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /
               port: 8081
-            initialDelaySeconds: 180
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /
               port: 8081
-            initialDelaySeconds: 180
-            periodSeconds: 30
+            periodSeconds: 10
           resources:
             requests:
               memory: "2Gi"
