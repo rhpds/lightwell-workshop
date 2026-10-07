@@ -18,6 +18,37 @@ spec:
       valuesObject:
         rbac:
           ownNamespaceOnly: false
+        securityContext:
+          pod:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          container:
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            readOnlyRootFilesystem: true
+            privileged: false
+            allowPrivilegeEscalation: false
+        crd:
+          securityContext:
+            pod:
+              runAsNonRoot: true
+              seccompProfile:
+                type: RuntimeDefault
+            container:
+              capabilities:
+                drop:
+                  - ALL
+              runAsNonRoot: true
+              seccompProfile:
+                type: RuntimeDefault
+              readOnlyRootFilesystem: true
+              privileged: false
+              allowPrivilegeEscalation: false
   destination:
     server: https://kubernetes.default.svc
     namespace: renovate-operator
