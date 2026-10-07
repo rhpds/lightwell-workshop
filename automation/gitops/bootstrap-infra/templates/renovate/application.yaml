@@ -39,26 +39,8 @@ spec:
             privileged: false
             allowPrivilegeEscalation: false
         crd:
-          securityContext:
-            pod:
-              runAsUser: null
-              runAsGroup: null
-              fsGroup: null
-              runAsNonRoot: true
-              seccompProfile:
-                type: RuntimeDefault
-            container:
-              runAsUser: null
-              runAsGroup: null
-              capabilities:
-                drop:
-                  - ALL
-              runAsNonRoot: true
-              seccompProfile:
-                type: RuntimeDefault
-              readOnlyRootFilesystem: true
-              privileged: false
-              allowPrivilegeEscalation: false
+          install: true
+          mode: template
   destination:
     server: https://kubernetes.default.svc
     namespace: renovate-operator
