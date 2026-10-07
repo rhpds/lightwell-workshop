@@ -54,7 +54,10 @@ nexus:
 sdlc:
   enabled: true
   namespace: "" # default sdlc-{guid}; set sdlc-control-plane only for legacy single-tenant labs
-  scmUrl: https://github.com/blues-man/lw-sdlc-opencode.git # must contain rulebooks/ for EDA import
+  # Source for BOTH the EDA project (rulebooks/) and the Controller project
+  # (playbooks/). The Automation Orchestrator rulebook and the start/resume
+  # orchestrator playbooks only exist here; the old blues-man repo has neither.
+  scmUrl: https://github.com/rhpds/lw-sdlc-opencode.git
   projectName: "" # default SDLC {guid}
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
@@ -64,7 +67,11 @@ sdlc:
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
   exposeUi: true # Route to the OpenCode embedded web UI (agent transcripts); basic-auth protected
-  opencodeImage: quay.io/bluesman/sdlc-opencode:sha-f44c241
+  # Must carry agent prompts that read SDLC_SANDBOX_NAMESPACE / EPHEMERAL_NS_PREFIX
+  # from env; older images hardcode the shared sdlc-sandboxes namespace and will
+  # write into a namespace this chart no longer creates.
+  # TODO: replace with the CI sha-* tag once rhpds/lw-sdlc-opencode#3 merges.
+  opencodeImage: quay.io/bluesman/sdlc-opencode:sandbox-ns-test
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.
   # Must be "allow" for the EDA-driven flow: the agent runs unattended, and

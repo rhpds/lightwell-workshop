@@ -71,6 +71,13 @@ def find_by_name(results: list, name: str) -> dict:
 
 
 SDLC_JOB_TEMPLATES = [
+    # Automation Orchestrator entry points. sdlc-remediation.yml launches these
+    # two directly from EDA; AO then owns the run.
+    ("SDLC Start Orchestrator", "playbooks/start-orchestrator.yml"),
+    ("SDLC Resume Orchestrator", "playbooks/resume-orchestrator.yml"),
+    # Worker playbooks. Still required: under AO they are launched as job-template
+    # nodes from the canvas rather than from EDA rules, and sdlc-remediation-legacy.yml
+    # still drives them directly for the pre-AO chain.
     ("SDLC Query TPA", "playbooks/query-tpa.yml"),
     ("SDLC Trigger Impact Analyzer", "playbooks/trigger-impact-analyzer.yml"),
     ("SDLC Trigger MR Verifier", "playbooks/trigger-mr-verifier.yml"),
