@@ -62,7 +62,23 @@ sdlc:
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
   decisionEnvImage: quay.io/ansible/ansible-rulebook:main
-  rulebookName: sdlc-remediation.yml
+  # Empty = pick automatically from sdlc.ao.baseUrl (see the ao block below).
+  # Set explicitly only to override that choice.
+  rulebookName: ""
+  ao:
+    # Automation Orchestrator. Nothing in bootstrap-infra installs AO today, so
+    # these are empty and the tenant runs the legacy rulebook, which drives
+    # Query TPA -> Impact Analyzer -> MR Verifier from EDA directly.
+    #
+    # Setting baseUrl switches the activation to sdlc-remediation.yml, where EDA
+    # is only a sensor and AO owns the flow. All four values are required
+    # together: the orchestrator playbooks assert on them and fail the job if
+    # any is missing.
+    baseUrl: "" # e.g. https://ao.apps.cluster.example.com
+    clientId: ""
+    clientSecret: ""
+    startWebhookPath: ""
+    resumeWebhookPath: ""
   edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl

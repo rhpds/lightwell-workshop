@@ -109,6 +109,25 @@
 {{- printf "pr-test-mr-%s" .Values.guid -}}
 {{- end -}}
 
+{{/*
+Rulebook for the EDA activation.
+
+sdlc-remediation.yml makes EDA a sensor and hands the flow to the Automation
+Orchestrator; its first job template POSTs to the AO webhook and asserts on
+ao_base_url/ao_client_id/ao_client_secret/ao_webhook_path. With no AO reachable
+that assert fails on the first Nexus event, so the tenant looks healthy and
+remediation never runs. Default to the legacy rulebook unless AO is configured.
+*/}}
+{{- define "bootstrap-tenant.rulebookName" -}}
+{{- if .Values.sdlc.rulebookName -}}
+{{- .Values.sdlc.rulebookName -}}
+{{- else if .Values.sdlc.ao.baseUrl -}}
+sdlc-remediation.yml
+{{- else -}}
+sdlc-remediation-legacy.yml
+{{- end -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.snowNamespace" -}}
 {{- printf "snow-%s" .Values.guid -}}
 {{- end -}}

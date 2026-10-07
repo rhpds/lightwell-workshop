@@ -43,6 +43,8 @@ spec:
               export AAP_PASSWORD=$(oc get secret aap-admin-password -n "${AAP_NS}" -o jsonpath='{.data.password}' | base64 -d)
               export TPA_UPLOADER_PASSWORD="{{ .Values.password }}"
               export OPENCODE_SERVER_PASSWORD="{{ .Values.sdlc.opencodeServerPassword | default .Values.password }}"
+              # Secret, so it stays out of the tenant-integration ConfigMap.
+              export AO_CLIENT_SECRET="{{ .Values.sdlc.ao.clientSecret }}"
               exec python3 /work/bootstrap-aap-eda.py
           envFrom:
             - configMapRef:

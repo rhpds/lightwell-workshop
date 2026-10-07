@@ -304,7 +304,27 @@ def build_extra_var_yaml() -> str:
         f"opencode_server_username: {env('OPENCODE_SERVER_USERNAME', 'opencode')}",
         f"opencode_server_password: {env('OPENCODE_SERVER_PASSWORD')}",
         f"validate_certs: {env('VALIDATE_CERTS', 'false')}",
+        # guid reaches the AO payload and the per-tenant sandbox naming; without
+        # it the orchestrator cannot tell which tenant an event came from.
+        f"guid: {env('GUID')}",
     ]
+    # Only emit the ao_* vars when AO is actually configured. The orchestrator
+    # playbooks do `ao_base_url | default('') | length > 0`, and Jinja's default
+    # filter does not replace a defined-but-null value -- an empty YAML scalar
+    # parses as None and blows up on `| length` instead of failing the assert
+    # with a readable message.
+    ao_base_url = env("AO_BASE_URL")
+    if ao_base_url:
+        for key, val in (
+            ("ao_base_url", ao_base_url),
+            ("ao_client_id", env("AO_CLIENT_ID")),
+            ("ao_client_secret", env("AO_CLIENT_SECRET")),
+            ("ao_start_webhook_path", env("AO_START_WEBHOOK_PATH")),
+            ("ao_resume_webhook_path", env("AO_RESUME_WEBHOOK_PATH")),
+        ):
+            # json.dumps gives a quoted scalar that is valid YAML, so a secret
+            # containing ':' or '#' cannot break the document.
+            lines.append(f"{key}: {json.dumps(val)}")
     return "\n".join(lines) + "\n"
 
 
@@ -314,7 +334,7 @@ def main() -> None:
     password = env("AAP_PASSWORD", required=True)
     project_name = env("EDA_PROJECT_NAME", "SDLC OpenCode EDA")
     scm_url = env("EDA_PROJECT_SCM_URL", required=True)
-    rulebook_name = env("EDA_RULEBOOK_NAME", "sdlc-remediation.yml")
+    rulebook_name = env("EDA_RULEBOOK_NAME", "sdlc-remediation-legacy.yml")
     activation_name = env("EDA_ACTIVATION_NAME", "sdlc-remediation")
     de_name = env("EDA_DECISION_ENV_NAME", "SDLC Decision Environment")
     de_image = env("EDA_DECISION_ENV_IMAGE", "quay.io/ansible/ansible-rulebook:main")
@@ -445,7 +465,7 @@ def main() -> None:
             base,
             {
                 "name": activation_name,
-                "description": "Nexus/GitLab webhooks → TPA → OpenCode (sdlc-remediation.yml)",
+                "description": f"Nexus/GitLab webhooks → TPA → OpenCode ({rulebook_name})",
                 "project_id": project_id,
                 "rulebook_id": rulebook_id,
                 "decision_environment_id": de_id,
