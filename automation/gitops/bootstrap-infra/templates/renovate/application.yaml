@@ -20,10 +20,15 @@ spec:
           ownNamespaceOnly: false
         securityContext:
           pod:
+            runAsUser: null
+            runAsGroup: null
+            fsGroup: null
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
           container:
+            runAsUser: null
+            runAsGroup: null
             capabilities:
               drop:
                 - ALL
@@ -36,10 +41,15 @@ spec:
         crd:
           securityContext:
             pod:
+              runAsUser: null
+              runAsGroup: null
+              fsGroup: null
               runAsNonRoot: true
               seccompProfile:
                 type: RuntimeDefault
             container:
+              runAsUser: null
+              runAsGroup: null
               capabilities:
                 drop:
                   - ALL
