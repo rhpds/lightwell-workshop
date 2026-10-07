@@ -70,8 +70,12 @@ sdlc:
   # Must carry agent prompts that read SDLC_SANDBOX_NAMESPACE / EPHEMERAL_NS_PREFIX
   # from env; older images hardcode the shared sdlc-sandboxes namespace and will
   # write into a namespace this chart no longer creates.
-  # TODO: replace with the CI sha-* tag once rhpds/lw-sdlc-opencode#3 merges.
-  opencodeImage: quay.io/bluesman/sdlc-opencode:sandbox-ns-test
+  # Built by hand from rhpds/lw-sdlc-opencode main @ 5e19550 (merge of #3) and
+  # pushed to quay.io/bluesman — the repo's CI has been returning
+  # startup_failure since 2026-10-07, so no sha-* tag exists for that commit.
+  # Repoint at the CI tag once Actions runs again; note the repo variable
+  # QUAY_IMAGE_NAME publishes to quay.io/sshaaf, not this org.
+  opencodeImage: quay.io/bluesman/sdlc-opencode:sha-5e19550
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.
   # Must be "allow" for the EDA-driven flow: the agent runs unattended, and
