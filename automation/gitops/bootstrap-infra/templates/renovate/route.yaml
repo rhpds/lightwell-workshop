@@ -1,0 +1,18 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: renovate-operator
+  namespace: renovate-operator
+  labels:
+    app: renovate-operator
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  to:
+    kind: Service
+    name: renovate-operator-renovate-operator
+  port:
+    targetPort: 8081
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
