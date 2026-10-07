@@ -1,5 +1,10 @@
 # Publishing House Project
 
+Working on the demo platform (Helm charts, EDA, OpenCode agent) rather than the
+lab content? Read [HANDOFF.md](HANDOFF.md) first — it carries the current state
+and the open items, and several people drive this repo with different agents.
+Update it when you finish or discover something.
+
 ## On every session start
 
 Read `publishing-house/spec.yaml`. Check the workflow stage by running `/rhdp-publishing-house`.
