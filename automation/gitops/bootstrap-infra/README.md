@@ -14,7 +14,7 @@ Supports the Lightwell SDLC demo with **shared** GitLab, AAP/EDA, Automation Orc
 | `templates/ao/` | Automation Orchestrator operator + instance | `automation-orchestrator` |
 | `templates/rhads/` | RHTPA + RHTAS, Keycloak TPA realm job | `lightwell-tpa`, `lightwell-tas` |
 | `templates/quay/` | Red Hat Quay operator/registry | `lightwell-quay` |
-| `templates/opencode-image/` | Shared OpenCode BuildConfig → ImageStream → Quay mirror | `lightwell-images` |
+| `templates/opencode-image/` | Shared OpenCode BuildConfig → ImageStream (integrated registry) | `lightwell-images` |
 | `templates/argocd/` | Argo CD admin password (OpenShift GitOps) | `openshift-gitops` |
 
 **Not included:** Artifactory, Jenkins, SonarQube, Tekton, OpenShift AI, **Nexus** (tenant chart).
@@ -77,24 +77,20 @@ Nexus webhooks and OpenCode Deployments: **`bootstrap-tenant`** chart (no separa
 When `opencodeImage.enabled=true` (default), this chart:
 
 1. Creates namespace `lightwell-images` with ImageStream + BuildConfig (Docker strategy from `rhpds/lw-sdlc-opencode`)
-2. After Quay admin init, Sync Job `opencode-image-publish`:
-   - ensures public Quay repo `lightwell/sdlc-opencode`
-   - `oc start-build` (skipped if ImageStreamTag already exists)
-   - `oc image mirror` ImageStream → in-cluster Quay (`:tag` and `:latest`)
-3. Grants `system:image-puller` on the ImageStream namespace to `system:serviceaccounts` (lab-wide)
+2. Sync Job `opencode-image-publish` runs `oc start-build` (skipped if ImageStreamTag already exists) and waits for the tag in the **OpenShift integrated registry**
+3. Grants `system:image-puller` on that namespace to `system:serviceaccounts` so every tenant SA can pull cross-namespace
 
 Tenants leave `sdlc.opencodeImage` empty and pull:
 
-`lightwell-quay-lightwell-quay.<deployer.domain>/lightwell/sdlc-opencode:<opencodeImage.tag>`
+`image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:<opencodeImage.tag>`
 
-Bump `opencodeImage.gitRef` + `opencodeImage.tag` together, sync infra (Job re-runs), then align `sdlc.opencodeImageTag` on tenants.
+Bump `opencodeImage.gitRef` + `opencodeImage.tag` together, sync infra (Job re-runs), then align `sdlc.opencodeImageTag` on tenants. Does **not** depend on in-cluster Quay.
 
 | Key | Purpose |
 |-----|---------|
 | `opencodeImage.enabled` | Install shared build/publish (default `true`) |
-| `opencodeImage.gitRef` / `tag` | Source commit and published tag (keep in sync) |
-| `opencodeImage.quayOrg` / `quayRepo` | Quay destination under in-cluster Quay |
-| `quay.hostname` | Optional Route host override for publish + docs |
+| `opencodeImage.gitRef` / `tag` | Source commit and ImageStream tag (keep in sync) |
+| `opencodeImage.namespace` / `name` | ImageStream location (default `lightwell-images` / `sdlc-opencode`) |
 
 Build needs egress to GitHub, `ghcr.io` (base image), and `mirror.openshift.com` (`oc` client in the Dockerfile).
 
@@ -116,6 +112,6 @@ helm template lightwell-infra automation/gitops/bootstrap-infra/ \
 | `https://sso.<domain>` | Keycloak (cluster) |
 | `https://trustify.<domain>` or TPA CR `appDomain` | RHTPA |
 | AAP gateway route in `aap` namespace | AAP Controller / EDA |
-| Quay registry route in `lightwell-quay` | In-cluster Quay (OpenCode image) |
+| Quay registry route in `lightwell-quay` | In-cluster Quay (optional; OpenCode uses integrated registry) |
 
 Per-tenant Nexus: `https://nexus-lightwell-nexus-<guid>.<domain>` (from tenant chart).

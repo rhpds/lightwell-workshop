@@ -1,5 +1,6 @@
 {{- if .Values.opencodeImage.enabled }}
-# After Quay admin init: ensure org/repo (public), build ImageStream tag, mirror to Quay.
+# Build the shared OpenCode image into the integrated registry (ImageStream).
+# Tenants pull via image-registry.openshift-image-registry.svc:5000/…
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,128 +18,20 @@ spec:
       serviceAccountName: opencode-image-publish
       restartPolicy: OnFailure
       containers:
-        - name: publish
+        - name: build
           image: {{ .Values.jobAnsibleImage }}
           env:
-            - name: QUAY_NS
-              value: {{ .Values.quay.namespace | quote }}
             - name: IMAGES_NS
               value: {{ .Values.opencodeImage.namespace | quote }}
             - name: IMAGE_NAME
               value: {{ .Values.opencodeImage.name | quote }}
             - name: IMAGE_TAG
               value: {{ .Values.opencodeImage.tag | quote }}
-            - name: QUAY_ORG
-              value: {{ .Values.opencodeImage.quayOrg | quote }}
-            - name: QUAY_REPO
-              value: {{ .Values.opencodeImage.quayRepo | quote }}
-            - name: QUAY_ADMIN_USER
-              value: quayadmin
-            - name: QUAY_ADMIN_PASS
-              value: {{ .Values.admin.password | quote }}
-            - name: QUAY_HOSTNAME_OVERRIDE
-              value: {{ .Values.quay.hostname | default "" | quote }}
           command:
             - /bin/bash
             - -c
             - |
               set -euo pipefail
-
-              echo "Resolving Quay route..."
-              QUAY_HOST="${QUAY_HOSTNAME_OVERRIDE}"
-              if [ -z "${QUAY_HOST}" ]; then
-                for i in $(seq 1 60); do
-                  QUAY_HOST=$(oc get route -n "${QUAY_NS}" \
-                    -l quay-operator/quayregistry=lightwell \
-                    -o jsonpath='{.items[0].spec.host}' 2>/dev/null || true)
-                  if [ -n "${QUAY_HOST}" ]; then
-                    break
-                  fi
-                  echo "Attempt $i/60 — waiting for Quay route (10s)..."
-                  sleep 10
-                done
-              fi
-              if [ -z "${QUAY_HOST}" ]; then
-                echo "ERROR: Quay route not found"
-                exit 1
-              fi
-              QUAY_URL="https://${QUAY_HOST}"
-              echo "Quay: ${QUAY_URL}"
-
-              echo "Waiting for Quay API..."
-              for i in $(seq 1 60); do
-                STATUS=$(curl -sk -o /dev/null -w '%{http_code}' \
-                  "${QUAY_URL}/health/instance" 2>/dev/null || echo 000)
-                if [ "${STATUS}" = "200" ]; then
-                  echo "Quay API ready"
-                  break
-                fi
-                echo "Attempt $i/60 — health ${STATUS} (10s)..."
-                sleep 10
-              done
-              if [ "${STATUS}" != "200" ]; then
-                echo "ERROR: Quay API not ready"
-                exit 1
-              fi
-
-              quay_api() {
-                # usage: quay_api METHOD PATH [JSON_BODY]
-                local method="$1" path="$2" body="${3:-}"
-                if [ -n "${body}" ]; then
-                  curl -sk -X "${method}" \
-                    -u "${QUAY_ADMIN_USER}:${QUAY_ADMIN_PASS}" \
-                    -H "Content-Type: application/json" \
-                    -d "${body}" \
-                    -w "\n%{http_code}" \
-                    "${QUAY_URL}${path}"
-                else
-                  curl -sk -X "${method}" \
-                    -u "${QUAY_ADMIN_USER}:${QUAY_ADMIN_PASS}" \
-                    -H "Content-Type: application/json" \
-                    -w "\n%{http_code}" \
-                    "${QUAY_URL}${path}"
-                fi
-              }
-
-              echo "Ensuring Quay org ${QUAY_ORG}..."
-              RESULT=$(quay_api POST /api/v1/organization/ \
-                "{\"name\":\"${QUAY_ORG}\",\"email\":\"${QUAY_ORG}@example.com\"}")
-              CODE=$(echo "${RESULT}" | tail -1)
-              BODY=$(echo "${RESULT}" | sed '$d')
-              if [ "${CODE}" = "201" ] || [ "${CODE}" = "200" ]; then
-                echo "Org created"
-              elif echo "${BODY}" | grep -qiE 'already exists|duplicate'; then
-                echo "Org already exists"
-              else
-                # GET to confirm it exists (create may 400 if present)
-                CHECK=$(quay_api GET "/api/v1/organization/${QUAY_ORG}")
-                CHECK_CODE=$(echo "${CHECK}" | tail -1)
-                if [ "${CHECK_CODE}" = "200" ]; then
-                  echo "Org already present"
-                else
-                  echo "WARNING: org create HTTP ${CODE}: ${BODY}"
-                fi
-              fi
-
-              echo "Ensuring public repo ${QUAY_ORG}/${QUAY_REPO}..."
-              RESULT=$(quay_api POST "/api/v1/repository" \
-                "{\"namespace\":\"${QUAY_ORG}\",\"repository\":\"${QUAY_REPO}\",\"description\":\"Lightwell OpenCode control-plane image\",\"visibility\":\"public\"}")
-              CODE=$(echo "${RESULT}" | tail -1)
-              BODY=$(echo "${RESULT}" | sed '$d')
-              if [ "${CODE}" = "201" ] || [ "${CODE}" = "200" ]; then
-                echo "Repo created (public)"
-              else
-                CHECK=$(quay_api GET "/api/v1/repository/${QUAY_ORG}/${QUAY_REPO}")
-                CHECK_CODE=$(echo "${CHECK}" | tail -1)
-                if [ "${CHECK_CODE}" = "200" ]; then
-                  echo "Repo already present — forcing public visibility"
-                  quay_api POST "/api/v1/repository/${QUAY_ORG}/${QUAY_REPO}/changevisibility" \
-                    '{"visibility":"public"}' >/dev/null || true
-                else
-                  echo "ERROR: repo create HTTP ${CODE}: ${BODY}"
-                  exit 1
-                fi
-              fi
 
               echo "Waiting for BuildConfig/${IMAGE_NAME}..."
               for i in $(seq 1 36); do
@@ -149,12 +42,34 @@ spec:
               done
               oc get buildconfig "${IMAGE_NAME}" -n "${IMAGES_NS}" >/dev/null
 
+              PULL_REF="image-registry.openshift-image-registry.svc:5000/${IMAGES_NS}/${IMAGE_NAME}:${IMAGE_TAG}"
+
               # Skip rebuild when the ImageStream already has this tag.
               if oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" >/dev/null 2>&1; then
                 echo "ImageStreamTag ${IMAGE_NAME}:${IMAGE_TAG} already exists — skipping build"
               else
-                echo "Starting build ${IMAGE_NAME}..."
-                oc start-build "${IMAGE_NAME}" -n "${IMAGES_NS}" --follow --wait
+                echo "Starting build ${IMAGE_NAME} → ${PULL_REF}"
+                # Do not use --follow/--wait: stream attach can hang after Push successful.
+                BUILD=$(oc start-build "${IMAGE_NAME}" -n "${IMAGES_NS}" -o name)
+                echo "Started ${BUILD}"
+                for i in $(seq 1 180); do
+                  PHASE=$(oc get "${BUILD}" -n "${IMAGES_NS}" -o jsonpath='{.status.phase}' 2>/dev/null || echo Unknown)
+                  echo "build phase=${PHASE} (${i}/180)"
+                  case "${PHASE}" in
+                    Complete) break ;;
+                    Failed|Error|Cancelled)
+                      echo "ERROR: ${BUILD} ended in ${PHASE}"
+                      oc logs -n "${IMAGES_NS}" "${BUILD}" --tail=80 || true
+                      exit 1
+                      ;;
+                  esac
+                  sleep 10
+                done
+                PHASE=$(oc get "${BUILD}" -n "${IMAGES_NS}" -o jsonpath='{.status.phase}' 2>/dev/null || echo Unknown)
+                if [ "${PHASE}" != "Complete" ]; then
+                  echo "ERROR: ${BUILD} did not complete (phase=${PHASE})"
+                  exit 1
+                fi
               fi
 
               echo "Waiting for ImageStreamTag ${IMAGE_NAME}:${IMAGE_TAG}..."
@@ -162,33 +77,12 @@ spec:
                 if oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" >/dev/null 2>&1; then
                   break
                 fi
-                sleep 10
+                sleep 5
               done
               oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" >/dev/null
 
-              SRC="image-registry.openshift-image-registry.svc:5000/${IMAGES_NS}/${IMAGE_NAME}:${IMAGE_TAG}"
-              DST="${QUAY_HOST}/${QUAY_ORG}/${QUAY_REPO}:${IMAGE_TAG}"
-              echo "Mirroring ${SRC} → ${DST}"
-
-              SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-              mkdir -p /tmp/docker
-              SRC_AUTH=$(printf 'unused:%s' "${SA_TOKEN}" | base64 -w0 2>/dev/null || printf 'unused:%s' "${SA_TOKEN}" | base64)
-              DST_AUTH=$(printf '%s:%s' "${QUAY_ADMIN_USER}" "${QUAY_ADMIN_PASS}" | base64 -w0 2>/dev/null || printf '%s:%s' "${QUAY_ADMIN_USER}" "${QUAY_ADMIN_PASS}" | base64)
-              printf '%s\n' \
-                '{' \
-                '  "auths": {' \
-                "    \"image-registry.openshift-image-registry.svc:5000\": {\"auth\": \"${SRC_AUTH}\"}," \
-                "    \"${QUAY_HOST}\": {\"auth\": \"${DST_AUTH}\"}" \
-                '  }' \
-                '}' > /tmp/docker/config.json
-              export DOCKER_CONFIG=/tmp/docker
-
-              oc image mirror --insecure=true "${SRC}" "${DST}"
-
-              # Convenience floating tag for demos; tenants should prefer the sha tag.
-              LATEST_DST="${QUAY_HOST}/${QUAY_ORG}/${QUAY_REPO}:latest"
-              oc image mirror --insecure=true "${SRC}" "${LATEST_DST}" || true
-
-              echo "Published ${DST}"
-              echo "Tenant default pull: ${DST} (sdlc.opencodeImage empty → helper builds this URL)"
+              echo "Published ${PULL_REF}"
+              echo "Tenants: leave sdlc.opencodeImage empty (default helper resolves this ref)."
+              oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" \
+                -o jsonpath='{.image.dockerImageReference}{"\n"}'
 {{- end }}

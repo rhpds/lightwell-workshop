@@ -4,5 +4,5 @@ description: >-
   Shared cluster platform for the Lightwell lab — GitLab, AAP/EDA, Automation
   Orchestrator (+ CNPG), RHTPA/RHTAS, Quay. Per-tenant Nexus lives in bootstrap-tenant.
 type: application
-version: 0.5.0
+version: 0.5.1
 appVersion: "1.0.0"

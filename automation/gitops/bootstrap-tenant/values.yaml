@@ -6,12 +6,6 @@ deployer:
   domain: apps.example.com
   storageClass: ocs-external-storagecluster-ceph-rbd-immediate
 
-# In-cluster Quay (bootstrap-infra). Used when sdlc.opencodeImage is empty.
-quay:
-  namespace: lightwell-quay
-  # Empty → lightwell-quay-lightwell-quay.<deployer.domain>
-  hostname: ""
-
 jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
 
 aap:
@@ -77,14 +71,13 @@ sdlc:
   exposeUi: true # Route to the OpenCode embedded web UI (agent transcripts); basic-auth protected
   # Must carry agent prompts that read SDLC_SANDBOX_NAMESPACE / EPHEMERAL_NS_PREFIX
   # from env; older images hardcode the shared sdlc-sandboxes namespace.
-  # Empty → pull from in-cluster Quay (bootstrap-infra BuildConfig + publish Job):
-  #   lightwell-quay-lightwell-quay.<domain>/lightwell/sdlc-opencode:<opencodeImageTag>
-  # Override with a full ref to use external Quay or the shared ImageStream, e.g.
-  #   image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:sha-5e19550
+  # Empty → OpenShift integrated registry (bootstrap-infra BuildConfig → ImageStream):
+  #   image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:<tag>
+  # Override with a full ref for external Quay / offline pins.
   opencodeImage: ""
+  opencodeImageNamespace: lightwell-images
+  opencodeImageName: sdlc-opencode
   opencodeImageTag: sha-5e19550
-  opencodeImageQuayOrg: lightwell
-  opencodeImageQuayRepo: sdlc-opencode
   opencodeImagePullPolicy: IfNotPresent
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.

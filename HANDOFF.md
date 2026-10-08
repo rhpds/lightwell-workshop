@@ -80,12 +80,12 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
    create the AAP integration, and keep SCM on `rhpds/lw-sdlc-opencode`.
    → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
 2. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
-   now **shared BuildConfig → ImageStream → in-cluster Quay** via
+   now **shared BuildConfig → ImageStream (OpenShift integrated registry)** via
    `bootstrap-infra` `opencodeImage` (ADR-013). Tenants leave
    `sdlc.opencodeImage` empty. External quay.io pins remain an override only.
-   → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-in-cluster-quay)
+   → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-openshift-integrated-registry)
 3. **First infra sync after enablement** must finish Job
-   `opencode-image-publish` (build + mirror) before OpenCode pods can pull.
+   `opencode-image-publish` (ImageStream build) before OpenCode pods can pull.
    Bump `opencodeImage.gitRef`/`tag` and tenant `sdlc.opencodeImageTag` together.
 4. **`nexus.lightwellNetwork` is still empty in AgnosticV.** Planned fix is a
    fake Lightwell — a Maven mirror holding some `.rhlw-*` packages for Nexus to

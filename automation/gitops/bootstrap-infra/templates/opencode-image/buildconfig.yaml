@@ -1,6 +1,6 @@
 {{- if .Values.opencodeImage.enabled }}
 # Shared OpenCode image build. Output lands on the ImageStream in this
-# namespace; the publish Job mirrors the tag into in-cluster Quay for tenants.
+# namespace (OpenShift integrated registry). Tenants pull that ImageStreamTag.
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:

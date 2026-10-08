@@ -55,12 +55,11 @@ rhtas:
 quay:
   namespace: lightwell-quay
   channel: stable-3.18
-  # Empty → discover Route host at publish time. Override if the operator
-  # hostname differs from lightwell-quay-lightwell-quay.<deployer.domain>.
-  hostname: ""
 
-# Shared OpenCode control-plane image: BuildConfig → ImageStream, then mirror
-# into in-cluster Quay so every tenant pulls the same tag (no external quay.io).
+# Shared OpenCode control-plane image: BuildConfig → ImageStream in the
+# OpenShift integrated registry. Tenants pull
+# image-registry.openshift-image-registry.svc:5000/<namespace>/<name>:<tag>
+# (lab-wide system:image-puller on this namespace).
 opencodeImage:
   enabled: true
   namespace: lightwell-images
@@ -70,7 +69,5 @@ opencodeImage:
   tag: sha-5e19550
   dockerfilePath: container/Dockerfile
   contextDir: ""
-  quayOrg: lightwell
-  quayRepo: sdlc-opencode
 
 jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
