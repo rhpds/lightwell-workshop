@@ -1,0 +1,11 @@
+{{- if .Values.orchestrator.enabled }}
+# AllNamespaces — CNPG must watch automation-orchestrator for Cluster/Database CRs.
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: cloudnative-pg
+  namespace: {{ .Values.cnpg.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec: {}
+{{- end }}

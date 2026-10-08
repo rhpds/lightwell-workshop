@@ -43,12 +43,30 @@ spec:
               export AAP_PASSWORD=$(oc get secret aap-admin-password -n "${AAP_NS}" -o jsonpath='{.data.password}' | base64 -d)
               export TPA_UPLOADER_PASSWORD="{{ .Values.password }}"
               export OPENCODE_SERVER_PASSWORD="{{ .Values.sdlc.opencodeServerPassword | default .Values.password }}"
-              # Secret, so it stays out of the tenant-integration ConfigMap.
-              export AO_CLIENT_SECRET="{{ .Values.sdlc.ao.clientSecret }}"
+              {{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.existingSecret }}
+              # Prefer Secret over ConfigMap for AO service-account credentials.
+              if [ -n "${AO_CLIENT_ID_FROM_SECRET:-}" ]; then export AO_CLIENT_ID="${AO_CLIENT_ID_FROM_SECRET}"; fi
+              if [ -n "${AO_CLIENT_SECRET_FROM_SECRET:-}" ]; then export AO_CLIENT_SECRET="${AO_CLIENT_SECRET_FROM_SECRET}"; fi
+              {{- end }}
               exec python3 /work/bootstrap-aap-eda.py
           envFrom:
             - configMapRef:
                 name: tenant-integration
+          env:
+            {{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.existingSecret }}
+            - name: AO_CLIENT_ID_FROM_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bootstrap-tenant.aoSecretName" . }}
+                  key: client_id
+                  optional: true
+            - name: AO_CLIENT_SECRET_FROM_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bootstrap-tenant.aoSecretName" . }}
+                  key: client_secret
+                  optional: true
+            {{- end }}
           volumeMounts:
             - name: scripts-work
               mountPath: /work

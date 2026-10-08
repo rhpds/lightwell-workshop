@@ -31,19 +31,22 @@ Last updated: 2026-10-08
   `EPHEMERAL_NS_PREFIX` from env (lw-sdlc-opencode#3, merged).
 - LiteLLM/MaaS wired through AgnosticV: model `qwen3-235b` (an alias — the
   upstream name `qwen3-235b-a22b` is rejected), 14d virtual keys.
-- EDA rulebook falls back to `sdlc-remediation-legacy.yml` unless `sdlc.ao.*`
-  is configured. See the AO item below.
+- EDA rulebook defaults from `sdlc.orchestrator.enabled` (true →
+  `sdlc-remediation.yml` AO bridge; false → `sdlc-remediation-legacy.yml`).
+  See the AO item below.
 
 A full pipeline run was proven on tenant `49t9b`: Nexus `CREATED` → EDA →
 Query TPA → Impact Analyzer → OpenCode → GitLab MR → MR Verifier.
+On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
+(Query TPA → Impact) → MR → Resume → MR Verifier.
 
 ## Next up
 
-1. **Automation Orchestrator is not installed anywhere.** `bootstrap-infra`
-   deploys nothing for it. Until someone supplies `sdlc.ao.baseUrl`,
-   `clientId`, `clientSecret`, `startWebhookPath` and `resumeWebhookPath`, the
-   chart stays on the legacy rulebook. Setting `baseUrl` alone fails rendering
-   on purpose — the orchestrator playbooks assert on all four.
+1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
+   CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
+   paths, `existingSecret` from `ao-bootstrap`). Remaining gaps: ensure
+   `APP_INTEGRATION_URL_ALLOWED_HOSTS` includes the AAP route host so AO can
+   create the AAP integration, and keep SCM on `rhpds/lw-sdlc-opencode`.
 2. **CI on `rhpds/lw-sdlc-opencode` is dead.** Every run since 2026-10-07 ends
    in `startup_failure` with zero jobs allocated, so there are no logs. The
    workflow file is byte-identical to the one behind the last green run and

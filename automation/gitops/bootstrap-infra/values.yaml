@@ -21,6 +21,24 @@ aap:
   channel: stable-2.7
   manifestUrl: https://d3s3zqyaz8cp2d.cloudfront.net/aap/manifest.zip
 
+# Automation Orchestrator (student flow controller). Tenant chart discovers
+# https://ao.<deployer.domain> — no per-tenant AgnosticV AO knobs required.
+orchestrator:
+  enabled: true
+  namespace: automation-orchestrator
+  channel: stable
+  postgres:
+    instances: 1
+    image: ghcr.io/cloudnative-pg/postgresql:15
+    storageSize: 20Gi
+    sslMode: require
+
+# Lab Postgres for AO (CloudNativePG — convenience, not RH-supported for AO).
+cnpg:
+  namespace: cloudnative-pg
+  channel: stable-v1
+  source: certified-operators
+
 tpa:
   namespace: lightwell-tpa
   channel: stable-v1.1

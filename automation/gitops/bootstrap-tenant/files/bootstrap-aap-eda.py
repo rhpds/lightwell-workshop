@@ -70,17 +70,19 @@ def find_by_name(results: list, name: str) -> dict:
     return {}
 
 
-SDLC_JOB_TEMPLATES = [
-    # Automation Orchestrator entry points. sdlc-remediation.yml launches these
-    # two directly from EDA; AO then owns the run.
-    ("SDLC Start Orchestrator", "playbooks/start-orchestrator.yml"),
-    ("SDLC Resume Orchestrator", "playbooks/resume-orchestrator.yml"),
-    # Worker playbooks. Still required: under AO they are launched as job-template
-    # nodes from the canvas rather than from EDA rules, and sdlc-remediation-legacy.yml
-    # still drives them directly for the pre-AO chain.
+# Worker playbooks. Under AO they are launched as job-template nodes from the
+# canvas; sdlc-remediation-legacy.yml still drives them directly pre-AO.
+SDLC_WORKER_JOB_TEMPLATES = [
     ("SDLC Query TPA", "playbooks/query-tpa.yml"),
     ("SDLC Trigger Impact Analyzer", "playbooks/trigger-impact-analyzer.yml"),
     ("SDLC Trigger MR Verifier", "playbooks/trigger-mr-verifier.yml"),
+]
+
+# Automation Orchestrator entry points. sdlc-remediation.yml launches these
+# from EDA; AO then owns the run.
+SDLC_AO_BRIDGE_JOB_TEMPLATES = [
+    ("SDLC Start Orchestrator", "playbooks/start-orchestrator.yml"),
+    ("SDLC Resume Orchestrator", "playbooks/resume-orchestrator.yml"),
 ]
 
 
@@ -91,6 +93,7 @@ def ensure_controller_playbooks(
     controller_org_id: int,
     scm_url: str,
     project_name: str,
+    ao_enabled: bool = False,
 ) -> tuple[int, int]:
     """Create Controller SCM project + localhost job templates for run_job_template actions."""
     code, invs = aap_request(
@@ -170,8 +173,9 @@ def ensure_controller_playbooks(
         base,
     )
     existing = {j.get("name"): j for j in (jts.get("results", []) if isinstance(jts, dict) else [])}
-    missing = []
-    for jt_name, playbook in SDLC_JOB_TEMPLATES:
+    templates = list(SDLC_AO_BRIDGE_JOB_TEMPLATES) + list(SDLC_WORKER_JOB_TEMPLATES)
+    missing_required = []
+    for jt_name, playbook in templates:
         if jt_name in existing:
             continue
         code, created = aap_request(
@@ -192,15 +196,23 @@ def ensure_controller_playbooks(
             },
         )
         if code not in (200, 201):
+            is_bridge = jt_name in {n for n, _ in SDLC_AO_BRIDGE_JOB_TEMPLATES}
+            if is_bridge and not ao_enabled:
+                print(
+                    f"WARNING: optional AO bridge JT {jt_name} skipped "
+                    f"(playbook not in SCM yet): {code}",
+                    file=sys.stderr,
+                )
+                continue
             # Do not treat 400 as success: a duplicate-name rejection here means
             # the template is absent from this org and the tenant cannot run a
             # remediation. Fail loudly rather than leaving a broken activation.
             print(f"ERROR: job template {jt_name}: {code} {created}", file=sys.stderr)
-            missing.append(jt_name)
-    if missing:
+            missing_required.append(jt_name)
+    if missing_required:
         print(
             f"ERROR: job templates not created in org id={controller_org_id}: "
-            + ", ".join(missing),
+            + ", ".join(missing_required),
             file=sys.stderr,
         )
         sys.exit(1)
@@ -288,6 +300,8 @@ def activation_matches(activation: dict, rulebook_id, extra_var: str, eda_cred_i
 
 
 def build_extra_var_yaml() -> str:
+    # AO client credentials: from ConfigMap (dev) or env injected from Secret
+    # via eda-bootstrap Job env (preferred). Same pattern as tpa_uploader_password.
     lines = [
         f"aap_organization_name: {env('EDA_ORGANIZATION_NAME') or env('AAP_ORGANIZATION_NAME', 'Default')}",
         f"tpa_url: {env('TPA_URL')}",
@@ -306,7 +320,7 @@ def build_extra_var_yaml() -> str:
         f"validate_certs: {env('VALIDATE_CERTS', 'false')}",
         # guid reaches the AO payload and the per-tenant sandbox naming; without
         # it the orchestrator cannot tell which tenant an event came from.
-        f"guid: {env('GUID')}",
+        f"guid: {env('GUID', '')}",
     ]
     # Only emit the ao_* vars when AO is actually configured. The orchestrator
     # playbooks do `ao_base_url | default('') | length > 0`, and Jinja's default
@@ -340,6 +354,18 @@ def main() -> None:
     de_image = env("EDA_DECISION_ENV_IMAGE", "quay.io/ansible/ansible-rulebook:main")
     org_id = int(env("EDA_ORGANIZATION_ID", "0") or "0")
     org_name = env("EDA_ORGANIZATION_NAME", "")
+    ao_enabled = env("AO_ENABLED", "false").lower() in ("1", "true", "yes")
+    print(f"EDA rulebook={rulebook_name} AO_ENABLED={ao_enabled}")
+    if ao_enabled and not env("AO_BASE_URL"):
+        print(
+            "WARNING: AO_ENABLED but AO_BASE_URL empty — Start/Resume Orchestrator JTs will fail until configured.",
+            file=sys.stderr,
+        )
+    if ao_enabled and (not env("AO_BASE_URL") or not env("AO_CLIENT_ID")):
+        print(
+            "WARNING: AO_ENABLED but ao_base_url/ao_client_id missing from activation extra_vars.",
+            file=sys.stderr,
+        )
 
     code, orgs = aap_request("GET", "/api/gateway/v1/organizations/", user, password, base)
     if org_id <= 0 and org_name and code == 200:
@@ -447,7 +473,15 @@ def main() -> None:
     if controller_org_id <= 0:
         controller_org_id = 1
     ctrl_project_name = env("CONTROLLER_PROJECT_NAME", f"{project_name} Playbooks")
-    ensure_controller_playbooks(user, password, base, controller_org_id, scm_url, ctrl_project_name)
+    ensure_controller_playbooks(
+        user,
+        password,
+        base,
+        controller_org_id,
+        scm_url,
+        ctrl_project_name,
+        ao_enabled=ao_enabled,
+    )
     eda_cred_name = env("EDA_CONTROLLER_CREDENTIAL_NAME", "SDLC Controller")
     eda_cred_id = ensure_eda_controller_credential(user, password, base, org_id, eda_cred_name)
     print(f"EDA Controller credential id={eda_cred_id}")

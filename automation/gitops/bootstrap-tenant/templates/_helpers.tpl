@@ -119,13 +119,7 @@ that assert fails on the first Nexus event, so the tenant looks healthy and
 remediation never runs. Default to the legacy rulebook unless AO is configured.
 */}}
 {{- define "bootstrap-tenant.rulebookName" -}}
-{{- if .Values.sdlc.rulebookName -}}
-{{- .Values.sdlc.rulebookName -}}
-{{- else if .Values.sdlc.ao.baseUrl -}}
-sdlc-remediation.yml
-{{- else -}}
-sdlc-remediation-legacy.yml
-{{- end -}}
+{{- include "bootstrap-tenant.edaRulebookName" . -}}
 {{- end -}}
 
 {{- define "bootstrap-tenant.snowNamespace" -}}
@@ -138,4 +132,60 @@ sdlc-remediation-legacy.yml
 
 {{- define "bootstrap-tenant.opencodeLlmSecretName" -}}
 {{- .Values.sdlc.llm.existingSecret | default "opencode-llm" -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.orchestratorEnabled" -}}
+{{- if hasKey (.Values.sdlc.orchestrator | default dict) "enabled" -}}
+{{- .Values.sdlc.orchestrator.enabled -}}
+{{- else -}}
+{{- false -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.edaRulebookName" -}}
+{{- if .Values.sdlc.rulebookName -}}
+{{- .Values.sdlc.rulebookName -}}
+{{- else if eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true" -}}
+{{- "sdlc-remediation.yml" -}}
+{{- else -}}
+{{- "sdlc-remediation-legacy.yml" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.aoSecretName" -}}
+{{- .Values.sdlc.orchestrator.existingSecret | default "automation-orchestrator" -}}
+{{- end -}}
+
+{{- /* Default AO URL from deployer.domain — same convention as infra Route ao.<domain>. */ -}}
+{{- define "bootstrap-tenant.aoBaseUrl" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.baseUrl -}}
+{{- .Values.sdlc.orchestrator.baseUrl -}}
+{{- else -}}
+{{- printf "https://ao.%s" .Values.deployer.domain -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.aoProjectName" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.projectName -}}
+{{- .Values.sdlc.orchestrator.projectName -}}
+{{- else -}}
+{{- printf "lightwell-%s" .Values.guid -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Guid-scoped webhook paths so tenants cannot fire each other's AO triggers. */ -}}
+{{- define "bootstrap-tenant.aoStartWebhookPath" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.startWebhookPath -}}
+{{- .Values.sdlc.orchestrator.startWebhookPath -}}
+{{- else -}}
+{{- printf "lightwell-remediation-start-%s" .Values.guid -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.aoResumeWebhookPath" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.resumeWebhookPath -}}
+{{- .Values.sdlc.orchestrator.resumeWebhookPath -}}
+{{- else -}}
+{{- printf "lightwell-remediation-resume-%s" .Values.guid -}}
+{{- end -}}
 {{- end -}}

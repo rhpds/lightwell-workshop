@@ -55,42 +55,23 @@ sdlc:
   enabled: true
   namespace: "" # default sdlc-{guid}; set sdlc-control-plane only for legacy single-tenant labs
   # Source for BOTH the EDA project (rulebooks/) and the Controller project
-  # (playbooks/). The Automation Orchestrator rulebook and the start/resume
-  # orchestrator playbooks only exist here; the old blues-man repo has neither.
+  # (playbooks/). AO rulebook + start/resume orchestrator playbooks live here.
   scmUrl: https://github.com/rhpds/lw-sdlc-opencode.git
   projectName: "" # default SDLC {guid}
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
   decisionEnvImage: quay.io/ansible/ansible-rulebook:main
-  # Empty = pick automatically from sdlc.ao.baseUrl (see the ao block below).
-  # Set explicitly only to override that choice.
-  rulebookName: ""
-  ao:
-    # Automation Orchestrator. Nothing in bootstrap-infra installs AO today, so
-    # these are empty and the tenant runs the legacy rulebook, which drives
-    # Query TPA -> Impact Analyzer -> MR Verifier from EDA directly.
-    #
-    # Setting baseUrl switches the activation to sdlc-remediation.yml, where EDA
-    # is only a sensor and AO owns the flow. All four values are required
-    # together: the orchestrator playbooks assert on them and fail the job if
-    # any is missing.
-    baseUrl: "" # e.g. https://ao.apps.cluster.example.com
-    clientId: ""
-    clientSecret: ""
-    startWebhookPath: ""
-    resumeWebhookPath: ""
+  # AO path (default): sdlc-remediation.yml — EDA bridges to Automation Orchestrator.
+  # Pre-AO chain: set orchestrator.enabled=false (uses sdlc-remediation-legacy.yml)
+  # or override rulebookName.
+  rulebookName: "" # default from orchestrator.enabled
   edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
   exposeUi: true # Route to the OpenCode embedded web UI (agent transcripts); basic-auth protected
   # Must carry agent prompts that read SDLC_SANDBOX_NAMESPACE / EPHEMERAL_NS_PREFIX
-  # from env; older images hardcode the shared sdlc-sandboxes namespace and will
-  # write into a namespace this chart no longer creates.
-  # Built by hand from rhpds/lw-sdlc-opencode main @ 5e19550 (merge of #3) and
-  # pushed to quay.io/bluesman — the repo's CI has been returning
-  # startup_failure since 2026-10-07, so no sha-* tag exists for that commit.
-  # Repoint at the CI tag once Actions runs again; note the repo variable
-  # QUAY_IMAGE_NAME publishes to quay.io/sshaaf, not this org.
+  # from env; older images hardcode the shared sdlc-sandboxes namespace.
+  # Built from rhpds/lw-sdlc-opencode @ 5e19550 (CI was failing; hand-pushed tag).
   opencodeImage: quay.io/bluesman/sdlc-opencode:sha-5e19550
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.
@@ -99,6 +80,27 @@ sdlc:
   opencodePermission: allow
   opencodeServerUsername: opencode
   opencodeServerPassword: "" # default tenant password if empty
+  # Automation Orchestrator — overall flow controller after Nexus→EDA filter.
+  # Install AO on the shared AAP platform (bootstrap-infra); wire webhook paths + SA here.
+  # https://docs.redhat.com/en/documentation/automation_orchestrator/2026.8/
+  orchestrator:
+    # Student goto: Automation Orchestrator owns the remediation canvas after
+    # Nexus→EDA filter. Requires AO installed on the shared platform (see
+    # bootstrap-infra README). Each tenant gets an isolated AO *project*
+    # (lightwell-{guid}), local user, EDA SA, and guid-scoped webhook paths so
+    # students do not see each other's workflows/executions.
+    # Set enabled=false only for pre-AO / legacy EDA-owned chains.
+    enabled: true # true → sdlc-remediation.yml (AO); false → sdlc-remediation-legacy.yml
+    namespace: automation-orchestrator # AO install namespace (admin secret + route)
+    # Empty → https://ao.<deployer.domain> (infra Route). No AgnosticV AO knobs needed.
+    baseUrl: ""
+    projectName: "" # default lightwell-{guid}
+    # Empty → lightwell-remediation-{start,resume}-{guid} (recommended for multi-tenant)
+    startWebhookPath: ""
+    resumeWebhookPath: ""
+    clientId: "" # filled by ao-bootstrap Job into existingSecret (do not commit)
+    clientSecret: "" # do not commit real values
+    existingSecret: automation-orchestrator # keys: client_id, client_secret [, project_name]
   llm:
     # Shared RHDP MaaS gateway. AgnosticV overrides this with the per-tenant
     # endpoint the litellm_virtual_keys role exports. `model` is the switch

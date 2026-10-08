@@ -1,0 +1,12 @@
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ao-bootstrap-source
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  bootstrap-ao-tenant.py: |
+{{ .Files.Get "files/bootstrap-ao-tenant.py" | indent 4 }}
+{{- end }}

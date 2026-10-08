@@ -1,0 +1,11 @@
+{{- if .Values.orchestrator.enabled }}
+# AllNamespaces — required by the Automation Orchestrator operator.
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: automation-orchestrator-operator
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec: {}
+{{- end }}

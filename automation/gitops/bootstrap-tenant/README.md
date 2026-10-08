@@ -13,7 +13,8 @@ Chart **v0.5.3** provisions T1–T4 plus the **SDLC control plane** (OpenCode, E
 | **AAP** | Org `user-<guid>`, tenant user, org membership (best-effort gateway API) |
 | **Nexus** | Dedicated instance, Maven repos + EDA webhooks (`nexus-reconcile` Job) |
 | **TPA seed** | `trustify-ui` client (direct access + SBOM scopes), per-tenant uploader, demo SBOM upload (`deploy-tpa.yml` parity) |
-| **EDA** | `eda-bootstrap` Job — project, decision env, activation `sdlc-remediation-<guid>`, Controller JTs |
+| **EDA** | `eda-bootstrap` Job — project, decision env, activation `sdlc-remediation-<guid>`, Controller JTs (Start/Resume Orchestrator + worker JTs) |
+| **Automation Orchestrator** | Installed by **bootstrap-infra** (one shared instance). AO has **projects**, not AAP orgs — that is the isolation boundary. `ao-bootstrap` creates project `lightwell-{guid}`, grants the student `project-admin` only there, removes them from the built-in `users` group (so they never see the shared `default` project), and uses guid-scoped webhook paths. List APIs hide other tenants’ workflows. |
 | **OpenCode** | Deployment + Service in `sdlc-<guid>`; SA `opencode` (verifier RBAC); `GITLAB_PAT` from Job **`sync-gitlab-pat`** → Secret `gitlab-root-pat`; optional LLM via `opencode-llm` / `inject-env-secrets.sh` |
 | **Demo dashboard** | Deployment + Service + authenticated Route in `sdlc-<guid>`; Secret references for GitLab, OpenCode/Keycloak, AAP, and Lightwell; sync Jobs copy the shared AAP password and Nexus upstream credentials into the tenant namespace |
 | **ServiceNow mock** | Namespace `snow-<guid>`, Deployment + Service + edge Route; lightweight CRUD/UI stand-in for ServiceNow ITSM (`quay.io/redhat-ads-tech/snow-mock:1.0.0`). Source: [`redhat-ads-tech/snow-mock`](https://github.com/redhat-ads-tech/snow-mock) |
@@ -137,7 +138,7 @@ sdlc:
 
 | Repo | Role |
 |------|------|
-| [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) | Rulebooks, playbooks, OpenCode agents/skills, container source (`github.com/sshaaf/lw-sdlc-opencode`). Demo A: blast radius → help-app MR — see `docs/DEMO-A-SMOKE.md` |
+| [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) | Rulebooks, playbooks, OpenCode agents/skills, container source (`github.com/rhpds/lw-sdlc-opencode`). Demo A: blast radius → help-app MR — see `docs/DEMO-A-SMOKE.md` |
 | **This chart** | All tenant + SDLC Kubernetes/GitOps (Helm only under `automation/gitops/bootstrap-*`) |
 
 Integration ConfigMap `tenant-integration` includes `REMEDIATION_APP_GITLAB_PATH` (default `lightwell/lw-demo-help-app-<guid>`), `TPA_SBOM_LABEL` (`sdlc-demo-<guid>`), `OPENCODE_BASE_URL`, and EDA SCM URL (`sdlc.scmUrl`).

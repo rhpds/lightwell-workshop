@@ -1,0 +1,15 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: cloudnative-pg
+  namespace: {{ .Values.cnpg.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  channel: {{ .Values.cnpg.channel }}
+  name: cloudnative-pg
+  source: {{ .Values.cnpg.source }}
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic
+{{- end }}

@@ -1,0 +1,76 @@
+{{- if .Values.orchestrator.enabled }}
+# AO rejects integration base_urls that resolve to private IPs unless the
+# hostname is in APP_INTEGRATION_URL_ALLOWED_HOSTS (JSON array). The operator
+# CR only exposes workflowHttpRequestAllowedHosts; patch backend + workers so
+# AAP integrations can be created for in-cluster AAP routes.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ao-integration-allowlist
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ao-integration-allowlist
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ao-integration-allowlist
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ao-integration-allowlist
+subjects:
+  - kind: ServiceAccount
+    name: ao-integration-allowlist
+    namespace: {{ .Values.orchestrator.namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ao-integration-allowed-hosts
+  namespace: {{ .Values.orchestrator.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      serviceAccountName: ao-integration-allowlist
+      restartPolicy: OnFailure
+      containers:
+        - name: patch
+          image: {{ .Values.jobImage | default "quay.io/openshift/origin-cli:4.16" }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              NS="{{ .Values.orchestrator.namespace }}"
+              AAP_HOST="aap-{{ .Values.aap.namespace | default "aap" }}.{{ .Values.deployer.domain }}"
+              ALLOW="[\"${AAP_HOST}\"]"
+              for d in automation-orchestrator-backend automation-orchestrator-worker automation-orchestrator-background-worker; do
+                for i in $(seq 1 60); do
+                  if oc get deploy "$d" -n "$NS" >/dev/null 2>&1; then break; fi
+                  sleep 5
+                done
+                oc set env "deploy/${d}" -n "$NS" "APP_INTEGRATION_URL_ALLOWED_HOSTS=${ALLOW}"
+              done
+              echo "Set APP_INTEGRATION_URL_ALLOWED_HOSTS=${ALLOW}"
+{{- end }}

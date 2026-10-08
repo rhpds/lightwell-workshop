@@ -27,16 +27,7 @@ data:
   EPHEMERAL_NS_PREFIX: {{ include "bootstrap-tenant.ephemeralNsPrefix" . | quote }}
   EDA_PROJECT_NAME: {{ include "bootstrap-tenant.edaProjectName" . | quote }}
   EDA_PROJECT_SCM_URL: {{ .Values.sdlc.scmUrl | quote }}
-{{- if .Values.sdlc.ao.baseUrl }}
-{{- if not (and .Values.sdlc.ao.clientId .Values.sdlc.ao.clientSecret .Values.sdlc.ao.startWebhookPath .Values.sdlc.ao.resumeWebhookPath) }}
-{{- fail "sdlc.ao.baseUrl is set, so sdlc.ao.clientId, clientSecret, startWebhookPath and resumeWebhookPath are all required — the orchestrator playbooks assert on them" }}
-{{- end }}
-{{- end }}
-  EDA_RULEBOOK_NAME: {{ include "bootstrap-tenant.rulebookName" . | quote }}
-  AO_BASE_URL: {{ .Values.sdlc.ao.baseUrl | quote }}
-  AO_CLIENT_ID: {{ .Values.sdlc.ao.clientId | quote }}
-  AO_START_WEBHOOK_PATH: {{ .Values.sdlc.ao.startWebhookPath | quote }}
-  AO_RESUME_WEBHOOK_PATH: {{ .Values.sdlc.ao.resumeWebhookPath | quote }}
+  EDA_RULEBOOK_NAME: {{ include "bootstrap-tenant.edaRulebookName" . | quote }}
   EDA_ACTIVATION_NAME: {{ include "bootstrap-tenant.edaActivationName" . | quote }}
   EDA_DECISION_ENV_NAME: {{ .Values.sdlc.decisionEnvName | quote }}
   EDA_DECISION_ENV_IMAGE: {{ .Values.sdlc.decisionEnvImage | quote }}
@@ -45,6 +36,14 @@ data:
   OPENCODE_SERVER_USERNAME: {{ .Values.sdlc.opencodeServerUsername | quote }}
   NEXUS_URL: {{ include "bootstrap-tenant.nexusRouteUrl" . | quote }}
   AAP_ORG: {{ include "bootstrap-tenant.aapOrg" . | quote }}
+  AO_ENABLED: {{ include "bootstrap-tenant.orchestratorEnabled" . | quote }}
+  AO_BASE_URL: {{ include "bootstrap-tenant.aoBaseUrl" . | quote }}
+  AO_PROJECT_NAME: {{ include "bootstrap-tenant.aoProjectName" . | quote }}
+  AO_START_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoStartWebhookPath" . | quote }}
+  AO_RESUME_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoResumeWebhookPath" . | quote }}
+  {{- /* Prefer existingSecret on the eda-bootstrap Job; these are fallbacks for lab/dev only. */}}
+  AO_CLIENT_ID: {{ (.Values.sdlc.orchestrator).clientId | default "" | quote }}
+  AO_CLIENT_SECRET: {{ (.Values.sdlc.orchestrator).clientSecret | default "" | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
