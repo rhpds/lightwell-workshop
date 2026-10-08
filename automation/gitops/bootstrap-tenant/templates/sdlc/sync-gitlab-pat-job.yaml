@@ -37,23 +37,18 @@ spec:
                 echo "ERROR: secret/${GITLAB_NS}/root-user-personal-token missing"
                 exit 1
               fi
-              CURRENT=$(oc get secret gitlab-root-pat -n "${SDLC_NS}" -o jsonpath='{.data.token}' 2>/dev/null || true)
-              if [ "${CURRENT}" = "${TOKEN_B64}" ]; then
-                echo "gitlab-root-pat already matches root PAT"
-                exit 0
-              fi
               RAW=$(printf '%s' "${TOKEN_B64}" | base64 -d)
               oc create secret generic gitlab-root-pat -n "${SDLC_NS}" \
                 --from-literal=token="${RAW}" \
                 --dry-run=client -o yaml | oc apply -f -
-              echo "gitlab-root-pat updated in ${SDLC_NS}"
-              if oc get deploy opencode -n "${SDLC_NS}" >/dev/null 2>&1; then
-                oc rollout restart deploy/opencode -n "${SDLC_NS}"
-              fi
+              echo "gitlab-root-pat ensured in ${SDLC_NS}"
               {{- if .Values.sdlc.renovate.enabled }}
               oc create secret generic renovate-token -n "${SDLC_NS}" \
                 --from-literal=RENOVATE_TOKEN="${RAW}" \
                 --dry-run=client -o yaml | oc apply -f -
-              echo "renovate-token updated in ${SDLC_NS}"
+              echo "renovate-token ensured in ${SDLC_NS}"
               {{- end }}
+              if oc get deploy opencode -n "${SDLC_NS}" >/dev/null 2>&1; then
+                oc rollout restart deploy/opencode -n "${SDLC_NS}"
+              fi
 {{- end }}
