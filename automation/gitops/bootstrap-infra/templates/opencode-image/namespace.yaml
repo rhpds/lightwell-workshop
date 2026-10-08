@@ -1,0 +1,11 @@
+{{- if .Values.opencodeImage.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.opencodeImage.namespace }}
+  labels:
+    app.kubernetes.io/part-of: lightwell-bootstrap-infra
+    app.kubernetes.io/component: opencode-image
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+{{- end }}

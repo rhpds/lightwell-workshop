@@ -131,7 +131,12 @@ For local `helm template` only (do not commit real passwords), pass `--set nexus
 ```yaml
 sdlc:
   enabled: true
-  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-<tag>
+  # Default (empty): in-cluster Quay from bootstrap-infra publish Job
+  #   lightwell-quay-lightwell-quay.<domain>/lightwell/sdlc-opencode:<opencodeImageTag>
+  opencodeImage: ""
+  opencodeImageTag: sha-5e19550
+  # Optional override — external Quay or shared ImageStream:
+  # opencodeImage: image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:sha-5e19550
 ```
 
 ## SCM vs GitOps

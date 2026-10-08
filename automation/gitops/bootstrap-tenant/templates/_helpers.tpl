@@ -189,3 +189,30 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 {{- printf "lightwell-remediation-resume-%s" .Values.guid -}}
 {{- end -}}
 {{- end -}}
+
+{{- /*
+  OpenCode image pull ref.
+  - sdlc.opencodeImage set → use as-is (external Quay / ImageStream override).
+  - empty → in-cluster Quay published by bootstrap-infra opencode-image Job:
+    <quayHost>/<org>/<repo>:<tag>
+  Quay hostname default matches QuayRegistry name=lightwell in lightwell-quay:
+    lightwell-quay-lightwell-quay.<deployer.domain>
+*/ -}}
+{{- define "bootstrap-tenant.quayHostname" -}}
+{{- if and .Values.quay .Values.quay.hostname -}}
+{{- .Values.quay.hostname -}}
+{{- else -}}
+{{- printf "lightwell-quay-%s.%s" (.Values.quay.namespace | default "lightwell-quay") .Values.deployer.domain -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.opencodeImage" -}}
+{{- if .Values.sdlc.opencodeImage -}}
+{{- .Values.sdlc.opencodeImage -}}
+{{- else -}}
+{{- $org := .Values.sdlc.opencodeImageQuayOrg | default "lightwell" -}}
+{{- $repo := .Values.sdlc.opencodeImageQuayRepo | default "sdlc-opencode" -}}
+{{- $tag := .Values.sdlc.opencodeImageTag | default "sha-5e19550" -}}
+{{- printf "%s/%s/%s:%s" (include "bootstrap-tenant.quayHostname" .) $org $repo $tag -}}
+{{- end -}}
+{{- end -}}

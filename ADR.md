@@ -126,6 +126,7 @@ Copy and fill for each new decision:
 |-------|---------|
 | **Date** | 2026-10-08 |
 | **Title** | Pin OpenCode to a known-good hand-built image while CI is broken |
+| **Status** | Superseded by [ADR-012](#adr-012--shared-opencode-image-build-to-in-cluster-quay) for lab clusters with bootstrap-infra Quay |
 | **Context** | GitHub Actions on `rhpds/lw-sdlc-opencode` fails at `startup_failure` with no jobs since 2026-10-07. Chart needs the per-tenant sandbox prompts (ADR-005). |
 | **Decision** | Pin `sdlc.opencodeImage` to `quay.io/bluesman/sdlc-opencode:sha-5e19550` (built from `lw-sdlc-opencode` `main` @ `5e19550`). Treat as temporary until CI publishes tags again. |
 | **Consequences** | Quay org mismatch vs repo variable `QUAY_IMAGE_NAME` (`quay.io/sshaaf/...`). Rebuild/repoint when CI is healthy; document which org is canonical. |
@@ -139,6 +140,16 @@ Copy and fill for each new decision:
 | **Context** | Multiple bugs reported success while leaving tenants non-functional (missing JTs, empty AO canvas, hung agents). |
 | **Decision** | Prefer assert/fail at Helm render or bootstrap Job time when required wiring is incomplete. Hook Jobs use `hook-delete-policy: HookSucceeded` — absence means success. |
 | **Consequences** | Sync may show red more often; debugging is clearer. Do not “fix” missing Jobs after HookSucceeded. |
+
+## ADR-012 — Shared OpenCode image build → in-cluster Quay
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-08 |
+| **Title** | Build OpenCode once on the platform; tenants pull from in-cluster Quay |
+| **Context** | External quay.io pins (ADR-010) and broken GH Actions make labs brittle. Infra already installs Quay. Tenants should not each rebuild the same control-plane image. |
+| **Decision** | `bootstrap-infra` owns a shared BuildConfig + ImageStream in `lightwell-images` (source `rhpds/lw-sdlc-opencode` @ pinned `gitRef`). Sync Job mirrors the tag into in-cluster Quay (`lightwell/sdlc-opencode`, public). Tenants leave `sdlc.opencodeImage` empty and resolve `<quay-host>/lightwell/sdlc-opencode:<tag>`. ImageStream also grants lab-wide `system:image-puller` for optional `image-registry://` pulls. |
+| **Consequences** | Infra sync waits on first build (egress to GitHub/ghcr/mirror.openshift.com). Bump `opencodeImage.gitRef` + `tag` and tenant `sdlc.opencodeImageTag` together. Override `sdlc.opencodeImage` still allowed for offline/dev. |
 
 ---
 
@@ -155,7 +166,8 @@ Copy and fill for each new decision:
 | Rulebook from `orchestrator.enabled` | ADR-007 |
 | AO infra + tenant canvas | ADR-008 |
 | SCM `rhpds/lw-sdlc-opencode` | ADR-009 |
-| OpenCode image / Quay / CI | ADR-010 |
+| OpenCode image / Quay / CI | ADR-010 (superseded on-lab by ADR-012) |
 | Fail-open gotcha | ADR-011 |
+| Shared OpenCode build → cluster Quay | ADR-012 |
 | Fake Lightwell / AgnosticV credentials | _(no ADR yet — planned, not decided)_ |
 | Spec outlines still say Artifactory… | _(content debt, not an ADR)_ |

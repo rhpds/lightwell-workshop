@@ -1,0 +1,94 @@
+{{- if .Values.opencodeImage.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opencode-image-publish
+  namespace: {{ .Values.opencodeImage.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+---
+# Start builds, read ImageStreams, pull from the integrated registry.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opencode-image-publish
+  namespace: {{ .Values.opencodeImage.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+rules:
+  - apiGroups: ["build.openshift.io"]
+    resources: ["buildconfigs", "buildconfigs/instantiate", "builds"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["image.openshift.io"]
+    resources: ["imagestreams", "imagestreamtags", "imagestreamimages"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "secrets", "configmaps", "serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opencode-image-publish
+  namespace: {{ .Values.opencodeImage.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opencode-image-publish
+subjects:
+  - kind: ServiceAccount
+    name: opencode-image-publish
+    namespace: {{ .Values.opencodeImage.namespace }}
+---
+# Discover the Quay Route hostname.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opencode-image-quay-routes
+  namespace: {{ .Values.quay.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+rules:
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opencode-image-quay-routes
+  namespace: {{ .Values.quay.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opencode-image-quay-routes
+subjects:
+  - kind: ServiceAccount
+    name: opencode-image-publish
+    namespace: {{ .Values.opencodeImage.namespace }}
+---
+# Any namespaced SA can pull the shared ImageStream (lab-wide). Tenants
+# normally pull from Quay; this covers image-registry:// overrides.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.opencodeImage.name }}-pullers
+  namespace: {{ .Values.opencodeImage.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: Group
+    name: system:serviceaccounts
+    apiGroup: rbac.authorization.k8s.io
+{{- end }}

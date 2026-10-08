@@ -17,7 +17,7 @@ check() {
 }
 
 echo "=== Namespaces ==="
-for ns in gitlab aap lightwell-tpa lightwell-tas lightwell-quay; do
+for ns in gitlab aap lightwell-tpa lightwell-tas lightwell-quay lightwell-images; do
   check "namespace $ns" "oc get ns $ns"
 done
 
@@ -31,6 +31,9 @@ echo "=== Custom resources ==="
 check "AAP CR" "oc get ansibleautomationplatform aap -n aap"
 check "TPA CR" "oc get trustedprofileanalyzer trustedprofileanalyzer-sample -n lightwell-tpa"
 check "QuayRegistry CR" "oc get quayregistry lightwell -n lightwell-quay"
+check "OpenCode ImageStream" "oc get imagestream sdlc-opencode -n lightwell-images"
+check "OpenCode BuildConfig" "oc get buildconfig sdlc-opencode -n lightwell-images"
+check "OpenCode ImageStreamTag" "oc get imagestreamtag sdlc-opencode:sha-5e19550 -n lightwell-images"
 
 echo ""
 echo "=== Routes ==="
