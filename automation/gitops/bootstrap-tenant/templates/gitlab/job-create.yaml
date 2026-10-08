@@ -97,9 +97,10 @@ spec:
               fi
 
               echo "Creating PAT for renovate-bot..."
+              PAT_EXPIRY=$(date -u -d "+364 days" +%Y-%m-%d 2>/dev/null || date -u -v+364d +%Y-%m-%d)
               RBOT_PAT=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
                 -X POST "${GITLAB_HOST}/api/v4/users/${RBOT_ID}/personal_access_tokens" \
-                -d "{\"name\":\"renovate-pat-{{ .Values.guid }}\",\"scopes\":[\"api\",\"read_repository\",\"write_repository\"],\"expires_at\":\"2027-12-31\"}" \
+                -d "{\"name\":\"renovate-pat-{{ .Values.guid }}\",\"scopes\":[\"api\",\"read_repository\",\"write_repository\"],\"expires_at\":\"${PAT_EXPIRY}\"}" \
                 | python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))")
               if [ -z "${RBOT_PAT}" ]; then
                 echo "WARN: could not create renovate-bot PAT, falling back to root token"
