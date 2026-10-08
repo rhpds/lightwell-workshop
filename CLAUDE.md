@@ -2,8 +2,10 @@
 
 Working on the demo platform (Helm charts, EDA, OpenCode agent) rather than the
 lab content? Read [HANDOFF.md](HANDOFF.md) first — it carries the current state
-and the open items, and several people drive this repo with different agents.
-Update it when you finish or discover something.
+and the open items — and [ADR.md](ADR.md) for the decisions behind them.
+Several people drive this repo with different agents. Update HANDOFF when you
+finish or discover something, and **update ADR.md in the same change** whenever
+that item is (or implies) an architectural decision.
 
 ## On every session start
 
