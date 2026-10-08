@@ -189,3 +189,21 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 {{- printf "lightwell-remediation-resume-%s" .Values.guid -}}
 {{- end -}}
 {{- end -}}
+
+{{- /*
+  OpenCode image pull ref.
+  - sdlc.opencodeImage set → use as-is (external registry override).
+  - empty → shared ImageStream in the OpenShift integrated registry
+    (bootstrap-infra BuildConfig → lightwell-images/sdlc-opencode):
+    image-registry.openshift-image-registry.svc:5000/<ns>/<name>:<tag>
+*/ -}}
+{{- define "bootstrap-tenant.opencodeImage" -}}
+{{- if .Values.sdlc.opencodeImage -}}
+{{- .Values.sdlc.opencodeImage -}}
+{{- else -}}
+{{- $ns := .Values.sdlc.opencodeImageNamespace | default "lightwell-images" -}}
+{{- $name := .Values.sdlc.opencodeImageName | default "sdlc-opencode" -}}
+{{- $tag := .Values.sdlc.opencodeImageTag | default "sha-5e19550" -}}
+{{- printf "image-registry.openshift-image-registry.svc:5000/%s/%s:%s" $ns $name $tag -}}
+{{- end -}}
+{{- end -}}

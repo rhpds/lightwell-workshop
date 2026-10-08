@@ -134,12 +134,24 @@ def ensure_project(client: AoClient, name: str, description: str) -> str:
     return created["id"]
 
 
+# AO local-user policy (seen on create): password min length 14.
+AO_USER_PASSWORD_MIN_LEN = 14
+
+
 def ensure_user(client: AoClient, username: str, password: str, email: str) -> str:
     users = list_all(client, "/api/v1/users")
     existing = next((u for u in users if u.get("username") == username), None)
     if existing:
         print(f"AO user exists: {username} ({existing['id']})")
         return existing["id"]
+    if len(password) < AO_USER_PASSWORD_MIN_LEN:
+        print(
+            f"ERROR: AO user password is {len(password)} chars; AO requires "
+            f">= {AO_USER_PASSWORD_MIN_LEN}. Set tenant chart value `password` "
+            f"(or AO_PASSWORD) longer and re-run ao-bootstrap.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     code, created = client.request(
         "POST",
         "/api/v1/users",

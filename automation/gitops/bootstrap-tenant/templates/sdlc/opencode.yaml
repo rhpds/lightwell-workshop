@@ -38,8 +38,9 @@ spec:
           emptyDir: {}
       containers:
         - name: opencode
-          image: {{ .Values.sdlc.opencodeImage | quote }}
-          imagePullPolicy: IfNotPresent
+          image: {{ include "bootstrap-tenant.opencodeImage" . | quote }}
+          imagePullPolicy: {{ .Values.sdlc.opencodeImagePullPolicy | default "IfNotPresent" | quote }}
+
           command: ["opencode"]
           args:
             - serve

@@ -1,0 +1,15 @@
+{{- if .Values.opencodeImage.enabled }}
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: {{ .Values.opencodeImage.name }}
+  namespace: {{ .Values.opencodeImage.namespace }}
+  labels:
+    app.kubernetes.io/part-of: lightwell-bootstrap-infra
+    app.kubernetes.io/component: opencode-image
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  lookupPolicy:
+    local: false
+{{- end }}

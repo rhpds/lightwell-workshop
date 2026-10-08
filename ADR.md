@@ -126,6 +126,7 @@ Copy and fill for each new decision:
 |-------|---------|
 | **Date** | 2026-10-08 |
 | **Title** | Pin OpenCode to a known-good hand-built image while CI is broken |
+| **Status** | Superseded by [ADR-013](#adr-013--shared-opencode-image-build-to-openshift-integrated-registry) for lab clusters with bootstrap-infra image build |
 | **Context** | GitHub Actions on `rhpds/lw-sdlc-opencode` fails at `startup_failure` with no jobs since 2026-10-07. Chart needs the per-tenant sandbox prompts (ADR-005). |
 | **Decision** | Pin `sdlc.opencodeImage` to `quay.io/bluesman/sdlc-opencode:sha-5e19550` (built from `lw-sdlc-opencode` `main` @ `5e19550`). Treat as temporary until CI publishes tags again. |
 | **Consequences** | Quay org mismatch vs repo variable `QUAY_IMAGE_NAME` (`quay.io/sshaaf/...`). Rebuild/repoint when CI is healthy; document which org is canonical. |
@@ -150,6 +151,16 @@ Copy and fill for each new decision:
 | **Decision** | Install the Renovate operator at cluster level (`bootstrap-infra`) via an ArgoCD child Application pointing at the upstream OCI Helm chart (`ghcr.io/mogenius/helm-charts/renovate-operator`). CRDs use `mode: template` (not hook Jobs) to avoid OpenShift SCC issues. The operator SA gets `nonroot-v2` SCC. Per-tenant infrastructure (SA, SCC ClusterRoleBinding, `renovate-token` secret) is deployed by `bootstrap-tenant`. The RenovateJob CR is **not** in the chart — the student creates it on demand from the Showroom lab guide. The repo's `renovate.json` uses the upstream `lightwell-experience/renovate-config:java-remediated` preset via `extends`, with `hostRules` and `packageRules` overriding the registry to point at the tenant's Nexus. |
 | **Consequences** | Renovate runs only when the student triggers it (no premature MRs during the AI module). The Renovate operator image runs as uid 12021 — executor pods need the `renovate-runner` SA with `nonroot-v2` SCC. The `lightwell-java-remediated` Nexus repo must be seeded with fake `.rhlw-*` artifacts during provisioning (not yet automated). The upstream preset uses `managerFilePatterns` which requires Renovate v44+; the RenovateJob image must be pinned accordingly. |
 
+## ADR-013 — Shared OpenCode image build → OpenShift integrated registry
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-08 |
+| **Title** | Build OpenCode once on the platform; tenants pull from the integrated registry |
+| **Context** | External quay.io pins (ADR-010) and broken GH Actions make labs brittle. In-cluster Quay is often unavailable or slow on lab clusters. Tenants should not each rebuild the same control-plane image. |
+| **Decision** | `bootstrap-infra` owns a shared BuildConfig + ImageStream in `lightwell-images` (source `rhpds/lw-sdlc-opencode` @ pinned `gitRef`). Sync Job `opencode-image-publish` runs `oc start-build` into that ImageStream. Tenants leave `sdlc.opencodeImage` empty and resolve `image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:<tag>`. Lab-wide `system:image-puller` on `lightwell-images` lets every tenant SA pull. |
+| **Consequences** | Infra sync waits on first build (egress to GitHub/ghcr/mirror.openshift.com). No dependency on Quay for OpenCode. Bump `opencodeImage.gitRef` + `tag` and tenant `sdlc.opencodeImageTag` together. Override `sdlc.opencodeImage` still allowed for offline/dev. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -165,8 +176,9 @@ Copy and fill for each new decision:
 | Rulebook from `orchestrator.enabled` | ADR-007 |
 | AO infra + tenant canvas | ADR-008 |
 | SCM `rhpds/lw-sdlc-opencode` | ADR-009 |
-| OpenCode image / Quay / CI | ADR-010 |
+| OpenCode image / Quay / CI | ADR-010 (superseded on-lab by ADR-013) |
 | Fail-open gotcha | ADR-011 |
 | Renovate for deterministic remediation | ADR-012 |
+| Shared OpenCode build → integrated registry | ADR-013 |
 | Fake Lightwell / AgnosticV credentials | _(no ADR yet — planned, not decided)_ |
 | Spec outlines still say Artifactory… | _(content debt, not an ADR)_ |

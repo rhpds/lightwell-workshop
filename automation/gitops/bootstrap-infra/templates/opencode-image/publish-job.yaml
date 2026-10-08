@@ -1,0 +1,88 @@
+{{- if .Values.opencodeImage.enabled }}
+# Build the shared OpenCode image into the integrated registry (ImageStream).
+# Tenants pull via image-registry.openshift-image-registry.svc:5000/…
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opencode-image-publish
+  namespace: {{ .Values.opencodeImage.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 8
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      serviceAccountName: opencode-image-publish
+      restartPolicy: OnFailure
+      containers:
+        - name: build
+          image: {{ .Values.jobAnsibleImage }}
+          env:
+            - name: IMAGES_NS
+              value: {{ .Values.opencodeImage.namespace | quote }}
+            - name: IMAGE_NAME
+              value: {{ .Values.opencodeImage.name | quote }}
+            - name: IMAGE_TAG
+              value: {{ .Values.opencodeImage.tag | quote }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "Waiting for BuildConfig/${IMAGE_NAME}..."
+              for i in $(seq 1 36); do
+                if oc get buildconfig "${IMAGE_NAME}" -n "${IMAGES_NS}" >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 5
+              done
+              oc get buildconfig "${IMAGE_NAME}" -n "${IMAGES_NS}" >/dev/null
+
+              PULL_REF="image-registry.openshift-image-registry.svc:5000/${IMAGES_NS}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+              # Skip rebuild when the ImageStream already has this tag.
+              if oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" >/dev/null 2>&1; then
+                echo "ImageStreamTag ${IMAGE_NAME}:${IMAGE_TAG} already exists — skipping build"
+              else
+                echo "Starting build ${IMAGE_NAME} → ${PULL_REF}"
+                # Do not use --follow/--wait: stream attach can hang after Push successful.
+                BUILD=$(oc start-build "${IMAGE_NAME}" -n "${IMAGES_NS}" -o name)
+                echo "Started ${BUILD}"
+                for i in $(seq 1 180); do
+                  PHASE=$(oc get "${BUILD}" -n "${IMAGES_NS}" -o jsonpath='{.status.phase}' 2>/dev/null || echo Unknown)
+                  echo "build phase=${PHASE} (${i}/180)"
+                  case "${PHASE}" in
+                    Complete) break ;;
+                    Failed|Error|Cancelled)
+                      echo "ERROR: ${BUILD} ended in ${PHASE}"
+                      oc logs -n "${IMAGES_NS}" "${BUILD}" --tail=80 || true
+                      exit 1
+                      ;;
+                  esac
+                  sleep 10
+                done
+                PHASE=$(oc get "${BUILD}" -n "${IMAGES_NS}" -o jsonpath='{.status.phase}' 2>/dev/null || echo Unknown)
+                if [ "${PHASE}" != "Complete" ]; then
+                  echo "ERROR: ${BUILD} did not complete (phase=${PHASE})"
+                  exit 1
+                fi
+              fi
+
+              echo "Waiting for ImageStreamTag ${IMAGE_NAME}:${IMAGE_TAG}..."
+              for i in $(seq 1 60); do
+                if oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 5
+              done
+              oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" >/dev/null
+
+              echo "Published ${PULL_REF}"
+              echo "Tenants: leave sdlc.opencodeImage empty (default helper resolves this ref)."
+              oc get imagestreamtag "${IMAGE_NAME}:${IMAGE_TAG}" -n "${IMAGES_NS}" \
+                -o jsonpath='{.image.dockerImageReference}{"\n"}'
+{{- end }}

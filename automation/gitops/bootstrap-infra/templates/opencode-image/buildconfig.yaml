@@ -1,0 +1,36 @@
+{{- if .Values.opencodeImage.enabled }}
+# Shared OpenCode image build. Output lands on the ImageStream in this
+# namespace (OpenShift integrated registry). Tenants pull that ImageStreamTag.
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ .Values.opencodeImage.name }}
+  namespace: {{ .Values.opencodeImage.namespace }}
+  labels:
+    app.kubernetes.io/part-of: lightwell-bootstrap-infra
+    app.kubernetes.io/component: opencode-image
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  successfulBuildsHistoryLimit: 3
+  failedBuildsHistoryLimit: 3
+  runPolicy: Serial
+  # Job starts the build after Quay org/repo exist; avoid racing ConfigChange.
+  triggers: []
+  source:
+    type: Git
+    git:
+      uri: {{ .Values.opencodeImage.gitUrl | quote }}
+      ref: {{ .Values.opencodeImage.gitRef | quote }}
+    {{- if .Values.opencodeImage.contextDir }}
+    contextDir: {{ .Values.opencodeImage.contextDir | quote }}
+    {{- end }}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: {{ .Values.opencodeImage.dockerfilePath | quote }}
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ printf "%s:%s" .Values.opencodeImage.name .Values.opencodeImage.tag | quote }}
+{{- end }}

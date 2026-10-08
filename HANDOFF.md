@@ -79,18 +79,14 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
    `APP_INTEGRATION_URL_ALLOWED_HOSTS` includes the AAP route host so AO can
    create the AAP integration, and keep SCM on `rhpds/lw-sdlc-opencode`.
    → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
-2. **CI on `rhpds/lw-sdlc-opencode` is dead.** Every run since 2026-10-07 ends
-   in `startup_failure` with zero jobs allocated, so there are no logs. The
-   workflow file is byte-identical to the one behind the last green run and
-   parses fine, so it is an org/repo Actions policy or billing problem — needs
-   someone with repo-admin or `admin:org` to read
-   `/actions/permissions`. Meanwhile images are built by hand.
-   → [ADR-010](ADR.md#adr-010--opencode-image-pin-hand-built-tag)
-3. **Quay org mismatch.** Repo variable `QUAY_IMAGE_NAME` is
-   `quay.io/sshaaf/sdlc-opencode`, but `values.yaml` pins
-   `quay.io/bluesman/sdlc-opencode:sha-5e19550` (hand-built from
-   lw-sdlc-opencode `main @ 5e19550`). Pick one org, then repoint the other.
-   → [ADR-010](ADR.md#adr-010--opencode-image-pin-hand-built-tag)
+2. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
+   now **shared BuildConfig → ImageStream (OpenShift integrated registry)** via
+   `bootstrap-infra` `opencodeImage` (ADR-013). Tenants leave
+   `sdlc.opencodeImage` empty. External quay.io pins remain an override only.
+   → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-openshift-integrated-registry)
+3. **First infra sync after enablement** must finish Job
+   `opencode-image-publish` (ImageStream build) before OpenCode pods can pull.
+   Bump `opencodeImage.gitRef`/`tag` and tenant `sdlc.opencodeImageTag` together.
 4. **`nexus.lightwellNetwork` is still empty in AgnosticV.** Planned fix is a
    fake Lightwell — a Maven mirror holding some `.rhlw-*` packages for Nexus to
    proxy — which removes the need for real credentials. The Renovate integration
