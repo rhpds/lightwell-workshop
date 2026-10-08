@@ -140,6 +140,16 @@ Copy and fill for each new decision:
 | **Decision** | Prefer assert/fail at Helm render or bootstrap Job time when required wiring is incomplete. Hook Jobs use `hook-delete-policy: HookSucceeded` — absence means success. |
 | **Consequences** | Sync may show red more often; debugging is clearer. Do not “fix” missing Jobs after HookSucceeded. |
 
+## ADR-012 — Renovate for deterministic remediation
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-08 |
+| **Title** | Use the Renovate operator for non-AI deterministic remediation |
+| **Context** | The workshop primarily showcases AI-driven remediation (OpenCode / Deep Agent). A second path demonstrates deterministic (non-AI) remediation using Renovate to bump Lightwell `rhlw` rebuild versions. The real Lightwell Maven repository (`packages.redhat.com`) requires customer credentials; the workshop seeds a per-tenant Nexus `lightwell-java-remediated` repo with fake `.rhlw-*` artifacts instead. |
+| **Decision** | Install the Renovate operator at cluster level (`bootstrap-infra`) via an ArgoCD child Application pointing at the upstream OCI Helm chart (`ghcr.io/mogenius/helm-charts/renovate-operator`). CRDs use `mode: template` (not hook Jobs) to avoid OpenShift SCC issues. The operator SA gets `nonroot-v2` SCC. Per-tenant infrastructure (SA, SCC ClusterRoleBinding, `renovate-token` secret) is deployed by `bootstrap-tenant`. The RenovateJob CR is **not** in the chart — the student creates it on demand from the Showroom lab guide. The repo's `renovate.json` uses the upstream `lightwell-experience/renovate-config:java-remediated` preset via `extends`, with `hostRules` and `packageRules` overriding the registry to point at the tenant's Nexus. |
+| **Consequences** | Renovate runs only when the student triggers it (no premature MRs during the AI module). The Renovate operator image runs as uid 12021 — executor pods need the `renovate-runner` SA with `nonroot-v2` SCC. The `lightwell-java-remediated` Nexus repo must be seeded with fake `.rhlw-*` artifacts during provisioning (not yet automated). The upstream preset uses `managerFilePatterns` which requires Renovate v44+; the RenovateJob image must be pinned accordingly. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -157,5 +167,6 @@ Copy and fill for each new decision:
 | SCM `rhpds/lw-sdlc-opencode` | ADR-009 |
 | OpenCode image / Quay / CI | ADR-010 |
 | Fail-open gotcha | ADR-011 |
+| Renovate for deterministic remediation | ADR-012 |
 | Fake Lightwell / AgnosticV credentials | _(no ADR yet — planned, not decided)_ |
 | Spec outlines still say Artifactory… | _(content debt, not an ADR)_ |
