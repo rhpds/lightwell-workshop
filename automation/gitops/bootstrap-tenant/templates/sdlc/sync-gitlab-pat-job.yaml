@@ -42,12 +42,6 @@ spec:
                 --from-literal=token="${RAW}" \
                 --dry-run=client -o yaml | oc apply -f -
               echo "gitlab-root-pat ensured in ${SDLC_NS}"
-              {{- if .Values.sdlc.renovate.enabled }}
-              oc create secret generic renovate-token -n "${SDLC_NS}" \
-                --from-literal=RENOVATE_TOKEN="${RAW}" \
-                --dry-run=client -o yaml | oc apply -f -
-              echo "renovate-token ensured in ${SDLC_NS}"
-              {{- end }}
               if oc get deploy opencode -n "${SDLC_NS}" >/dev/null 2>&1; then
                 oc rollout restart deploy/opencode -n "${SDLC_NS}"
               fi

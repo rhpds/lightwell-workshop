@@ -74,6 +74,45 @@ spec:
                 echo "ERROR: group membership failed (HTTP ${CODE})"; cat /tmp/member.json; exit 1
               fi
 
+              {{- if .Values.sdlc.renovate.enabled }}
+              RENOVATE_BOT="renovate-bot"
+              RENOVATE_BOT_PASS="{{ .Values.password }}"
+              echo "Ensuring renovate-bot user..."
+              CODE=$(curl -sk -o /tmp/rbot.json -w '%{http_code}' \
+                -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/users" \
+                -d "{\"username\":\"${RENOVATE_BOT}\",\"name\":\"Renovate Bot\",\"email\":\"renovate-bot@acme.example.com\",\"password\":\"${RENOVATE_BOT_PASS}\",\"skip_confirmation\":true}")
+              if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
+                echo "WARN: renovate-bot user create HTTP ${CODE}"; cat /tmp/rbot.json
+              fi
+              RBOT_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" "${GITLAB_HOST}/api/v4/users?username=${RENOVATE_BOT}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+
+              echo "Adding renovate-bot to group ${GROUP} as Maintainer..."
+              CODE=$(curl -sk -o /tmp/rbotmem.json -w '%{http_code}' \
+                -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/groups/${GROUP_ID}/members" \
+                -d "{\"user_id\":${RBOT_ID},\"access_level\":40}")
+              if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
+                echo "WARN: renovate-bot group membership HTTP ${CODE}"; cat /tmp/rbotmem.json
+              fi
+
+              echo "Creating PAT for renovate-bot..."
+              RBOT_PAT=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/users/${RBOT_ID}/personal_access_tokens" \
+                -d "{\"name\":\"renovate-pat-{{ .Values.guid }}\",\"scopes\":[\"api\",\"read_repository\",\"write_repository\"],\"expires_at\":\"2027-12-31\"}" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))")
+              if [ -z "${RBOT_PAT}" ]; then
+                echo "WARN: could not create renovate-bot PAT, falling back to root token"
+                RBOT_PAT="${ROOT_TOKEN}"
+              fi
+
+              SDLC_NS="{{ include "bootstrap-tenant.sdlcNamespace" . }}"
+              oc create secret generic renovate-token -n "${SDLC_NS}" \
+                --from-literal=RENOVATE_TOKEN="${RBOT_PAT}" \
+                --dry-run=client -o yaml | oc apply -f -
+              echo "renovate-token (renovate-bot PAT) stored in ${SDLC_NS}"
+              {{- end }}
+
               seed_app() {
                 local APP_NAME="$1" SEED_REPO="$2" SEED_REF="$3"
                 local PROJECT_PATH="${GROUP}/${APP_NAME}"
