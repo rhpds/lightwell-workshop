@@ -123,6 +123,12 @@ sdlc:
     model: "" # model ID exposed by LiteLLM; used as litellm/{model}
     apiKey: "" # when set, chart creates secret opencode-llm (optional for demos)
     existingSecret: "" # e.g. opencode-llm — chart skips creating that Secret; still wires OPENAI_API_KEY
+  renovate:
+    # Deterministic (non-AI) remediation via Renovate. Requires the Renovate
+    # operator installed at cluster level (bootstrap-infra). Deploys the SA +
+    # SCC + secret so the student can create a RenovateJob CR on demand from
+    # the Showroom lab guide.
+    enabled: true
   dashboard:
     # Off by default. The dashboard ships a credential-sync hook at sync-wave 3
     # that polls 10 minutes for the Lightwell Network Secret and then fails,

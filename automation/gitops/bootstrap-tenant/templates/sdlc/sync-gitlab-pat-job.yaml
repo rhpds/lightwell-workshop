@@ -50,4 +50,10 @@ spec:
               if oc get deploy opencode -n "${SDLC_NS}" >/dev/null 2>&1; then
                 oc rollout restart deploy/opencode -n "${SDLC_NS}"
               fi
+              {{- if .Values.sdlc.renovate.enabled }}
+              oc create secret generic renovate-token -n "${SDLC_NS}" \
+                --from-literal=RENOVATE_TOKEN="${RAW}" \
+                --dry-run=client -o yaml | oc apply -f -
+              echo "renovate-token updated in ${SDLC_NS}"
+              {{- end }}
 {{- end }}

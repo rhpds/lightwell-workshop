@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-08
+Last updated: 2026-10-08 (Renovate + snow-mock + ArgoCD fixes)
 
 ## Where the pieces live
 
@@ -51,6 +51,25 @@ A full pipeline run was proven on tenant `49t9b`: Nexus `CREATED` → EDA →
 Query TPA → Impact Analyzer → OpenCode → GitLab MR → MR Verifier.
 On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 (Query TPA → Impact) → MR → Resume → MR Verifier.
+- **Renovate operator** deployed at cluster level (`bootstrap-infra`
+  `templates/renovate/` — ArgoCD child Application pointing at the upstream
+  OCI Helm chart v6.4.0, `nonroot-v2` SCC, OpenShift Route for the web UI,
+  CRD install via template mode). Per-tenant SA + SCC + `renovate-token`
+  secret deployed by `bootstrap-tenant`. Student creates the RenovateJob CR
+  on demand from Showroom. Tested end-to-end on tenant `kbdhw`: Renovate
+  discovered `lw-demo-help-app-kbdhw`, found `woodstox-core 6.0.3.rhlw-00001`
+  in the tenant Nexus `lightwell-java-remediated` repo, and created MRs.
+  Uses the upstream `lightwell-experience/renovate-config:java-remediated`
+  preset via `extends`. → [ADR-012](ADR.md#adr-012--renovate-for-deterministic-remediation)
+- **ServiceNow mock** deployed per tenant via `bootstrap-tenant`
+  `templates/snow/` (namespace `snow-<guid>`, Deployment, Service, Route).
+  Image: `quay.io/redhat-ads-tech/snow-mock:1.0.0`.
+- **ArgoCD admin password Job removed** from `bootstrap-infra`. The
+  `set-admin-password` Job raced with the OpenShift GitOps operator. Use
+  the operator-managed password or "Log in via OpenShift" instead.
+- **Nexus startupProbe** added to the tenant StatefulSet (10s interval,
+  60 attempts = 10 min). Nexus 3.76 takes 3-5+ minutes to start and the
+  liveness probe was killing it before startup completed.
 
 ## Next up
 
@@ -62,15 +81,24 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
    → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
 2. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
    now **shared BuildConfig → ImageStream → in-cluster Quay** via
-   `bootstrap-infra` `opencodeImage` (ADR-012). Tenants leave
+   `bootstrap-infra` `opencodeImage` (ADR-013). Tenants leave
    `sdlc.opencodeImage` empty. External quay.io pins remain an override only.
-   → [ADR-012](ADR.md#adr-012--shared-opencode-image-build-to-in-cluster-quay)
+   → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-in-cluster-quay)
 3. **First infra sync after enablement** must finish Job
    `opencode-image-publish` (build + mirror) before OpenCode pods can pull.
    Bump `opencodeImage.gitRef`/`tag` and tenant `sdlc.opencodeImageTag` together.
 4. **`nexus.lightwellNetwork` is still empty in AgnosticV.** Planned fix is a
    fake Lightwell — a Maven mirror holding some `.rhlw-*` packages for Nexus to
-   proxy — which removes the need for real credentials.
+   proxy — which removes the need for real credentials. The Renovate integration
+   (ADR-012) needs these artifacts seeded into the tenant Nexus
+   `lightwell-java-remediated` repo; a provisioning Job to seed them is not yet
+   built.
+5. **Renovate module content not yet written.** The Showroom AsciiDoc for the
+   Renovate module needs the student-facing `oc apply` for the RenovateJob CR
+   (templated with Antora `{guid}` / `{openshift_cluster_ingress_domain}`
+   attributes) and the `renovate.json` that extends the Lightwell preset.
+   The `discoveryFilters` must scope to `lightwell/lw-demo-help-app-{guid}`
+   (not `lightwell/*`) so tenants don't scan each other's repos.
 5. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
    before the org-scoping fix). Re-run the bootstrap job or re-order them.
 6. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
