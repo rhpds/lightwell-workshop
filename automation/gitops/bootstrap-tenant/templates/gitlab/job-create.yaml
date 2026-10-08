@@ -96,15 +96,19 @@ spec:
                 echo "WARN: renovate-bot group membership HTTP ${CODE}"; cat /tmp/rbotmem.json
               fi
 
-              echo "Creating PAT for renovate-bot..."
+              echo "Creating PAT for renovate-bot (user_id=${RBOT_ID})..."
               PAT_EXPIRY=$(date -u -d "+364 days" +%Y-%m-%d 2>/dev/null || date -u -v+364d +%Y-%m-%d)
-              RBOT_PAT=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+              echo "PAT expiry: ${PAT_EXPIRY}"
+              PAT_RESPONSE=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
                 -X POST "${GITLAB_HOST}/api/v4/users/${RBOT_ID}/personal_access_tokens" \
-                -d "{\"name\":\"renovate-pat-{{ .Values.guid }}\",\"scopes\":[\"api\",\"read_repository\",\"write_repository\"],\"expires_at\":\"${PAT_EXPIRY}\"}" \
-                | python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))")
+                -d "{\"name\":\"renovate-pat-{{ .Values.guid }}\",\"scopes\":[\"api\",\"read_repository\",\"write_repository\"],\"expires_at\":\"${PAT_EXPIRY}\"}")
+              RBOT_PAT=$(echo "${PAT_RESPONSE}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || true)
               if [ -z "${RBOT_PAT}" ]; then
-                echo "WARN: could not create renovate-bot PAT, falling back to root token"
+                echo "WARN: could not create renovate-bot PAT. Response: ${PAT_RESPONSE}"
+                echo "Falling back to root token"
                 RBOT_PAT="${ROOT_TOKEN}"
+              else
+                echo "renovate-bot PAT created successfully (expires ${PAT_EXPIRY})"
               fi
 
               SDLC_NS="{{ include "bootstrap-tenant.sdlcNamespace" . }}"
