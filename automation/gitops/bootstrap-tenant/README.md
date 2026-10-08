@@ -138,7 +138,7 @@ sdlc:
 
 | Repo | Role |
 |------|------|
-| [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) | Rulebooks, playbooks, OpenCode agents/skills, container source (`github.com/sshaaf/lw-sdlc-opencode`). Demo A: blast radius → help-app MR — see `docs/DEMO-A-SMOKE.md` |
+| [`lw-sdlc-opencode`](../../../../lw-sdlc-opencode) | Rulebooks, playbooks, OpenCode agents/skills, container source (`github.com/rhpds/lw-sdlc-opencode`). Demo A: blast radius → help-app MR — see `docs/DEMO-A-SMOKE.md` |
 | **This chart** | All tenant + SDLC Kubernetes/GitOps (Helm only under `automation/gitops/bootstrap-*`) |
 
 Integration ConfigMap `tenant-integration` includes `REMEDIATION_APP_GITLAB_PATH` (default `lightwell/lw-demo-help-app-<guid>`), `TPA_SBOM_LABEL` (`sdlc-demo-<guid>`), `OPENCODE_BASE_URL`, and EDA SCM URL (`sdlc.scmUrl`).

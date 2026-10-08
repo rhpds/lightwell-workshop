@@ -53,6 +53,8 @@ spec:
               export AO_ADMIN_USERNAME=admin
               export AO_ADMIN_PASSWORD=$(oc get secret ao-admin-password -n "${AO_NS}" -o jsonpath='{.data.password}' | base64 -d)
               export GUID="{{ .Values.guid }}"
+              export AO_USERNAME="{{ .Values.username }}"
+              export AO_PASSWORD="{{ .Values.password }}"
               export USERNAME="{{ .Values.username }}"
               export PASSWORD="{{ .Values.password }}"
               export AO_PROJECT_NAME="{{ include "bootstrap-tenant.aoProjectName" . }}"
@@ -60,8 +62,17 @@ spec:
               export AO_RESUME_WEBHOOK_PATH="{{ include "bootstrap-tenant.aoResumeWebhookPath" . }}"
               export AO_SECRET_NAME="{{ include "bootstrap-tenant.aoSecretName" . }}"
               export AO_SECRET_NAMESPACE="{{ include "bootstrap-tenant.jobNamespace" . }}"
+              export AAP_ORGANIZATION_NAME="{{ include "bootstrap-tenant.aapOrg" . }}"
+              AAP_NS="{{ .Values.aap.namespace }}"
+              export AAP_ADMIN_USERNAME=admin
+              export AAP_ADMIN_PASSWORD=$(oc get secret aap-admin-password -n "${AAP_NS}" -o jsonpath='{.data.password}' | base64 -d)
+              # Controller URL for AO AAP integration (global); host must be in
+              # APP_INTEGRATION_URL_ALLOWED_HOSTS when it resolves privately.
+              export AAP_BASE_URL="https://{{ .Values.aap.routeHost | default (printf "aap-%s.%s" .Values.aap.namespace .Values.deployer.domain) }}"
+              # Full clone URL for Impact Analyzer (AO cannot concat expressions).
+              export REMEDIATION_APP_GIT_URL="{{ include "bootstrap-tenant.gitlabHost" . }}/{{ include "bootstrap-tenant.demoProjectPath" . }}.git"
               export VALIDATE_CERTS=false
-              echo "Bootstrapping AO project=${AO_PROJECT_NAME} base=${AO_BASE_URL}"
+              echo "Bootstrapping AO project=${AO_PROJECT_NAME} base=${AO_BASE_URL} aap_org=${AAP_ORGANIZATION_NAME}"
               exec python3 /work/bootstrap-ao-tenant.py
           volumeMounts:
             - name: scripts-work

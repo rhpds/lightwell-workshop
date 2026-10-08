@@ -25,4 +25,9 @@ spec:
   secrets:
     initialAdminPasswordSecretRef:
       name: ao-admin-password
+  # AAP/GitLab routes often resolve to private router IPs; allowlist so AO can
+  # create AAP integrations and HTTP nodes can reach in-cluster endpoints.
+  workflowHttpRequestAllowedHosts:
+    - {{ printf "aap-%s.%s" (.Values.aap.namespace | default "aap") .Values.deployer.domain | quote }}
+    - {{ printf "gitlab-%s.%s" (.Values.gitlab.namespace | default "gitlab") .Values.deployer.domain | quote }}
 {{- end }}

@@ -9,15 +9,19 @@ not see other tenants' workflow lists. For each lab tenant this script ensures:
   2. Local AO user (project-admin on that project only); removed from the
      built-in ``users`` group so the shared ``default`` project is hidden
   3. EDA bridge service account + client_credentials in that project
-  4. Published ``Lightwell Remediation`` workflow with guid-scoped EDA
-     webhook paths (so tenants cannot trigger each other)
-  5. Writes client_id / client_secret into a Kubernetes Secret for EDA bootstrap
+  4. AO credential for AAP Controller (launch job templates)
+  5. Published ``Lightwell Remediation`` workflow — Query TPA → blast-radius
+     gate → Impact Analyzer; GitLab resume → MR Verifier (guid-scoped EDA
+     webhook paths so tenants cannot trigger each other)
+  6. Writes client_id / client_secret into a Kubernetes Secret for EDA bootstrap
 
 Requires env:
   AO_BASE_URL, AO_ADMIN_USERNAME, AO_ADMIN_PASSWORD, GUID, USERNAME, PASSWORD
+  AAP_ADMIN_USERNAME, AAP_ADMIN_PASSWORD (Controller API for aap_job_template nodes)
 Optional:
   AO_PROJECT_NAME (default lightwell-{guid})
   AO_START_WEBHOOK_PATH / AO_RESUME_WEBHOOK_PATH
+  AAP_ORGANIZATION_NAME (default user-{guid})
   AO_SECRET_NAME / AO_SECRET_NAMESPACE (K8s write via oc)
   VALIDATE_CERTS (default false)
 """
@@ -271,12 +275,240 @@ def ensure_service_account(
     return sa_id, client_id, client_secret
 
 
+AAP_CREDENTIAL_TYPE_NAME = "Ansible Automation Platform"
+AAP_CREDENTIAL_NAME = "AAP Controller"
+JT_QUERY_TPA = "SDLC Query TPA"
+JT_IMPACT = "SDLC Trigger Impact Analyzer"
+JT_MR_VERIFIER = "SDLC Trigger MR Verifier"
+AAP_INTEGRATION_NAME = "AAP Lightwell"
+
+
+def ensure_aap_integration(
+    client: AoClient,
+    *,
+    aap_base_url: str,
+    management_credential_id: str,
+) -> str:
+    """Create/reuse a global Ansible Automation Platform integration.
+
+    aap_job_template nodes require a configured AAP integration (endpoint URL).
+    The workflow node's credential_id is separate runtime auth; this integration
+    supplies the Controller base URL + health-check credential.
+    """
+    integrations = list_all(client, "/api/v1/integrations")
+    existing = next(
+        (
+            i
+            for i in integrations
+            if i.get("name") == AAP_INTEGRATION_NAME
+            and i.get("integration_type") == "ansible_automation_platform"
+        ),
+        None,
+    )
+    if existing:
+        print(f"AO AAP integration exists: {existing['id']}")
+        return existing["id"]
+
+    base = aap_base_url.rstrip("/")
+    code, created = client.request(
+        "POST",
+        "/api/v1/integrations",
+        {
+            "name": AAP_INTEGRATION_NAME,
+            "description": "Shared AAP Controller for Lightwell remediation JTs",
+            "integration_type": "ansible_automation_platform",
+            "configuration": {
+                "integration_type": "ansible_automation_platform",
+                "base_url": base,
+                "insecure_skip_tls_verify": True,
+            },
+            "management_credential_id": management_credential_id,
+            "enabled": True,
+            "scope": "global",
+        },
+    )
+    if code not in (200, 201) or not isinstance(created, dict) or not created.get("id"):
+        print(f"ERROR: create AAP integration failed: {code} {created}", file=sys.stderr)
+        print(
+            "Hint: APP_INTEGRATION_URL_ALLOWED_HOSTS must include the AAP hostname "
+            "when it resolves to a private/router IP.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"AO AAP integration created: {created['id']}")
+    return created["id"]
+
+
+def ensure_aap_credential(
+    client: AoClient,
+    project_id: str,
+    *,
+    username: str,
+    password: str,
+) -> str:
+    """Create/reuse an AO credential that can launch AAP job templates."""
+    types = list_all(client, "/api/v1/credential_types")
+    ctype = find_by_name(types, AAP_CREDENTIAL_TYPE_NAME)
+    if not ctype or not ctype.get("id"):
+        print(
+            f"ERROR: credential type {AAP_CREDENTIAL_TYPE_NAME!r} not found",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    creds = list_all(client, "/api/v1/credentials")
+    existing = next(
+        (
+            c
+            for c in creds
+            if c.get("name") == AAP_CREDENTIAL_NAME
+            and c.get("project_id") == project_id
+        ),
+        None,
+    )
+    if existing:
+        print(f"AO AAP credential exists: {existing['id']}")
+        return existing["id"]
+
+    code, created = client.request(
+        "POST",
+        "/api/v1/credentials",
+        {
+            "name": AAP_CREDENTIAL_NAME,
+            "description": "Controller API auth for Lightwell remediation JTs",
+            "credential_type_id": ctype["id"],
+            "project_id": project_id,
+            "inputs": {"username": username, "password": password},
+        },
+    )
+    if code not in (200, 201) or not isinstance(created, dict) or not created.get("id"):
+        print(f"ERROR: create AAP credential failed: {code} {created}", file=sys.stderr)
+        sys.exit(1)
+    print(f"AO AAP credential created: {created['id']}")
+    return created["id"]
+
+
+def _aap_jt_node(
+    node_id: str,
+    name: str,
+    job_template_name: str,
+    organization_name: str,
+    credential_id: str,
+    extra_vars: dict[str, Any],
+    *,
+    integration_id: str = "",
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "job_template_name": job_template_name,
+        "organization_name": organization_name,
+        "credential_id": credential_id,
+        "extra_vars": extra_vars,
+    }
+    if integration_id:
+        params["integration_id"] = integration_id
+    return {
+        "id": node_id,
+        "name": name,
+        "type": "aap_job_template",
+        "parameters": params,
+    }
+
+
 def remediation_workflow_definition(
-    sa_id: str, start_path: str, resume_path: str
+    sa_id: str,
+    start_path: str,
+    resume_path: str,
+    *,
+    aap_org: str,
+    aap_credential_id: str,
+    remediation_app_git_url: str = "",
+    aap_integration_id: str = "",
 ) -> dict:
+    """Nexus start → Query TPA → blast-radius gate → Impact; GitLab resume → MR Verifier.
+
+    Parity with legacy ``sdlc-remediation-legacy.yml``, but AO owns the chain and
+    EDA only bridges into the guid-scoped start/resume triggers.
+    """
+    query_vars = {
+        "artifact_name": "${trigger.artifact_name}",
+        "artifact_group": "${trigger.artifact_group}",
+        "artifact_version": "${trigger.artifact_version}",
+        "package_purl": "${trigger.package_purl}",
+        "vulnerable_version": "${trigger.vulnerable_version}",
+        "fix_version": "${trigger.fix_version}",
+        "cve_id": "${trigger.cve_id}",
+        "severity": "${trigger.severity}",
+        "tpa_url": "${trigger.tpa_url}",
+        "keycloak_url": "${trigger.keycloak_url}",
+        "keycloak_tpa_realm": "${trigger.keycloak_tpa_realm}",
+        "tpa_uploader_username": "${trigger.tpa_uploader_username}",
+        "tpa_oauth_client_id": "${trigger.tpa_oauth_client_id}",
+        "tpa_uploader_password": "${trigger.tpa_uploader_password}",
+        "tpa_sbom_label": "${trigger.tpa_sbom_label}",
+        "gitlab_url": "${trigger.gitlab_url}",
+        "remediation_app_gitlab_path": "${trigger.remediation_app_gitlab_path}",
+        "eda_webhook_url": "${trigger.eda_webhook_url}",
+        "blast_radius_mode": "${trigger.blast_radius_mode}",
+        "opencode_base_url": "${trigger.opencode_base_url}",
+        "opencode_server_username": "${trigger.opencode_server_username}",
+        "opencode_server_password": "${trigger.opencode_server_password}",
+        "aap_organization_name": "${trigger.aap_organization_name}",
+        "guid": "${trigger.guid}",
+    }
+    # Demo-A: rebuild Impact inputs from the start trigger (single help-app).
+    # Query TPA still gates via job success (fails when blast_radius.count < 1)
+    # and exports set_stats artifacts for richer multi-app canvases later.
+    #
+    # Prefer a full .git URL (literal from bootstrap env) — AO expressions cannot
+    # concatenate gitlab_url + path, and OpenCode needs the clone URL.
+    repo_url = remediation_app_git_url or "${trigger.gitlab_url}"
+    impact_vars = {
+        "package_info": {
+            "purl": "${trigger.package_purl}",
+            # Maven GAV artifactId (not purl) — OpenCode bump-maven-mr matches pom.xml.
+            "artifact_id": "${trigger.artifact_name}",
+            "vulnerable_version": "${trigger.vulnerable_version}",
+            "fix_version": "${trigger.fix_version}",
+            "new_version": "${trigger.fix_version}",
+            "cve_id": "${trigger.cve_id}",
+        },
+        "affected_repos": [
+            {
+                "gitlab_path": "${trigger.remediation_app_gitlab_path}",
+                "repo_url": repo_url,
+                "sbom_label": "${trigger.tpa_sbom_label}",
+                "match_reason": "ao_orchestrated",
+                "app_classification": "demo",
+                "deployment_env": "development",
+            }
+        ],
+        "blast_radius": {
+            "mode": "${trigger.blast_radius_mode}",
+            "count": 1,
+        },
+        "opencode_base_url": "${trigger.opencode_base_url}",
+        "opencode_server_username": "${trigger.opencode_server_username}",
+        "opencode_server_password": "${trigger.opencode_server_password}",
+        "gitlab_url": "${trigger.gitlab_url}",
+        "guid": "${trigger.guid}",
+    }
+    verifier_vars = {
+        "merge_request_iid": "${trigger.merge_request_iid}",
+        "project_id": "${trigger.project_id}",
+        "source_branch": "${trigger.source_branch}",
+        "target_branch": "${trigger.target_branch}",
+        "repository_git_url": "${trigger.repository_git_url}",
+        "opencode_base_url": "${trigger.opencode_base_url}",
+        "opencode_server_username": "${trigger.opencode_server_username}",
+        "opencode_server_password": "${trigger.opencode_server_password}",
+        "guid": "${trigger.guid}",
+    }
     return {
         "name": "Lightwell Remediation",
-        "description": "Per-tenant Nexus→EDA→AO canvas (isolated project)",
+        "description": (
+            "Nexus→EDA→AO: Query TPA → Impact Analyzer; "
+            "GitLab MR→EDA→AO: MR Verifier (per-tenant isolation)"
+        ),
         "schema_version": "2.0.0",
         "triggers": [
             {
@@ -299,19 +531,48 @@ def remediation_workflow_definition(
             },
         ],
         "nodes": [
+            _aap_jt_node(
+                "query_tpa",
+                "Query TPA",
+                JT_QUERY_TPA,
+                aap_org,
+                aap_credential_id,
+                query_vars,
+                integration_id=aap_integration_id,
+            ),
             {
-                "id": "placeholder",
-                "name": "Placeholder (wire AAP JTs)",
-                "type": "internal_activity",
+                "id": "has_blast",
+                "name": "Query TPA succeeded",
+                "type": "condition",
+                # query-tpa fails when blast_radius.count < 1 (after set_stats + EDA callback).
                 "parameters": {
-                    "activity": "integration_health_check",
-                    "input": {"batch": True},
+                    "condition": '${query_tpa.job_status} == "successful"',
                 },
-            }
+            },
+            _aap_jt_node(
+                "impact",
+                "Impact Analyzer",
+                JT_IMPACT,
+                aap_org,
+                aap_credential_id,
+                impact_vars,
+                integration_id=aap_integration_id,
+            ),
+            _aap_jt_node(
+                "mr_verifier",
+                "MR Verifier",
+                JT_MR_VERIFIER,
+                aap_org,
+                aap_credential_id,
+                verifier_vars,
+                integration_id=aap_integration_id,
+            ),
         ],
         "edges": [
-            {"from": "start_trigger", "to": "placeholder"},
-            {"from": "resume_trigger", "to": "placeholder"},
+            {"from": "start_trigger", "to": "query_tpa"},
+            {"from": "query_tpa", "to": "has_blast"},
+            {"from": "has_blast", "to": "impact", "from_port": "true"},
+            {"from": "resume_trigger", "to": "mr_verifier"},
         ],
     }
 
@@ -322,6 +583,11 @@ def ensure_workflow(
     sa_id: str,
     start_path: str,
     resume_path: str,
+    *,
+    aap_org: str,
+    aap_credential_id: str,
+    remediation_app_git_url: str = "",
+    aap_integration_id: str = "",
 ) -> str:
     name = "Lightwell Remediation"
     workflows = list_all(client, "/api/v1/workflows")
@@ -333,7 +599,23 @@ def ensure_workflow(
         ),
         None,
     )
-    defn = remediation_workflow_definition(sa_id, start_path, resume_path)
+    defn = remediation_workflow_definition(
+        sa_id,
+        start_path,
+        resume_path,
+        aap_org=aap_org,
+        aap_credential_id=aap_credential_id,
+        remediation_app_git_url=remediation_app_git_url,
+        aap_integration_id=aap_integration_id,
+    )
+    code, validated = client.request(
+        "POST", "/api/v1/workflows/validate", {"workflow_definition": defn}
+    )
+    result = validated if isinstance(validated, dict) else {}
+    if code != 200 or result.get("is_valid") is False:
+        print(f"ERROR: workflow definition invalid: {code} {validated}", file=sys.stderr)
+        sys.exit(1)
+
     if not existing:
         code, created = client.request(
             "POST",
@@ -376,23 +658,29 @@ def ensure_workflow(
             file=sys.stderr,
         )
         sys.exit(1)
-    if detail.get("published_version_id") and detail.get("is_enabled"):
-        print("AO workflow already published")
-        return wf_id
+
     ver = detail.get("current_version") or 1
+    published_ver = detail.get("published_version_number")
+    # Always publish after PATCH so a new draft version becomes live.
+    # Skip only when this exact version is already the published enabled one
+    # and we did not just create/patch (caller always patches when existing).
     code, published = client.request(
         "POST",
         f"/api/v1/workflows/{wf_id}/versions/{ver}/publish",
         {
             "publish_name": f"tenant-{start_path}",
-            "change_description": "Per-tenant Lightwell remediation",
+            "change_description": "Per-tenant Lightwell remediation (AAP JT canvas)",
         },
     )
-    if code not in (200, 201):
-        print(f"ERROR: publish workflow failed: {code} {published}", file=sys.stderr)
-        sys.exit(1)
-    print(f"AO workflow published (version {ver})")
-    return wf_id
+    if code in (200, 201):
+        print(f"AO workflow published (version {ver})")
+        return wf_id
+    # Idempotent: already published at this version
+    if published_ver == ver and detail.get("is_enabled"):
+        print(f"AO workflow already published (version {ver}): {published}")
+        return wf_id
+    print(f"ERROR: publish workflow failed: {code} {published}", file=sys.stderr)
+    sys.exit(1)
 
 
 def write_k8s_secret(
@@ -466,8 +754,9 @@ def main() -> None:
     admin_user = env("AO_ADMIN_USERNAME", "admin")
     admin_pass = env("AO_ADMIN_PASSWORD", required=True)
     guid = env("GUID", required=True)
-    username = env("USERNAME", required=True)
-    password = env("PASSWORD", required=True)
+    # Prefer AO_USERNAME — shell USERNAME is often the OS login (e.g. macOS).
+    username = env("AO_USERNAME") or env("USERNAME", required=True)
+    password = env("AO_PASSWORD") or env("PASSWORD", required=True)
     project_name = env("AO_PROJECT_NAME", f"lightwell-{guid}")
     start_path = env(
         "AO_START_WEBHOOK_PATH", f"lightwell-remediation-start-{guid}"
@@ -477,6 +766,11 @@ def main() -> None:
     )
     secret_name = env("AO_SECRET_NAME", "automation-orchestrator")
     secret_ns = env("AO_SECRET_NAMESPACE", required=True)
+    aap_org = env("AAP_ORGANIZATION_NAME", f"user-{guid}")
+    aap_admin_user = env("AAP_ADMIN_USERNAME", "admin")
+    aap_admin_pass = env("AAP_ADMIN_PASSWORD", required=True)
+    remediation_app_git_url = env("REMEDIATION_APP_GIT_URL", "")
+    aap_base_url = env("AAP_BASE_URL", "")
     validate = env("VALIDATE_CERTS", "false").lower() in ("1", "true", "yes")
 
     client = AoClient(base, validate_certs=validate)
@@ -499,12 +793,42 @@ def main() -> None:
         "lightwell-eda-bridge",
         f"EDA bridge for tenant {guid}",
     )
-    ensure_workflow(client, project_id, sa_id, start_path, resume_path)
+    aap_cred_id = ensure_aap_credential(
+        client,
+        project_id,
+        username=aap_admin_user,
+        password=aap_admin_pass,
+    )
+    aap_integration_id = ""
+    if aap_base_url:
+        aap_integration_id = ensure_aap_integration(
+            client,
+            aap_base_url=aap_base_url,
+            management_credential_id=aap_cred_id,
+        )
+    else:
+        print(
+            "WARNING: AAP_BASE_URL unset — skipping AAP integration create; "
+            "aap_job_template nodes will fail until an integration exists.",
+            file=sys.stderr,
+        )
+    ensure_workflow(
+        client,
+        project_id,
+        sa_id,
+        start_path,
+        resume_path,
+        aap_org=aap_org,
+        aap_credential_id=aap_cred_id,
+        remediation_app_git_url=remediation_app_git_url,
+        aap_integration_id=aap_integration_id,
+    )
     write_k8s_secret(secret_ns, secret_name, client_id, client_secret, project_name)
 
     print(
         f"AO tenant ready: project={project_name} user={username} "
-        f"start_path={start_path} resume_path={resume_path}"
+        f"start_path={start_path} resume_path={resume_path} "
+        f"aap_org={aap_org}"
     )
 
 

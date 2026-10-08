@@ -28,7 +28,7 @@ spec:
             existingSecret: redhat-packages-credentials
         sdlc:
           enabled: true
-          scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git
+          scmUrl: https://github.com/rhpds/lw-sdlc-opencode.git
           # orchestrator.enabled defaults true; AO_BASE_URL = https://ao.<deployer.domain>
   destination:
     server: https://kubernetes.default.svc
