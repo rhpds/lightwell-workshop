@@ -54,19 +54,25 @@ nexus:
 sdlc:
   enabled: true
   namespace: "" # default sdlc-{guid}; set sdlc-control-plane only for legacy single-tenant labs
-  scmUrl: https://github.com/sshaaf/lw-sdlc-opencode.git # must contain rulebooks/ for EDA import
+  # Source for BOTH the EDA project (rulebooks/) and the Controller project
+  # (playbooks/). AO rulebook + start/resume orchestrator playbooks live here.
+  scmUrl: https://github.com/rhpds/lw-sdlc-opencode.git
   projectName: "" # default SDLC {guid}
   activationName: "" # default sdlc-remediation-{guid}
   decisionEnvName: "SDLC Decision Environment"
   decisionEnvImage: quay.io/ansible/ansible-rulebook:main
   # AO path (default): sdlc-remediation.yml — EDA bridges to Automation Orchestrator.
-  # Pre-AO chain: set orchestrator.enabled=false (uses sdlc-remediation-legacy.yml) or override rulebookName.
+  # Pre-AO chain: set orchestrator.enabled=false (uses sdlc-remediation-legacy.yml)
+  # or override rulebookName.
   rulebookName: "" # default from orchestrator.enabled
   edaWebhookUrl: "" # default http://{activation}.{aap.ns}.svc:5000/
   edaWebhookRouteUrl: "" # default https://{activation}-{aap.ns}.{ingress}/
   gitlabWebhookTargetUrl: "" # default same as edaWebhookRouteUrl
   exposeUi: true # Route to the OpenCode embedded web UI (agent transcripts); basic-auth protected
-  opencodeImage: quay.io/sshaaf/sdlc-opencode:sha-6071dd6
+  # Must carry agent prompts that read SDLC_SANDBOX_NAMESPACE / EPHEMERAL_NS_PREFIX
+  # from env; older images hardcode the shared sdlc-sandboxes namespace.
+  # Built from rhpds/lw-sdlc-opencode @ 5e19550 (CI was failing; hand-pushed tag).
+  opencodeImage: quay.io/bluesman/sdlc-opencode:sha-5e19550
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.
   # Must be "allow" for the EDA-driven flow: the agent runs unattended, and

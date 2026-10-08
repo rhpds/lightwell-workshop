@@ -90,6 +90,38 @@
 {{- .Values.sdlc.opencodeServerPassword | default .Values.password -}}
 {{- end -}}
 
+{{- /*
+  Build sandbox for the MR verifier. Per-tenant: the agent writes this
+  tenant's GitLab PAT into it as Secret gitlab-pat, and keys verify-Job
+  idempotency on mr-iid -- which restarts at 1 per project. A cluster-wide
+  namespace therefore leaks credentials between tenants and lets one
+  tenant's lookup find (and delete) another's Job.
+*/ -}}
+{{- define "bootstrap-tenant.sandboxNamespace" -}}
+{{- printf "sdlc-sandboxes-%s" .Values.guid -}}
+{{- end -}}
+
+{{- /*
+  Prefix for the ephemeral per-MR test namespaces. Same collision reason:
+  two tenants both verifying !1 would otherwise both want pr-test-mr-1.
+*/ -}}
+{{- define "bootstrap-tenant.ephemeralNsPrefix" -}}
+{{- printf "pr-test-mr-%s" .Values.guid -}}
+{{- end -}}
+
+{{/*
+Rulebook for the EDA activation.
+
+sdlc-remediation.yml makes EDA a sensor and hands the flow to the Automation
+Orchestrator; its first job template POSTs to the AO webhook and asserts on
+ao_base_url/ao_client_id/ao_client_secret/ao_webhook_path. With no AO reachable
+that assert fails on the first Nexus event, so the tenant looks healthy and
+remediation never runs. Default to the legacy rulebook unless AO is configured.
+*/}}
+{{- define "bootstrap-tenant.rulebookName" -}}
+{{- include "bootstrap-tenant.edaRulebookName" . -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.snowNamespace" -}}
 {{- printf "snow-%s" .Values.guid -}}
 {{- end -}}

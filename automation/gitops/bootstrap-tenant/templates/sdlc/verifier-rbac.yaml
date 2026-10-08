@@ -10,7 +10,7 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: sdlc-sandboxes
+  name: {{ include "bootstrap-tenant.sandboxNamespace" . }}
   labels:
     lightwell.guid: {{ .Values.guid | quote }}
     app.kubernetes.io/part-of: lightwell-bootstrap-tenant
@@ -49,7 +49,8 @@ subjects:
     name: lightwell-tenant-jobs
     namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
 ---
-# mr-verifier runs oc from the OpenCode pod: Jobs in sdlc-sandboxes, namespaces pr-test-mr-*.
+# mr-verifier runs oc from the OpenCode pod: Jobs in the tenant sandbox
+# namespace, plus ephemeral namespaces under the tenant pr-test-mr prefix.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
