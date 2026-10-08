@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-realm-displayname
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keycloak-realm-displayname
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["keycloak-initial-admin"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keycloak-realm-displayname
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-realm-displayname
+    namespace: openshift-gitops
+roleRef:
+  kind: Role
+  name: keycloak-realm-displayname
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-realm-displayname
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      serviceAccountName: keycloak-realm-displayname
+      restartPolicy: OnFailure
+      containers:
+        - name: patch-realm
+          image: {{ .Values.jobAnsibleImage }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              REALM="sso"
+              DISPLAY_NAME="Lightwell Patch to Production Workshop"
+              SSO_URL="https://keycloak.keycloak.svc:8443"
+
+              ADMIN_USER=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.username}' | base64 -d)
+              ADMIN_PASS=$(oc get secret keycloak-initial-admin -n keycloak -o jsonpath='{.data.password}' | base64 -d)
+
+              for i in $(seq 1 30); do
+                TOKEN=$(curl -sk "${SSO_URL}/realms/master/protocol/openid-connect/token" \
+                  -d "grant_type=password&client_id=admin-cli&username=${ADMIN_USER}&password=${ADMIN_PASS}" | \
+                  python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true)
+                if [ -n "${TOKEN}" ]; then break; fi
+                echo "Waiting for Keycloak (${i}/30)..."
+                sleep 10
+              done
+              if [ -z "${TOKEN}" ]; then
+                echo "ERROR: could not get Keycloak admin token"
+                exit 1
+              fi
+
+              curl -sk -X PUT "${SSO_URL}/admin/realms/${REALM}" \
+                -H "Authorization: Bearer ${TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "{\"displayName\": \"${DISPLAY_NAME}\"}"
+
+              echo "Realm display name set to: ${DISPLAY_NAME}"
