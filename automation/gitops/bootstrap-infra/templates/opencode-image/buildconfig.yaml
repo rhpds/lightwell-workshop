@@ -15,8 +15,6 @@ spec:
   successfulBuildsHistoryLimit: 3
   failedBuildsHistoryLimit: 3
   runPolicy: Serial
-  # Job starts the build after Quay org/repo exist; avoid racing ConfigChange.
-  triggers: []
   source:
     type: Git
     git:
