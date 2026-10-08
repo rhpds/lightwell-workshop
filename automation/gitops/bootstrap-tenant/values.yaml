@@ -15,14 +15,20 @@ aap:
 
 gitlab:
   namespace: gitlab
-  group: lightwell
-  demoProjectPath: "" # default lightwell/lw-demo-help-app-{guid}
+  group: "" # default acme-{guid} — per-tenant GitLab group for isolation
+  demoProjectPath: "" # default {group}/wire-transfer-svc — AI remediation target
   pat: "" # unused by OpenCode; sync-gitlab-pat copies the GitLab root PAT into Secret gitlab-root-pat
-  helpAppSeed:
-    enabled: true # clone sourceRepo into the tenant GitLab project (force-push defaultBranch)
-    sourceRepo: https://github.com/sshaaf/lw-demo-help-app.git
-    sourceRef: main # branch or tag to clone
-    defaultBranch: main # branch name on the tenant GitLab project
+  defaultBranch: main
+  appSeeds:
+    - name: wire-transfer-svc
+      sourceRepo: https://github.com/redhat-ads-tech/wire-transfer-svc.git
+      sourceRef: main
+    - name: benefits-mgmt-app
+      sourceRepo: https://github.com/redhat-ads-tech/benefits-mgmt-app.git
+      sourceRef: main
+    - name: report-generator-app
+      sourceRepo: https://github.com/redhat-ads-tech/report-generator-app.git
+      sourceRef: main
 
 keycloak:
   url: "" # default https://sso.{deployer.domain}

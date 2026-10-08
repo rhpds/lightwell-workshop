@@ -68,7 +68,7 @@ spec:
             - name: LW_HELP_APP
               value: {{ include "bootstrap-tenant.demoProjectPath" . | quote }}
             - name: LW_HELP_APP_BRANCH
-              value: {{ .Values.gitlab.helpAppSeed.defaultBranch | quote }}
+              value: {{ .Values.gitlab.defaultBranch | quote }}
             - name: LW_TPA_REALM
               value: {{ .Values.keycloak.tpaRealm | quote }}
             - name: LW_TPA_CLIENT

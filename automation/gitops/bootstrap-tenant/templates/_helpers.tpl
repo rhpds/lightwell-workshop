@@ -22,8 +22,12 @@
 {{- .Values.tpa.url | default (printf "https://server-%s.%s" (.Values.tpa.namespace | default "lightwell-tpa") .Values.deployer.domain) -}}
 {{- end -}}
 
+{{- define "bootstrap-tenant.gitlabGroup" -}}
+{{- .Values.gitlab.group | default (printf "acme-%s" .Values.guid) -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.demoProjectPath" -}}
-{{- .Values.gitlab.demoProjectPath | default (printf "%s/lw-demo-help-app-%s" .Values.gitlab.group .Values.guid) -}}
+{{- .Values.gitlab.demoProjectPath | default (printf "%s/wire-transfer-svc" (include "bootstrap-tenant.gitlabGroup" .)) -}}
 {{- end -}}
 
 {{- define "bootstrap-tenant.tpaSbomLabel" -}}
