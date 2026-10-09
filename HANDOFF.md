@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-08 (app-of-apps refactor + Acme apps + Renovate + snow-mock)
+Last updated: 2026-10-09 (AO path verified end-to-end on tenant 8vjv7)
 
 ## Where the pieces live
 
@@ -95,36 +95,53 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 
 ## Next up
 
-1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
+1. **OpenCode `impact-analyzer` hangs unattended** — it carries
+   `bash."*": "ask"` in `opencode.json`, and agent-level permission beats the
+   chart's `sdlc.opencodePermission: allow` (the image's `/app/opencode.json`
+   loads after `OPENCODE_CONFIG_CONTENT`). The AAP job still reports
+   `successful` because it starts the agent asynchronously, so the pipeline
+   looks green and produces no MR. Fix is open as
+   [lw-sdlc-opencode#4](https://github.com/rhpds/lw-sdlc-opencode/pull/4);
+   once merged, rebuild via the infra BuildConfig and bump `gitRef`/`tag` in
+   all three places (item 4). → [ADR-004](ADR.md#adr-004--unattended-opencode-tool-permission)
+2. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
-   paths, `existingSecret` from `ao-bootstrap`). Remaining gaps: ensure
-   `APP_INTEGRATION_URL_ALLOWED_HOSTS` includes the AAP route host so AO can
-   create the AAP integration, and keep SCM on `rhpds/lw-sdlc-opencode`.
-   → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
-2. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
+   paths, `existingSecret` from `ao-bootstrap`). Keep SCM on
+   `rhpds/lw-sdlc-opencode`. The `APP_INTEGRATION_URL_ALLOWED_HOSTS` gap is
+   **closed** — verified on `8vjv7`, the AAP route host is present on the
+   backend, background-worker and worker, and the AAP integration created
+   cleanly. → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
+3. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
    now **shared BuildConfig → ImageStream (OpenShift integrated registry)** via
    `bootstrap-infra` `opencodeImage` (ADR-013). Tenants leave
    `sdlc.opencodeImage` empty. External quay.io pins remain an override only.
    → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-openshift-integrated-registry)
-3. **First infra sync after enablement** must finish Job
+4. **First infra sync after enablement** must finish Job
    `opencode-image-publish` (ImageStream build) before OpenCode pods can pull.
    Bump `opencodeImage.gitRef`/`tag` and tenant `sdlc.opencodeImageTag` together.
-4. **`nexus.lightwellNetwork` is still empty in AgnosticV.** Planned fix is a
-   fake Lightwell — a Maven mirror holding some `.rhlw-*` packages for Nexus to
-   proxy — which removes the need for real credentials. The Renovate integration
-   (ADR-012) needs these artifacts seeded into the tenant Nexus
-   `lightwell-java-remediated` repo; a provisioning Job to seed them is not yet
-   built.
-5. **Renovate module content not yet written.** The Showroom AsciiDoc for the
+5. **`nexus.lightwellNetwork` is still empty in AgnosticV**, so a fresh tenant
+   comes up green with no Lightwell proxy repos and therefore **no Nexus
+   webhooks** — the whole chain has no entry point until credentials are
+   injected (`scripts/inject-env-secrets.sh`, then `nexus-reconcile` re-runs
+   and creates both repos and both webhooks). Planned fix is a fake Lightwell
+   Maven mirror. Real upstream
+   (`packages.redhat.com/lightwell/java/remediated/`) is browsable with the
+   credentials and carries `jackson/` and `woodstox/` trees, e.g.
+   `jackson-databind` has 12 `.rhlw-*` rebuilds — useful for seeding.
+   **Naming:** the chart creates `redhat-packages-{validated,remediated}-{guid}`.
+   The name `lightwell-java-remediated` used in ADR-012 appears nowhere in
+   `automation/` or `content/` — settle which is canonical before writing the
+   seeding Job or the Renovate `hostRules`.
+6. **Renovate module content not yet written.** The Showroom AsciiDoc for the
    Renovate module needs the student-facing `oc apply` for the RenovateJob CR
    (templated with Antora `{guid}` / `{openshift_cluster_ingress_domain}`
    attributes). The `discoveryFilters` must scope to `acme-{guid}/*` or a
    specific app (e.g. `acme-{guid}/report-generator-app`). Each app repo
    already has a `renovate.json` with the Lightwell preset + placeholder
    `hostRules`; the RenovateJob inline config overrides with real Nexus URLs.
-5. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
+7. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
    before the org-scoping fix). Re-run the bootstrap job or re-order them.
-6. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
+8. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
    Artifactory / Deep Agent / RHACM.** The Showroom content under `content/`
    was updated to Nexus / Lightwell OpenCode Agents / TSSC + DevSecOps; the
    outlines were not.

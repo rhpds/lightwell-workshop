@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-08
+Last synced with HANDOFF: 2026-10-09
 
 ---
 
@@ -67,8 +67,8 @@ Copy and fill for each new decision:
 | **Date** | 2026-10-07 |
 | **Title** | Set OpenCode permission to allow for EDA-driven agents |
 | **Context** | OpenCode defaults bash (and other tools) to `ask`. In a headless pod driven by EDA/AAP there is no operator to answer prompts, so the agent hangs forever. |
-| **Decision** | Chart default `sdlc.opencodePermission: allow` (wired into the OpenCode deployment). |
-| **Consequences** | Agents can run the remediation pipeline unattended. Broader tool allowlist increases blast radius inside the sandbox; rely on sandbox RBAC and skill permissions for containment. |
+| **Decision** | Chart default `sdlc.opencodePermission: allow` (wired into the OpenCode deployment). **Agent-level permission in the image's `/app/opencode.json` overrides this** — that file is loaded *after* `OPENCODE_CONFIG_CONTENT`, so the chart cannot reach it. Every agent that runs headless must therefore also carry `bash."*": "allow"` in `rhpds/lw-sdlc-opencode`'s `opencode.json`. |
+| **Consequences** | Agents can run the remediation pipeline unattended. Broader tool allowlist increases blast radius inside the sandbox; rely on sandbox RBAC and skill permissions for containment. The chart-level knob alone is **not** sufficient — verified on tenant `8vjv7` (2026-10-09), where `impact-analyzer` still had `bash."*": "ask"` and parked on a prompt nobody could answer while AAP reported every job successful. Fixed by [lw-sdlc-opencode#4](https://github.com/rhpds/lw-sdlc-opencode/pull/4). |
 
 ## ADR-005 — Per-tenant sandbox namespaces
 
