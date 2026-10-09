@@ -161,6 +161,26 @@ Copy and fill for each new decision:
 | **Decision** | `bootstrap-infra` owns a shared BuildConfig + ImageStream in `lightwell-images` (source `rhpds/lw-sdlc-opencode` @ pinned `gitRef`). Sync Job `opencode-image-publish` runs `oc start-build` into that ImageStream. Tenants leave `sdlc.opencodeImage` empty and resolve `image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:<tag>`. Lab-wide `system:image-puller` on `lightwell-images` lets every tenant SA pull. |
 | **Consequences** | Infra sync waits on first build (egress to GitHub/ghcr/mirror.openshift.com). No dependency on Quay for OpenCode. Bump `opencodeImage.gitRef` + `tag` and tenant `sdlc.opencodeImageTag` together. Override `sdlc.opencodeImage` still allowed for offline/dev. |
 
+## ADR-014 — App-of-apps infra pattern
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-08 |
+| **Title** | Refactor bootstrap-infra into an app-of-apps pattern |
+| **Context** | The monolithic infra chart (56 templates, single ArgoCD Application) was hard to debug — a failure in any component blocked the entire sync. Components like Quay and AO have slow hook Jobs that serialized unnecessarily. |
+| **Decision** | `bootstrap-infra` becomes an app-of-apps chart that renders 8 child ArgoCD Application CRs, each pointing at a standalone Helm subchart under `automation/gitops/cluster/`. Sync-wave ordering on Application CRs: cnpg (-3), keycloak (-2), rhads (-1), gitlab+aap (0), quay (1), opencode-image (2), ao (3). Renovate stays as an existing child Application (OCI chart). Values flow from parent to children via `helm.valuesObject`. |
+| **Consequences** | 10 ArgoCD apps total (parent + 8 children + renovate-operator). Each component independently syncable and debuggable. GitLab, AAP, and Quay sync in parallel, reducing total provision time. No AgnosticV changes — `repo_path` stays `automation/gitops/bootstrap-infra`. Sync-waves on Application CRs control creation order but do not guarantee child health before the next wave starts — components with cross-dependencies rely on internal retry logic. |
+
+## ADR-015 — Per-tenant GitLab groups with Acme apps
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-08 |
+| **Title** | Isolate tenants in per-tenant GitLab groups with three sample apps |
+| **Context** | The shared `lightwell` group exposed all tenant projects to each other. The single `lw-demo-help-app` from a personal GitHub repo (`sshaaf/lw-demo-help-app`) didn't reflect a realistic multi-app portfolio. The workshop narrative needs high-risk and low-risk apps to demonstrate remediation priority. |
+| **Decision** | Replace the shared `lightwell` group with per-tenant `acme-{guid}` groups (private, Maintainer access for `user-{guid}`). Three Acme Inc. sample apps seeded from `redhat-ads-tech/` GitHub org: `wire-transfer-svc` (high risk, AI remediation target), `benefits-mgmt-app` (low risk), `report-generator-app` (low risk, Renovate target). `gitlab.appSeeds` is a configurable list in `values.yaml`. `REMEDIATION_APP_GITLAB_PATH` points to `wire-transfer-svc`. A dedicated `renovate-bot` GitLab user with per-tenant PAT is created for Renovate MRs. |
+| **Consequences** | Tenants only see their own apps. `discoveryFilters` for Renovate scopes naturally to `acme-{guid}/*`. EDA webhook set only on `wire-transfer-svc`. Existing AO/EDA/dashboard wiring unchanged — reads from `demoProjectPath` helper. Apps have intentional vulnerabilities and each repo contains a `renovate.json` with the Lightwell preset + placeholder `hostRules`. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -180,5 +200,7 @@ Copy and fill for each new decision:
 | Fail-open gotcha | ADR-011 |
 | Renovate for deterministic remediation | ADR-012 |
 | Shared OpenCode build → integrated registry | ADR-013 |
+| App-of-apps infra pattern | ADR-014 |
+| Per-tenant GitLab groups with Acme apps | ADR-015 |
 | Fake Lightwell / AgnosticV credentials | _(no ADR yet — planned, not decided)_ |
 | Spec outlines still say Artifactory… | _(content debt, not an ADR)_ |

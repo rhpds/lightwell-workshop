@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-08 (Renovate + snow-mock + ArgoCD fixes)
+Last updated: 2026-10-08 (app-of-apps refactor + Acme apps + Renovate + snow-mock)
 
 ## Where the pieces live
 
@@ -17,6 +17,7 @@ Last updated: 2026-10-08 (Renovate + snow-mock + ArgoCD fixes)
 | Helm charts, Showroom content, dashboard | this repo (`rhpds/lightwell-workshop`), pushes straight to `main` |
 | Catalog item `lb1815-lightwell-tenant` | `rhpds/agnosticv`, `rh1-2027/` — via PR |
 | OpenCode agent prompts, EDA rulebooks, AAP playbooks | `rhpds/lw-sdlc-opencode` — via PR |
+| Acme sample apps (3) | `redhat-ads-tech/{wire-transfer-svc,benefits-mgmt-app,report-generator-app}` |
 
 ## Recently done
 
@@ -70,6 +71,27 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 - **Nexus startupProbe** added to the tenant StatefulSet (10s interval,
   60 attempts = 10 min). Nexus 3.76 takes 3-5+ minutes to start and the
   liveness probe was killing it before startup completed.
+- **App-of-apps refactor** of `bootstrap-infra`. The monolithic chart (56
+  templates, single ArgoCD app) is now an app-of-apps that creates 8 child
+  Applications, each pointing at a standalone subchart under
+  `automation/gitops/cluster/`. Components sync in parallel (GitLab + AAP
+  at wave 0, Quay at wave 1, AO at wave 3). No AgnosticV changes — `repo_path`
+  stays `automation/gitops/bootstrap-infra`.
+  → [ADR-014](ADR.md#adr-014--app-of-apps-infra-pattern)
+- **Per-tenant GitLab groups** with three Acme sample apps. Replaced the shared
+  `lightwell` group and single `lw-demo-help-app` with per-tenant `acme-{guid}`
+  groups containing `wire-transfer-svc` (high risk, AI target),
+  `benefits-mgmt-app`, and `report-generator-app`. `gitlab.appSeeds` is a
+  configurable list. `REMEDIATION_APP_GITLAB_PATH` points to `wire-transfer-svc`.
+  → [ADR-015](ADR.md#adr-015--per-tenant-gitlab-groups-with-acme-apps)
+- **Renovate-bot GitLab user** created per tenant with a scoped PAT. MRs from
+  Renovate show as `Renovate Bot` instead of `root`. PAT stored as
+  `renovate-token` secret in `sdlc-{guid}`.
+  → [ADR-012](ADR.md#adr-012--renovate-for-deterministic-remediation)
+- **Keycloak login label** set to "Lightwell Patch to Production Workshop" via
+  a sync hook Job that patches the realm `displayName`.
+- **BuildConfig `triggers: []` drift** fixed — OpenShift strips empty trigger
+  arrays, causing perpetual OutOfSync.
 
 ## Next up
 
@@ -96,9 +118,10 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 5. **Renovate module content not yet written.** The Showroom AsciiDoc for the
    Renovate module needs the student-facing `oc apply` for the RenovateJob CR
    (templated with Antora `{guid}` / `{openshift_cluster_ingress_domain}`
-   attributes) and the `renovate.json` that extends the Lightwell preset.
-   The `discoveryFilters` must scope to `lightwell/lw-demo-help-app-{guid}`
-   (not `lightwell/*`) so tenants don't scan each other's repos.
+   attributes). The `discoveryFilters` must scope to `acme-{guid}/*` or a
+   specific app (e.g. `acme-{guid}/report-generator-app`). Each app repo
+   already has a `renovate.json` with the Lightwell preset + placeholder
+   `hostRules`; the RenovateJob inline config overrides with real Nexus URLs.
 5. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
    before the org-scoping fix). Re-run the bootstrap job or re-order them.
 6. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
