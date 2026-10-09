@@ -33,7 +33,7 @@ check "TPA CR" "oc get trustedprofileanalyzer trustedprofileanalyzer-sample -n l
 check "QuayRegistry CR" "oc get quayregistry lightwell -n lightwell-quay"
 check "OpenCode ImageStream" "oc get imagestream sdlc-opencode -n lightwell-images"
 check "OpenCode BuildConfig" "oc get buildconfig sdlc-opencode -n lightwell-images"
-check "OpenCode ImageStreamTag" "oc get imagestreamtag sdlc-opencode:sha-5e19550 -n lightwell-images"
+check "OpenCode ImageStreamTag" "oc get imagestreamtag sdlc-opencode:sha-aad125a -n lightwell-images"
 
 echo ""
 echo "=== Routes ==="

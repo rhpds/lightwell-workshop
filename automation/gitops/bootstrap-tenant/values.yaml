@@ -83,7 +83,7 @@ sdlc:
   opencodeImage: ""
   opencodeImageNamespace: lightwell-images
   opencodeImageName: sdlc-opencode
-  opencodeImageTag: sha-5e19550
+  opencodeImageTag: sha-aad125a
   opencodeImagePullPolicy: IfNotPresent
   opencodeBaseUrl: "" # default http://opencode.{sdlc.ns}.svc:4096
   # OpenCode tool permission: ask | allow | deny, or a per-tool map.
