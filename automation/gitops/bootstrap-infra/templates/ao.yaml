@@ -1,0 +1,35 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" "ao" "namespace" .Values.argocd.namespace "syncWave" "3") }}
+spec:
+  destination:
+    namespace: {{ .Values.orchestrator.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: automation/gitops/cluster/ao
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        deployer:
+          domain: {{ .Values.deployer.domain }}
+          storageClass: {{ .Values.deployer.storageClass }}
+        admin:
+          password: {{ .Values.admin.password | quote }}
+        orchestrator:
+          enabled: {{ .Values.orchestrator.enabled }}
+          namespace: {{ .Values.orchestrator.namespace }}
+          channel: {{ .Values.orchestrator.channel }}
+          postgres:
+            instances: {{ .Values.orchestrator.postgres.instances }}
+            image: {{ .Values.orchestrator.postgres.image }}
+            storageSize: {{ .Values.orchestrator.postgres.storageSize }}
+            sslMode: {{ .Values.orchestrator.postgres.sslMode }}
+        aap:
+          namespace: {{ .Values.aap.namespace }}
+        gitlab:
+          namespace: {{ .Values.gitlab.namespace }}
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

@@ -1,0 +1,7 @@
+orchestrator:
+  enabled: true
+
+cnpg:
+  namespace: cloudnative-pg
+  channel: stable-v1
+  source: certified-operators

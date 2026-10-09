@@ -1,5 +1,13 @@
-# Cluster bootstrap for Lightwell SDLC demo (Phase 1).
+# App-of-apps for the Lightwell cluster platform.
 # AgnosticV injects deployer.domain, admin.password, and storageClass at deploy time.
+# Values here are passed down to child Applications via helm.valuesObject.
+
+gitops:
+  repoURL: https://github.com/rhpds/lightwell-workshop.git
+  targetRevision: main
+
+argocd:
+  namespace: openshift-gitops
 
 deployer:
   domain: apps.example.com
@@ -21,8 +29,6 @@ aap:
   channel: stable-2.7
   manifestUrl: https://d3s3zqyaz8cp2d.cloudfront.net/aap/manifest.zip
 
-# Automation Orchestrator (student flow controller). Tenant chart discovers
-# https://ao.<deployer.domain> — no per-tenant AgnosticV AO knobs required.
 orchestrator:
   enabled: true
   namespace: automation-orchestrator
@@ -33,7 +39,6 @@ orchestrator:
     storageSize: 20Gi
     sslMode: require
 
-# Lab Postgres for AO (CloudNativePG — convenience, not RH-supported for AO).
 cnpg:
   namespace: cloudnative-pg
   channel: stable-v1
@@ -56,10 +61,6 @@ quay:
   namespace: lightwell-quay
   channel: stable-3.18
 
-# Shared OpenCode control-plane image: BuildConfig → ImageStream in the
-# OpenShift integrated registry. Tenants pull
-# image-registry.openshift-image-registry.svc:5000/<namespace>/<name>:<tag>
-# (lab-wide system:image-puller on this namespace).
 opencodeImage:
   enabled: true
   namespace: lightwell-images

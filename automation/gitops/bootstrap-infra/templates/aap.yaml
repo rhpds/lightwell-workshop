@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" "aap" "namespace" .Values.argocd.namespace "syncWave" "0") }}
+spec:
+  destination:
+    namespace: {{ .Values.aap.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: automation/gitops/cluster/aap
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        admin:
+          password: {{ .Values.admin.password | quote }}
+        aap:
+          namespace: {{ .Values.aap.namespace }}
+          channel: {{ .Values.aap.channel }}
+          manifestUrl: {{ .Values.aap.manifestUrl }}
+        jobAnsibleImage: {{ .Values.jobAnsibleImage }}
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}

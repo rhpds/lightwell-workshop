@@ -1,0 +1,21 @@
+deployer:
+  domain: apps.example.com
+  storageClass: ocs-external-storagecluster-ceph-rbd-immediate
+
+admin:
+  password: changeme
+
+tpa:
+  namespace: lightwell-tpa
+  channel: stable-v1.1
+  keycloakRealm: trusted-profile-analyzer
+  uiClientId: trustify-ui
+  storageSize: 20Gi
+  dbStorageSize: 5Gi
+  postgresImage: docker.io/library/postgres:16-alpine
+
+rhtas:
+  namespace: lightwell-tas
+  channel: stable-v1.4
+
+jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05

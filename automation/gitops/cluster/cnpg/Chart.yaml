@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cnpg
+description: CloudNativePG operator for Automation Orchestrator database
+type: application
+version: 0.1.0

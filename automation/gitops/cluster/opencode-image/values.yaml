@@ -1,0 +1,11 @@
+opencodeImage:
+  enabled: true
+  namespace: lightwell-images
+  name: sdlc-opencode
+  gitUrl: https://github.com/rhpds/lw-sdlc-opencode.git
+  gitRef: "5e19550"
+  tag: sha-5e19550
+  dockerfilePath: container/Dockerfile
+  contextDir: ""
+
+jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05

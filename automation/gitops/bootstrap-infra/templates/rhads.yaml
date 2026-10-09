@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" "rhads" "namespace" .Values.argocd.namespace "syncWave" "-1") }}
+spec:
+  destination:
+    namespace: {{ .Values.tpa.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: automation/gitops/cluster/rhads
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        deployer:
+          domain: {{ .Values.deployer.domain }}
+          storageClass: {{ .Values.deployer.storageClass }}
+        admin:
+          password: {{ .Values.admin.password | quote }}
+        tpa:
+          namespace: {{ .Values.tpa.namespace }}
+          channel: {{ .Values.tpa.channel }}
+          keycloakRealm: {{ .Values.tpa.keycloakRealm }}
+          uiClientId: {{ .Values.tpa.uiClientId }}
+          storageSize: {{ .Values.tpa.storageSize }}
+          dbStorageSize: {{ .Values.tpa.dbStorageSize }}
+          postgresImage: {{ .Values.tpa.postgresImage }}
+        rhtas:
+          namespace: {{ .Values.rhtas.namespace }}
+          channel: {{ .Values.rhtas.channel }}
+        jobAnsibleImage: {{ .Values.jobAnsibleImage }}
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}

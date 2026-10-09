@@ -1,0 +1,5 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak realm configuration for the Lightwell workshop
+type: application
+version: 0.1.0

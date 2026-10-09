@@ -1,0 +1,24 @@
+deployer:
+  domain: apps.example.com
+  storageClass: ocs-external-storagecluster-ceph-rbd-immediate
+
+admin:
+  password: changeme
+
+orchestrator:
+  enabled: true
+  namespace: automation-orchestrator
+  channel: stable
+  postgres:
+    instances: 1
+    image: ghcr.io/cloudnative-pg/postgresql:15
+    storageSize: 20Gi
+    sslMode: require
+
+aap:
+  namespace: aap
+
+gitlab:
+  namespace: gitlab
+
+jobImage: ""

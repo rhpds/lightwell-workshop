@@ -1,0 +1,23 @@
+{{- if .Values.orchestrator.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" "cnpg" "namespace" .Values.argocd.namespace "syncWave" "-3") }}
+spec:
+  destination:
+    namespace: {{ .Values.cnpg.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: automation/gitops/cluster/cnpg
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        orchestrator:
+          enabled: {{ .Values.orchestrator.enabled }}
+        cnpg:
+          namespace: {{ .Values.cnpg.namespace }}
+          channel: {{ .Values.cnpg.channel }}
+          source: {{ .Values.cnpg.source }}
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}
+{{- end }}

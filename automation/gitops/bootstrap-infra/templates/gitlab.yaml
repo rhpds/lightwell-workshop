@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+{{ include "app-of-apps.metadata" (dict "name" "gitlab" "namespace" .Values.argocd.namespace "syncWave" "0") }}
+spec:
+  destination:
+    namespace: {{ .Values.gitlab.namespace }}
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: automation/gitops/cluster/gitlab
+    repoURL: {{ .Values.gitops.repoURL }}
+    targetRevision: {{ .Values.gitops.targetRevision }}
+    helm:
+      valuesObject:
+        deployer:
+          domain: {{ .Values.deployer.domain }}
+          storageClass: {{ .Values.deployer.storageClass }}
+        admin:
+          password: {{ .Values.admin.password | quote }}
+        gitlab:
+          namespace: {{ .Values.gitlab.namespace }}
+          image: {{ .Values.gitlab.image }}
+          postgresqlImage: {{ .Values.gitlab.postgresqlImage }}
+          redisImage: {{ .Values.gitlab.redisImage }}
+          rootPassword: {{ .Values.gitlab.rootPassword | quote }}
+          repos: {{ .Values.gitlab.repos | toJson }}
+        jobAnsibleImage: {{ .Values.jobAnsibleImage }}
+{{ include "app-of-apps.syncPolicy" . | indent 2 }}

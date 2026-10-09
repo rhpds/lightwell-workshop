@@ -1,8 +1,9 @@
 apiVersion: v2
 name: bootstrap-infra
 description: >-
-  Shared cluster platform for the Lightwell lab — GitLab, AAP/EDA, Automation
-  Orchestrator (+ CNPG), RHTPA/RHTAS, Quay. Per-tenant Nexus lives in bootstrap-tenant.
+  App-of-apps for the Lightwell cluster platform. Creates child ArgoCD
+  Applications for each component: CNPG, Keycloak, GitLab, AAP, RHADS
+  (TPA+RHTAS), Quay, AO, OpenCode image, and Renovate operator.
 type: application
-version: 0.5.1
+version: 1.0.0
 appVersion: "1.0.0"
