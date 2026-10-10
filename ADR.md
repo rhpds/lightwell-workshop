@@ -159,7 +159,7 @@ Copy and fill for each new decision:
 | **Title** | Build OpenCode once on the platform; tenants pull from the integrated registry |
 | **Context** | External quay.io pins (ADR-010) and broken GH Actions make labs brittle. In-cluster Quay is often unavailable or slow on lab clusters. Tenants should not each rebuild the same control-plane image. |
 | **Decision** | `bootstrap-infra` owns a shared BuildConfig + ImageStream in `lightwell-images` (source `rhpds/lw-sdlc-opencode` @ pinned `gitRef`). Sync Job `opencode-image-publish` runs `oc start-build` into that ImageStream. Tenants leave `sdlc.opencodeImage` empty and resolve `image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:<tag>`. Lab-wide `system:image-puller` on `lightwell-images` lets every tenant SA pull. |
-| **Consequences** | Infra sync waits on first build (egress to GitHub/ghcr/mirror.openshift.com). No dependency on Quay for OpenCode. Bump `opencodeImage.gitRef` + `tag` and tenant `sdlc.opencodeImageTag` together. Override `sdlc.opencodeImage` still allowed for offline/dev. |
+| **Consequences** | Infra sync waits on first build (egress to GitHub/ghcr/mirror.openshift.com). No dependency on Quay for OpenCode. Override `sdlc.opencodeImage` still allowed for offline/dev. **A version bump touches six files, not three** — missing the helper default silently pins tenants to the old image: `bootstrap-infra/values.yaml`, `cluster/opencode-image/values.yaml` (`gitRef` + `tag`), `bootstrap-tenant/values.yaml` (`sdlc.opencodeImageTag`), `bootstrap-tenant/templates/_helpers.tpl` (fallback default), `bootstrap-infra/scripts/verify-bootstrap-infra.sh`, and `bootstrap-tenant/README.md`. |
 
 ## ADR-014 — App-of-apps infra pattern
 
@@ -180,6 +180,16 @@ Copy and fill for each new decision:
 | **Context** | The shared `lightwell` group exposed all tenant projects to each other. The single `lw-demo-help-app` from a personal GitHub repo (`sshaaf/lw-demo-help-app`) didn't reflect a realistic multi-app portfolio. The workshop narrative needs high-risk and low-risk apps to demonstrate remediation priority. |
 | **Decision** | Replace the shared `lightwell` group with per-tenant `acme-{guid}` groups (private, Maintainer access for `user-{guid}`). Three Acme Inc. sample apps seeded from `redhat-ads-tech/` GitHub org: `wire-transfer-svc` (high risk, AI remediation target), `benefits-mgmt-app` (low risk), `report-generator-app` (low risk, Renovate target). `gitlab.appSeeds` is a configurable list in `values.yaml`. `REMEDIATION_APP_GITLAB_PATH` points to `wire-transfer-svc`. A dedicated `renovate-bot` GitLab user with per-tenant PAT is created for Renovate MRs. |
 | **Consequences** | Tenants only see their own apps. `discoveryFilters` for Renovate scopes naturally to `acme-{guid}/*`. EDA webhook set only on `wire-transfer-svc`. Existing AO/EDA/dashboard wiring unchanged — reads from `demoProjectPath` helper. Apps have intentional vulnerabilities and each repo contains a `renovate.json` with the Lightwell preset + placeholder `hostRules`. |
+
+## ADR-016 — Trigger artifacts must be declared dependencies of a seeded app
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-09 |
+| **Title** | Only publish Lightwell rebuilds that some Acme app declares directly |
+| **Context** | The chain starts when a `.rhlw-*` artifact is cached in the tenant Nexus proxy. TPA then matches affected repos from the SBOM, and `impact-analyzer` bumps the version in `pom.xml`. SBOM matching is broader than the pom: on tenant `8vjv7`, `jackson-databind` matched `wire-transfer-svc` via `sbom_label_and_dependency_coordinate`, but that pom declares struts / h2 / commons-dbcp and no jackson. The agent ran correctly and died on `ERROR: dependency com.fasterxml.jackson.core:jackson-databind not found in pom.xml`. Re-running with `com.h2database:h2:2.2.219.rhlw-00001`, which `wire-transfer-svc` does declare, produced MR !1 immediately. |
+| **Decision** | The demo trigger set is restricted to artifacts that at least one seeded Acme app declares **directly** in its `pom.xml`. The fake-Lightwell mirror seeds exactly those coordinates, and Showroom instructs students to trigger with one of them. |
+| **Consequences** | Pairs the mirror contents to the app poms — changing either side requires changing the other. Today only `com.h2database:h2` qualifies (upstream has no `org/apache/struts/`), so `benefits-mgmt-app` and `report-generator-app` need either matching rebuilds or pom changes before they can be remediation targets. Handling transitive-only findings would need `dependencyManagement` support in `gitlab_api.py bump-maven-mr`; out of scope for now. |
 
 ---
 
@@ -202,5 +212,6 @@ Copy and fill for each new decision:
 | Shared OpenCode build → integrated registry | ADR-013 |
 | App-of-apps infra pattern | ADR-014 |
 | Per-tenant GitLab groups with Acme apps | ADR-015 |
-| Fake Lightwell / AgnosticV credentials | _(no ADR yet — planned, not decided)_ |
+| Trigger artifacts must match app poms | ADR-016 |
+| Fake Lightwell / AgnosticV credentials | ADR-016 (contents); install still planned |
 | Spec outlines still say Artifactory… | _(content debt, not an ADR)_ |

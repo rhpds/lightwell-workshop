@@ -162,7 +162,12 @@ if do_llm:
 app["spec"]["source"]["helm"]["values"] = vals
 with open(outp, "w") as f:
     json.dump(app, f)
-print(vals)
+# Never print vals: the Application's helm values carry the tenant password and
+# the LiteLLM virtual key, and this script's output routinely ends up pasted
+# into tickets and chat. Show only the keys we rewrote.
+print("  helm values updated:", ", ".join(
+    k for k, on in (("nexus.lightwellNetwork.existingSecret", do_nexus),
+                    ("sdlc.llm.existingSecret", do_llm)) if on))
 PY
   oc apply -f "${TMP}.out"
   rm -f "${TMP}.in" "${TMP}.out"

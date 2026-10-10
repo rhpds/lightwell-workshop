@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-09 (AO path verified end-to-end on tenant 8vjv7)
+Last updated: 2026-10-09 (AO path re-verified end to end on 8vjv7, image sha-aad125a)
 
 ## Where the pieces live
 
@@ -48,10 +48,20 @@ Last updated: 2026-10-09 (AO path verified end-to-end on tenant 8vjv7)
   → [ADR-007](ADR.md#adr-007--eda-rulebook-selected-by-orchestrator-flag),
   [ADR-009](ADR.md#adr-009--sdlc-scm-at-rhpdslw-sdlc-opencode)
 
+- **`impact-analyzer` no longer hangs.** It carried `bash."*": "ask"`, and
+  agent-level permission beats the chart's `sdlc.opencodePermission: allow`
+  (the image's `/app/opencode.json` loads *after* `OPENCODE_CONFIG_CONTENT`).
+  Fixed in [lw-sdlc-opencode#4](https://github.com/rhpds/lw-sdlc-opencode/pull/4),
+  built as `sha-aad125a`. → [ADR-004](ADR.md#adr-004--unattended-opencode-tool-permission)
+
 A full pipeline run was proven on tenant `49t9b`: Nexus `CREATED` → EDA →
 Query TPA → Impact Analyzer → OpenCode → GitLab MR → MR Verifier.
 On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 (Query TPA → Impact) → MR → Resume → MR Verifier.
+Re-proven end to end on `8vjv7` (2026-10-09) on image `sha-aad125a`, with
+`com.h2database:h2:2.2.219.rhlw-00001`: cache → Start Orchestrator → AO →
+Query TPA → Impact Analyzer → MR !1 (one-line `pom.xml` bump) → Resume
+Orchestrator → MR Verifier, ~90s from trigger to MR.
 - **Renovate operator** deployed at cluster level (`bootstrap-infra`
   `templates/renovate/` — ArgoCD child Application pointing at the upstream
   OCI Helm chart v6.4.0, `nonroot-v2` SCC, OpenShift Route for the web UI,
@@ -95,31 +105,22 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 
 ## Next up
 
-1. **OpenCode `impact-analyzer` hangs unattended** — it carries
-   `bash."*": "ask"` in `opencode.json`, and agent-level permission beats the
-   chart's `sdlc.opencodePermission: allow` (the image's `/app/opencode.json`
-   loads after `OPENCODE_CONFIG_CONTENT`). The AAP job still reports
-   `successful` because it starts the agent asynchronously, so the pipeline
-   looks green and produces no MR. Fix is open as
-   [lw-sdlc-opencode#4](https://github.com/rhpds/lw-sdlc-opencode/pull/4);
-   once merged, rebuild via the infra BuildConfig and bump `gitRef`/`tag` in
-   all three places (item 4). → [ADR-004](ADR.md#adr-004--unattended-opencode-tool-permission)
-2. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
+1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
    paths, `existingSecret` from `ao-bootstrap`). Keep SCM on
    `rhpds/lw-sdlc-opencode`. The `APP_INTEGRATION_URL_ALLOWED_HOSTS` gap is
    **closed** — verified on `8vjv7`, the AAP route host is present on the
    backend, background-worker and worker, and the AAP integration created
    cleanly. → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
-3. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
+2. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
    now **shared BuildConfig → ImageStream (OpenShift integrated registry)** via
    `bootstrap-infra` `opencodeImage` (ADR-013). Tenants leave
    `sdlc.opencodeImage` empty. External quay.io pins remain an override only.
    → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-openshift-integrated-registry)
-4. **First infra sync after enablement** must finish Job
+3. **First infra sync after enablement** must finish Job
    `opencode-image-publish` (ImageStream build) before OpenCode pods can pull.
    Bump `opencodeImage.gitRef`/`tag` and tenant `sdlc.opencodeImageTag` together.
-5. **`nexus.lightwellNetwork` is still empty in AgnosticV**, so a fresh tenant
+4. **`nexus.lightwellNetwork` is still empty in AgnosticV**, so a fresh tenant
    comes up green with no Lightwell proxy repos and therefore **no Nexus
    webhooks** — the whole chain has no entry point until credentials are
    injected (`scripts/inject-env-secrets.sh`, then `nexus-reconcile` re-runs
@@ -132,16 +133,22 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
    The name `lightwell-java-remediated` used in ADR-012 appears nowhere in
    `automation/` or `content/` — settle which is canonical before writing the
    seeding Job or the Renovate `hostRules`.
-6. **Renovate module content not yet written.** The Showroom AsciiDoc for the
+   **Contents:** seed only coordinates an Acme app declares *directly* in its
+   `pom.xml` — SBOM matching is broader than the pom, and the agent dies on
+   `dependency … not found in pom.xml` otherwise. Today only
+   `com.h2database:h2` qualifies (upstream has no `org/apache/struts/`), so
+   `benefits-mgmt-app` and `report-generator-app` cannot yet be targets.
+   → [ADR-016](ADR.md#adr-016--trigger-artifacts-must-be-declared-dependencies-of-a-seeded-app)
+5. **Renovate module content not yet written.** The Showroom AsciiDoc for the
    Renovate module needs the student-facing `oc apply` for the RenovateJob CR
    (templated with Antora `{guid}` / `{openshift_cluster_ingress_domain}`
    attributes). The `discoveryFilters` must scope to `acme-{guid}/*` or a
    specific app (e.g. `acme-{guid}/report-generator-app`). Each app repo
    already has a `renovate.json` with the Lightwell preset + placeholder
    `hostRules`; the RenovateJob inline config overrides with real Nexus URLs.
-7. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
+6. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
    before the org-scoping fix). Re-run the bootstrap job or re-order them.
-8. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
+7. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
    Artifactory / Deep Agent / RHACM.** The Showroom content under `content/`
    was updated to Nexus / Lightwell OpenCode Agents / TSSC + DevSecOps; the
    outlines were not.
@@ -150,7 +157,6 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
 
 - `podman-compose.yaml` has a `$PID`/`$!` interpolation bug and an obsolete
   `version:` key.
-- `inject-env-secrets.sh` prints secret values to stdout.
 - Running the local Antora preview rewrites `site.yml` (the dev-mode container
   injects `/antora/lib/dev-mode.js`). Revert it before committing.
 
@@ -162,6 +168,19 @@ On `tr59k-1` the AO path was also proven: Nexus → EDA Start → AO canvas
   → [ADR-011](ADR.md#adr-011--prefer-fail-closed-over-fail-open)
 - Hook Jobs use `hook-delete-policy: HookSucceeded`, so **absence means
   success** — do not go looking for the Job afterwards.
+- **Do not trigger within a minute of a tenant sync.** The sync re-runs
+  `eda-bootstrap`, which can disable/enable the activation and restart the
+  webhook listener; a Nexus POST landing in that gap is lost silently. Seen on
+  `8vjv7`: listener pod created 23:46:59, trigger at 23:47:00, no chain. Check
+  the `activation-job-*` pod age in `aap` before firing.
+- **A cached artifact cannot re-trigger.** The webhook fires on *component
+  created*, so re-pulling the same GAV does nothing — use a different version.
+- **MR Verifier runs `verify-mr-<iid>` as a Job inside
+  `sdlc-sandboxes-<guid>`**, not in an ephemeral `pr-test-mr-*` namespace.
+  Looking for the latter and finding nothing is not a failure.
+- Both OpenCode job templates **start the agent asynchronously** and report
+  `successful` immediately. A green AAP job says nothing about whether the
+  agent worked — read the `opencode` pod log or the session transcript.
 - Debugging a live tenant needs **cluster-admin**
   (`cluster_admin_agnosticd_sa_token` from the order), not the tenant login.
   The tenant user is Forbidden on `sdlc-<guid>` and `openshift-gitops`.
