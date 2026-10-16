@@ -47,16 +47,21 @@ spec:
           args:
             - |
               set -euo pipefail
-              POLICY_LINE="p, {{ .Values.username }}, applications, *, acme-{{ .Values.guid }}/*, allow"
+              ROLE="role:acme-{{ .Values.guid }}"
+              USERNAME="{{ .Values.username }}"
+              PROJECT="acme-{{ .Values.guid }}"
 
               CURRENT=$(oc get argocd openshift-gitops -n openshift-gitops -o jsonpath='{.spec.rbac.policy}')
 
-              if echo "${CURRENT}" | grep -qF "{{ .Values.username }}, applications"; then
-                echo "RBAC policy for {{ .Values.username }} already exists"
+              if echo "${CURRENT}" | grep -qF "${USERNAME}, ${ROLE}"; then
+                echo "RBAC policy for ${USERNAME} already exists"
                 exit 0
               fi
 
-              NEW_POLICY=$(printf '%s\n%s' "${CURRENT}" "${POLICY_LINE}")
+              EXTRA=$(printf 'p, %s, applications, *, %s/*, allow\np, %s, projects, get, %s, allow\ng, %s, %s' \
+                "${ROLE}" "${PROJECT}" "${ROLE}" "${PROJECT}" "${USERNAME}" "${ROLE}")
+
+              NEW_POLICY=$(printf '%s\n%s' "${CURRENT}" "${EXTRA}")
 
               python3 -c "
               import json, subprocess, sys
@@ -66,5 +71,5 @@ spec:
                 '-n', 'openshift-gitops', '--type', 'merge', '-p', patch])
               " <<< "${NEW_POLICY}"
 
-              echo "Added ArgoCD RBAC policy for {{ .Values.username }}"
+              echo "Added ArgoCD RBAC role ${ROLE} for ${USERNAME}"
 {{- end }}
