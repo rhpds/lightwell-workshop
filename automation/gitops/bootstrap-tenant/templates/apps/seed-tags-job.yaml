@@ -60,11 +60,12 @@ spec:
               echo "=== Waiting for initial pipeline builds to complete ==="
               BUILD_NS="build-${GUID}"
               for i in $(seq 1 60); do
-                RUNNING=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "Running" || echo "0")
-                TOTAL=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
-                SUCCEEDED=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "True" || echo "0")
+                PR_LIST=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null || true)
+                RUNNING=$(echo "${PR_LIST}" | grep -c "Running" || true)
+                TOTAL=$(echo "${PR_LIST}" | grep -c . || true)
+                SUCCEEDED=$(echo "${PR_LIST}" | grep -c "True" || true)
                 echo "  Attempt ${i}/60: ${SUCCEEDED}/${TOTAL} succeeded, ${RUNNING} running"
-                if [ "${RUNNING}" = "0" ] && [ "${TOTAL}" -gt "0" ] && [ "${SUCCEEDED}" -gt "0" ]; then
+                if [ "${RUNNING}" -eq 0 ] && [ "${TOTAL}" -gt 0 ] && [ "${SUCCEEDED}" -gt 0 ]; then
                   echo "  All builds complete"
                   break
                 fi
