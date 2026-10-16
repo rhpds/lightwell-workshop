@@ -56,12 +56,15 @@ spec:
                 exit 0
               fi
 
-              NEW_POLICY="${CURRENT}
-              ${POLICY_LINE}"
+              NEW_POLICY=$(printf '%s\n%s' "${CURRENT}" "${POLICY_LINE}")
 
-              oc patch configmap argocd-rbac-cm -n openshift-gitops \
-                --type merge \
-                -p "{\"data\":{\"policy.csv\":\"${NEW_POLICY}\"}}"
+              python3 -c "
+              import json, subprocess, sys
+              policy = sys.stdin.read()
+              patch = json.dumps({'data': {'policy.csv': policy}})
+              subprocess.check_call(['oc', 'patch', 'configmap', 'argocd-rbac-cm',
+                '-n', 'openshift-gitops', '--type', 'merge', '-p', patch])
+              " <<< "${NEW_POLICY}"
 
               echo "Added ArgoCD RBAC policy for {{ .Values.username }}"
 {{- end }}
