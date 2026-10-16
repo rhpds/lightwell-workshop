@@ -34,8 +34,7 @@ metadata:
   namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "5"
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: 10
   template:
