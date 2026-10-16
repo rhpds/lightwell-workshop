@@ -6,9 +6,9 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    resourceNames: ["argocd-rbac-cm"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["argocds"]
+    resourceNames: ["openshift-gitops"]
     verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -49,7 +49,7 @@ spec:
               set -euo pipefail
               POLICY_LINE="p, {{ .Values.username }}, applications, *, acme-{{ .Values.guid }}/*, allow"
 
-              CURRENT=$(oc get configmap argocd-rbac-cm -n openshift-gitops -o jsonpath='{.data.policy\.csv}')
+              CURRENT=$(oc get argocd openshift-gitops -n openshift-gitops -o jsonpath='{.spec.rbac.policy}')
 
               if echo "${CURRENT}" | grep -qF "{{ .Values.username }}, applications"; then
                 echo "RBAC policy for {{ .Values.username }} already exists"
@@ -61,8 +61,8 @@ spec:
               python3 -c "
               import json, subprocess, sys
               policy = sys.stdin.read()
-              patch = json.dumps({'data': {'policy.csv': policy}})
-              subprocess.check_call(['oc', 'patch', 'configmap', 'argocd-rbac-cm',
+              patch = json.dumps({'spec': {'rbac': {'policy': policy}}})
+              subprocess.check_call(['oc', 'patch', 'argocd', 'openshift-gitops',
                 '-n', 'openshift-gitops', '--type', 'merge', '-p', patch])
               " <<< "${NEW_POLICY}"
 
