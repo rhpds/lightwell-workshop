@@ -1,0 +1,120 @@
+{{- if .Values.apps.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-app-tags-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      serviceAccountName: lightwell-tenant-jobs
+      restartPolicy: OnFailure
+      containers:
+        - name: seed-tags
+          image: {{ .Values.jobAnsibleImage }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              GUID="{{ .Values.guid }}"
+              GROUP="{{ include "bootstrap-tenant.gitlabGroup" . }}"
+              GITLAB_HOST="{{ include "bootstrap-tenant.gitlabHost" . }}"
+              GITLAB_NS="{{ .Values.gitlab.namespace }}"
+              DEFAULT_BRANCH="{{ .Values.gitlab.defaultBranch }}"
+
+              ROOT_TOKEN=$(oc get secret root-user-personal-token -n "${GITLAB_NS}" -o jsonpath='{.data.token}' | base64 -d)
+
+              echo "=== Waiting for initial pipeline builds to complete ==="
+              BUILD_NS="build-${GUID}"
+              for i in $(seq 1 60); do
+                RUNNING=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "Running" || true)
+                TOTAL=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+                SUCCEEDED=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "True" || true)
+                echo "  Attempt ${i}/60: ${SUCCEEDED}/${TOTAL} succeeded, ${RUNNING} running"
+                if [ "${RUNNING}" = "0" ] && [ "${TOTAL}" -gt "0" ] && [ "${SUCCEEDED}" -gt "0" ]; then
+                  echo "  All builds complete"
+                  break
+                fi
+                sleep 15
+              done
+
+              echo "=== Reading latest commit SHAs from GitLab ==="
+              APP_TAGS=""
+              {{- range $name, $app := .Values.apps.appList }}
+              APP_NAME="{{ $name }}"
+              {{- end }}
+              for APP_NAME in {{- range .Values.gitlab.appSeeds }} "{{ .name }}"{{- end }}; do
+                PROJECT_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${GROUP}/${APP_NAME}")
+                SHA=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                  "${GITLAB_HOST}/api/v4/projects/${PROJECT_ENC}/repository/branches/${DEFAULT_BRANCH}" \
+                  | python3 -c "import json,sys; print(json.load(sys.stdin)['commit']['id'])" 2>/dev/null || true)
+                if [ -n "${SHA}" ]; then
+                  echo "  ${APP_NAME}: ${SHA}"
+                  APP_TAGS="${APP_TAGS}${APP_NAME}=${SHA}\n"
+                fi
+              done
+
+              echo "=== Updating deployment manifests ==="
+              DEPLOY_PROJECT="${GROUP}/acme-deployment"
+              DEPLOY_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${DEPLOY_PROJECT}")
+
+              # Unprotect branch for push
+              curl -sk -o /dev/null -X DELETE -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                "${GITLAB_HOST}/api/v4/projects/${DEPLOY_ENC}/protected_branches/${DEFAULT_BRANCH}" || true
+
+              WORK=$(mktemp -d)
+              PUSH_URL="${GITLAB_HOST}/${DEPLOY_PROJECT}.git"
+              PUSH_URL_AUTH="$(echo "${PUSH_URL}" | sed "s#https://#https://oauth2:${ROOT_TOKEN}@#" | sed "s#http://#http://oauth2:${ROOT_TOKEN}@#")"
+              git -c http.sslVerify=false clone "${PUSH_URL_AUTH}" "${WORK}/deploy"
+              cd "${WORK}/deploy"
+              git config user.email "lightwell-seed@example.com"
+              git config user.name "lightwell-tenant-seed"
+
+              # Update values.yaml with the real tags
+              python3 -c "
+              import yaml, sys
+
+              tags = {}
+              for line in '''$(printf "${APP_TAGS}")'''.strip().split('\n'):
+                  if '=' in line:
+                      name, sha = line.split('=', 1)
+                      tags[name.strip()] = sha.strip()
+
+              with open('values.yaml') as f:
+                  values = yaml.safe_load(f)
+
+              for app_name, app_conf in values.get('apps', {}).items():
+                  if app_name in tags:
+                      app_conf['imageTag'] = tags[app_name]
+
+              with open('values.yaml', 'w') as f:
+                  yaml.dump(values, f, default_flow_style=False, sort_keys=False)
+
+              print('Updated image tags:')
+              for name, tag in tags.items():
+                  print(f'  {name}: {tag}')
+              "
+
+              git add values.yaml
+              if git diff --cached --quiet; then
+                echo "No tag changes needed"
+              else
+                git commit -m "seed initial image tags from first build"
+                git -c http.sslVerify=false push origin "${DEFAULT_BRANCH}"
+                echo "Pushed updated tags to ${DEPLOY_PROJECT}"
+              fi
+
+              # Re-protect branch
+              curl -sk -o /dev/null -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X POST "${GITLAB_HOST}/api/v4/projects/${DEPLOY_ENC}/protected_branches" \
+                -d "{\"name\":\"${DEFAULT_BRANCH}\",\"push_access_level\":40,\"merge_access_level\":40}" || true
+
+              cd /tmp
+              rm -rf "${WORK}"
+              echo "=== Tag seeding complete ==="
+{{- end }}

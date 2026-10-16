@@ -5,20 +5,19 @@ metadata:
   name: acme-apps-{{ .Values.guid }}
   namespace: openshift-gitops
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: "3"
   labels:
     lightwell.guid: {{ .Values.guid | quote }}
 spec:
   project: acme-{{ .Values.guid }}
   source:
-    repoURL: {{ .Values.apps.repoURL }}
+    repoURL: {{ include "bootstrap-tenant.gitlabUrl" . }}/{{ include "bootstrap-tenant.gitlabGroup" . }}/acme-deployment.git
     targetRevision: main
     path: .
     helm:
       valuesObject:
         guid: {{ .Values.guid }}
         domain: {{ .Values.deployer.domain }}
-        imageTag: {{ .Values.apps.imageTag | default "latest" }}
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.username }}-app

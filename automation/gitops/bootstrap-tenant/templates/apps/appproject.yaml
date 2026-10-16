@@ -10,6 +10,7 @@ spec:
   description: "Acme sample apps for tenant {{ .Values.guid }}"
   sourceRepos:
     - {{ .Values.apps.repoURL | quote }}
+    - "{{ include "bootstrap-tenant.gitlabUrl" . }}/{{ include "bootstrap-tenant.gitlabGroup" . }}/acme-deployment.git"
   destinations:
     - namespace: {{ .Values.username }}-app
       server: https://kubernetes.default.svc

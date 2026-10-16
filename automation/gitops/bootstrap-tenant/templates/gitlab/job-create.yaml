@@ -177,6 +177,11 @@ spec:
               seed_app "{{ .name }}" "{{ .sourceRepo }}" "{{ .sourceRef }}" {{ if .policy }}'{{ .policy | toJson }}'{{ else }}''{{ end }}
               {{- end }}
 
+              {{- if .Values.apps.enabled }}
+              echo "Seeding deployment manifests repo..."
+              seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" ''
+              {{- end }}
+
               # Set up MR webhook on the AI remediation target (wire-transfer-svc)
               if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
                 DEMO_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${DEMO_PROJECT_PATH}")
