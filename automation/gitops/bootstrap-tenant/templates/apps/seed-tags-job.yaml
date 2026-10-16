@@ -1,4 +1,32 @@
 {{- if .Values.apps.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pipelinerun-reader-{{ .Values.guid }}
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipelinerun-reader-{{ .Values.guid }}
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pipelinerun-reader-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-tenant-jobs
+    namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -32,9 +60,9 @@ spec:
               echo "=== Waiting for initial pipeline builds to complete ==="
               BUILD_NS="build-${GUID}"
               for i in $(seq 1 60); do
-                RUNNING=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "Running" || true)
+                RUNNING=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "Running" || echo "0")
                 TOTAL=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
-                SUCCEEDED=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "True" || true)
+                SUCCEEDED=$(oc get pipelineruns -n "${BUILD_NS}" --no-headers 2>/dev/null | grep -c "True" || echo "0")
                 echo "  Attempt ${i}/60: ${SUCCEEDED}/${TOTAL} succeeded, ${RUNNING} running"
                 if [ "${RUNNING}" = "0" ] && [ "${TOTAL}" -gt "0" ] && [ "${SUCCEEDED}" -gt "0" ]; then
                   echo "  All builds complete"
@@ -45,9 +73,6 @@ spec:
 
               echo "=== Reading latest commit SHAs from GitLab ==="
               APP_TAGS=""
-              {{- range $name, $app := .Values.apps.appList }}
-              APP_NAME="{{ $name }}"
-              {{- end }}
               for APP_NAME in {{- range .Values.gitlab.appSeeds }} "{{ .name }}"{{- end }}; do
                 PROJECT_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${GROUP}/${APP_NAME}")
                 SHA=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
