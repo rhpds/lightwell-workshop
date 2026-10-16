@@ -11,7 +11,7 @@ metadata:
 spec:
   project: acme-{{ .Values.guid }}
   source:
-    repoURL: {{ include "bootstrap-tenant.gitlabUrl" . }}/{{ include "bootstrap-tenant.gitlabGroup" . }}/acme-deployment.git
+    repoURL: {{ include "bootstrap-tenant.gitlabHost" . }}/{{ include "bootstrap-tenant.gitlabGroup" . }}/acme-deployment.git
     targetRevision: main
     path: .
     helm:
