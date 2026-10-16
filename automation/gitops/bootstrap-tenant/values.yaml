@@ -92,8 +92,13 @@ tpa:
   objectBucketClaim:
     name: tpa-bucket-claim
     storageClassName: openshift-storage.noobaa.io
-  dataset:
-    url: "https://raw.githubusercontent.com/redhat-tssc-tmm/rhdp-tpa-demo/main/datasets/tpa-demo-dataset-v2.zip"
+  datasets:
+    cve:
+      url: "https://github.com/redhat-ads-tech/lb1815-vuln-seed/raw/refs/heads/main/lb1815-cve.zip"
+      label: "labels.importer=CVElist-v5"
+    osv:
+      url: "https://github.com/redhat-ads-tech/lb1815-vuln-seed/raw/refs/heads/main/lb1815-osv.zip"
+      label: "labels.importer=GHSA-OSV"
   images:
     postgresql: registry.redhat.io/rhel10/postgresql-18
     dataset: registry.redhat.io/ubi9/ubi

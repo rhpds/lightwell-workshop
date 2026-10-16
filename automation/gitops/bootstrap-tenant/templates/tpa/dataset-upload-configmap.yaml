@@ -1,0 +1,73 @@
+{{- if .Values.tpa.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tpa-dataset-upload-script
+  namespace: {{ include "tpa.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  upload-dataset.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    : "${DATASET_URL:?}" "${DATASET_LABEL:?}" "${TPA_URL:?}"
+    : "${KC_TOKEN_URL:?}" "${CLIENT_ID:?}" "${CLIENT_SECRET:?}"
+
+    echo "Waiting for TPA server to be ready..."
+    for i in $(seq 1 30); do
+      HTTP=$(curl -sk -o /dev/null -w "%{http_code}" "${TPA_URL}/.well-known/trustify" 2>/dev/null) || true
+      if [[ "$HTTP" =~ ^(200|401|403|404) ]]; then
+        echo "TPA server is responding (HTTP ${HTTP})."
+        break
+      fi
+      echo "  Attempt ${i}/30: TPA server not ready (HTTP ${HTTP:-none}), waiting 10s..."
+      sleep 10
+    done
+
+    echo "Downloading dataset from ${DATASET_URL}..."
+    curl -sSL -o /tmp/dataset.zip "$DATASET_URL"
+    FILE_SIZE=$(du -h /tmp/dataset.zip | cut -f1)
+    echo "Downloaded ${FILE_SIZE}"
+
+    echo "Requesting access token..."
+    TOKEN=""
+    for i in $(seq 1 12); do
+      RESPONSE=$(curl -sSk "$KC_TOKEN_URL" \
+        -d "grant_type=client_credentials&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}" 2>&1)
+      TOKEN=$(echo "$RESPONSE" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("access_token",""))' 2>/dev/null) || true
+      if [[ -n "$TOKEN" ]]; then
+        echo "Access token obtained."
+        break
+      fi
+      echo "  Attempt ${i}/12: token request failed, waiting 10s..."
+      sleep 10
+    done
+
+    if [[ -z "$TOKEN" ]]; then
+      echo "Failed to obtain access token after 12 attempts."
+      exit 1
+    fi
+
+    echo "Uploading dataset to ${TPA_URL}/api/v3/dataset?${DATASET_LABEL} ..."
+    HTTP_CODE=$(curl -sk -o /tmp/response.json -w "%{http_code}" -X POST \
+      "${TPA_URL}/api/v3/dataset?${DATASET_LABEL}" \
+      -H "Content-Type: application/zip" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      --data-binary @/tmp/dataset.zip) || true
+
+    echo "HTTP response code: ${HTTP_CODE:-unknown}"
+
+    if [[ "$HTTP_CODE" =~ ^2 ]]; then
+      echo "Upload and ingestion successful."
+      exit 0
+    elif [[ "$HTTP_CODE" == "504" || -z "$HTTP_CODE" || "$HTTP_CODE" == "000" ]]; then
+      echo "Route timed out or connection closed — upload likely completed."
+      echo "The server continues processing in the background."
+      exit 0
+    else
+      echo "Upload failed with HTTP ${HTTP_CODE}."
+      cat /tmp/response.json 2>/dev/null || true
+      exit 1
+    fi
+{{- end }}

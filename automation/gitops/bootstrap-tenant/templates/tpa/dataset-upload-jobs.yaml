@@ -1,0 +1,64 @@
+{{- if .Values.tpa.enabled }}
+{{- $tpaUrl := include "tpa.url" . }}
+{{- $kcTokenUrl := printf "https://%s/realms/%s/protocol/openid-connect/token" (include "tpa.keycloakHost" .) .Values.keycloak.realm }}
+{{- $clientId := .Values.tpa.oidc.cliClientId }}
+{{- $image := .Values.tpa.images.dataset }}
+{{- $namespace := include "tpa.namespace" . }}
+{{- range $name, $ds := .Values.tpa.datasets }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tpa-dataset-upload-{{ $name }}
+  namespace: {{ $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: tpa-dataset-upload
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: upload
+          image: {{ $image }}
+          env:
+            - name: DATASET_URL
+              value: {{ $ds.url | quote }}
+            - name: DATASET_LABEL
+              value: {{ $ds.label | quote }}
+            - name: TPA_URL
+              value: {{ $tpaUrl | quote }}
+            - name: KC_TOKEN_URL
+              value: {{ $kcTokenUrl | quote }}
+            - name: CLIENT_ID
+              value: {{ $clientId | quote }}
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oidc-cli
+                  key: client-secret
+          command:
+            - /bin/bash
+            - /scripts/upload-dataset.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+      volumes:
+        - name: scripts
+          configMap:
+            name: tpa-dataset-upload-script
+            defaultMode: 0555
+{{- end }}
+{{- end }}
