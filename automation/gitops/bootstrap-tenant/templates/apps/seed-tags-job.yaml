@@ -100,30 +100,12 @@ spec:
               git config user.email "lightwell-seed@example.com"
               git config user.name "lightwell-tenant-seed"
 
-              # Update values.yaml with the real tags
-              python3 -c "
-              import yaml, sys
-
-              tags = {}
-              for line in '''$(printf "${APP_TAGS}")'''.strip().split('\n'):
-                  if '=' in line:
-                      name, sha = line.split('=', 1)
-                      tags[name.strip()] = sha.strip()
-
-              with open('values.yaml') as f:
-                  values = yaml.safe_load(f)
-
-              for app_name, app_conf in values.get('apps', {}).items():
-                  if app_name in tags:
-                      app_conf['imageTag'] = tags[app_name]
-
-              with open('values.yaml', 'w') as f:
-                  yaml.dump(values, f, default_flow_style=False, sort_keys=False)
-
-              print('Updated image tags:')
-              for name, tag in tags.items():
-                  print(f'  {name}: {tag}')
-              "
+              # Update values.yaml with the real tags (sed, no PyYAML needed)
+              while IFS='=' read -r APP_NAME TAG; do
+                [ -z "${APP_NAME}" ] && continue
+                echo "  Setting ${APP_NAME} → ${TAG}"
+                sed -i "/${APP_NAME}:/,/imageTag:/ s|imageTag:.*|imageTag: \"${TAG}\"|" values.yaml
+              done <<< "$(printf "${APP_TAGS}")"
 
               git add values.yaml
               if git diff --cached --quiet; then
