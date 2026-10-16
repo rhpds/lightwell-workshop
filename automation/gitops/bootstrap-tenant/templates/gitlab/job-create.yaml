@@ -48,7 +48,7 @@ spec:
               CODE=$(curl -sk -o /tmp/grp.json -w '%{http_code}' \
                 -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
                 -X POST "${GITLAB_HOST}/api/v4/groups" \
-                -d "{\"name\":\"${GROUP}\",\"path\":\"${GROUP}\",\"visibility\":\"private\"}")
+                -d "{\"name\":\"${GROUP}\",\"path\":\"${GROUP}\",\"visibility\":\"public\"}")
               if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
                 echo "WARN: group create HTTP ${CODE}"; cat /tmp/grp.json
               fi
