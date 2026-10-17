@@ -119,13 +119,18 @@ spec:
 
               seed_app() {
                 local APP_NAME="$1" SEED_REPO="$2" SEED_REF="$3" POLICY_JSON="${4:-}"
+                # ArgoCD reads acme-deployment anonymously; a private project
+                # fails with "authentication required: HTTP Basic: Access
+                # denied" and the Application never syncs. The app repos stay
+                # private -- only the deployment chart needs to be readable.
+                local VISIBILITY="${5:-private}"
                 local PROJECT_PATH="${GROUP}/${APP_NAME}"
 
                 echo "Creating project ${PROJECT_PATH}..."
                 CODE=$(curl -sk -o /tmp/proj.json -w '%{http_code}' \
                   -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
                   -X POST "${GITLAB_HOST}/api/v4/projects" \
-                  -d "{\"name\":\"${APP_NAME}\",\"path\":\"${APP_NAME}\",\"namespace_id\":${GROUP_ID},\"visibility\":\"private\",\"initialize_with_readme\":false,\"default_branch\":\"${DEFAULT_BRANCH}\"}")
+                  -d "{\"name\":\"${APP_NAME}\",\"path\":\"${APP_NAME}\",\"namespace_id\":${GROUP_ID},\"visibility\":\"${VISIBILITY}\",\"initialize_with_readme\":false,\"default_branch\":\"${DEFAULT_BRANCH}\"}")
                 if [ "${CODE}" != "201" ] && [ "${CODE}" != "409" ]; then
                   echo "WARN: project create HTTP ${CODE}"; cat /tmp/proj.json
                 fi
@@ -178,7 +183,7 @@ spec:
 
               {{- if .Values.apps.enabled }}
               echo "Seeding deployment manifests repo..."
-              seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" ''
+              seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" '' "public"
               {{- end }}
 
               # Set up MR webhook on the AI remediation target (wire-transfer-svc)
