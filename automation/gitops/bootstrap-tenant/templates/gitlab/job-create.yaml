@@ -5,7 +5,11 @@ metadata:
   namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
-    argocd.argoproj.io/sync-options: Replace=true
+    # Force=true makes Argo delete and recreate instead of issuing a
+    # replace. A Job is immutable, and replacing one fails with
+    # "spec.selector: Required value" because the manifest has no
+    # controller-generated selector -- which broke every re-sync.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 10
   template:
