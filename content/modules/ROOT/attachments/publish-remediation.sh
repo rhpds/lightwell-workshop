@@ -40,8 +40,11 @@ echo "  Description: ${DESCRIPTION}"
 echo ""
 
 # Discover tenant GUID
-GUID=$(oc whoami | sed 's/user-//')
-USERNAME=$(oc whoami)
+# Derived from the logged-in user, which is right in the Showroom terminal.
+# Overridable because anyone debugging as cluster-admin would otherwise get
+# GUID=admin and every namespace lookup would miss.
+GUID="${GUID:-$(oc whoami | sed 's/user-//')}"
+USERNAME="user-${GUID}"
 
 # ---------------------------------------------------------------------------
 # Part 1: Nexus — upload remediated artifact
