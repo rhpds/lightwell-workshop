@@ -30,27 +30,30 @@ gitlab:
     - name: wire-transfer-svc
       sourceRepo: https://github.com/redhat-ads-tech/wire-transfer-svc.git
       sourceRef: main
-      riskClass: HIGH
-      riskRationale: Payment-critical / PCI-scoped system — requires human review
-      # Injected as .lightwell/policy.json during seed (overrides upstream if present).
+      # Injected as .lightwell/policy.json during seed (overrides upstream if
+      # present) and carried through classify into affected_repos, which is
+      # how it reaches the MR body. The EDA activation's extra_vars do not
+      # reach AO-launched job templates, so policy is the only channel.
       policy:
         remediation_owner: ao
         approval: needs_approval
+        riskClass: HIGH
+        riskRationale: Payment-critical / PCI-scoped system — requires human review
     - name: benefits-mgmt-app
       sourceRepo: https://github.com/redhat-ads-tech/benefits-mgmt-app.git
       sourceRef: main
-      riskClass: LOW
-      riskRationale: Internal HR application — no regulated data
       policy:
         remediation_owner: ao
         approval: auto_approve
+        riskClass: LOW
+        riskRationale: Internal HR application — no regulated data
     - name: report-generator-app
       sourceRepo: https://github.com/redhat-ads-tech/report-generator-app.git
       sourceRef: main
-      riskClass: LOW
-      riskRationale: Internal reporting tool — no regulated data
       policy:
         remediation_owner: renovate
+        riskClass: LOW
+        riskRationale: Internal reporting tool — no regulated data
 
 keycloak:
   url: "" # default https://sso.{deployer.domain}
