@@ -16,17 +16,9 @@ spec:
     spec:
       serviceAccountName: lightwell-tenant-jobs
       restartPolicy: OnFailure
-      volumes:
-        - name: tekton-pipelines
-          configMap:
-            name: tekton-app-pipelines
       containers:
         - name: create-gitlab-tenant
           image: {{ .Values.jobAnsibleImage }}
-          volumeMounts:
-            - name: tekton-pipelines
-              mountPath: /tekton-pipelines
-              readOnly: true
           command:
             - /bin/bash
             - -c
@@ -174,20 +166,6 @@ spec:
                   git -c user.email="lightwell-seed@example.com" -c user.name="lightwell-tenant-seed" \
                     commit --allow-empty -m "Add .lightwell/policy.json for Lightwell remediation routing" || true
                   echo "Injected .lightwell/policy.json for ${APP_NAME}"
-                fi
-
-                # Seed the Tekton pipelines the same way. build-pull-request
-                # verifies the MR before merge and fills the validation table;
-                # build-push-to-main promotes the new tag into
-                # acme-deployment so ArgoCD deploys it. Skipped for
-                # acme-deployment itself, which is not a built app.
-                if [ "${APP_NAME}" != "acme-deployment" ] && [ -d /tekton-pipelines ]; then
-                  mkdir -p .tekton
-                  cp /tekton-pipelines/*.yaml .tekton/ 2>/dev/null || true
-                  git add .tekton
-                  git -c user.email="lightwell-seed@example.com" -c user.name="lightwell-tenant-seed" \
-                    commit --allow-empty -m "Add Lightwell Tekton pipelines" || true
-                  echo "Injected .tekton pipelines for ${APP_NAME}"
                 fi
                 PUSH_URL="${GITLAB_HOST}/${PROJECT_PATH}.git"
                 PUSH_URL_AUTH="$(echo "${PUSH_URL}" | sed "s#https://#https://oauth2:${ROOT_TOKEN}@#" | sed "s#http://#http://oauth2:${ROOT_TOKEN}@#")"

@@ -232,13 +232,13 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    `build-pull-request` filled the table (`5/5 tests passed`) -> merge ->
    `promote-to-deployment-repo` -> ArgoCD deployed `0126b6d`, pod 1/1.
    lw-sdlc-opencode#5 is merged and the image is `sha-7447545`.
-   The pipelines are injected by the chart as a stopgap; PRs are open
-   upstream — [wire-transfer-svc#1](https://github.com/redhat-ads-tech/wire-transfer-svc/pull/1),
+   The pipelines are **not** in the chart: they must come from the app
+   repos. PRs are open and mergeable —
+   [wire-transfer-svc#1](https://github.com/redhat-ads-tech/wire-transfer-svc/pull/1),
    [benefits-mgmt-app#1](https://github.com/redhat-ads-tech/benefits-mgmt-app/pull/1),
    [report-generator-app#1](https://github.com/redhat-ads-tech/report-generator-app/pull/1).
-   **When those merge, delete `templates/gitlab/tekton-pipelines-configmap.yaml`,
-   `files/tekton/` and the copy step in `seed_app`** — otherwise the chart
-   keeps overwriting whatever the app repos ship.
+   Until they merge, a tenant gets no pre-merge verification and no
+   promote-to-deployment-repo, so ArgoCD keeps the seeded tag.
    → [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact)
 1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
