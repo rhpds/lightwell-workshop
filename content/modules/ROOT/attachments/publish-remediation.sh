@@ -95,11 +95,37 @@ ${LICENSE_BLOCK}
 POMEOF
 echo "  POM created"
 
-# Create placeholder JAR
+# Build the remediated JAR from the real upstream artifact.
+#
+# This used to publish a placeholder containing a single text file. That is
+# enough to make Maven resolve the bumped version, but the classes are not
+# there, so anything that actually runs the dependency fails -- the
+# integration tests in these apps go straight to "Failed to load H2 driver".
+# A Lightwell rebuild is the real library with a patch applied, so republish
+# the upstream jar under the .rhlw version and mark it.
 echo "--- Creating JAR ---"
 JAR_FILE=$(mktemp)
-echo "remediated-${RHLW_VERSION}" > /tmp/lw-placeholder.txt
-jar cf "${JAR_FILE}" /tmp/lw-placeholder.txt 2>/dev/null || zip -j "${JAR_FILE}" /tmp/lw-placeholder.txt 2>/dev/null
+UPSTREAM_JAR="https://${NEXUS_HOST}/repository/maven-public/${GROUP_PATH}/${ARTIFACT_ID}/${BASE_VERSION}/${ARTIFACT_ID}-${BASE_VERSION}.jar"
+if curl -sfk --max-time 120 -o "${JAR_FILE}" "${UPSTREAM_JAR}" && [ -s "${JAR_FILE}" ]; then
+  echo "  Rebuilt from upstream ${ARTIFACT_ID} ${BASE_VERSION} ($(wc -c < "${JAR_FILE}" | tr -d ' ') bytes)"
+  # Stamp it so the remediated build is distinguishable from the original.
+  printf 'Lightwell-Remediation: %s\nLightwell-Base-Version: %s\n' \
+    "${RHLW_VERSION}" "${BASE_VERSION}" > /tmp/lw-remediation.txt
+  python3 - "${JAR_FILE}" <<'PYEOF' || true
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], "a") as z:
+    z.write("/tmp/lw-remediation.txt", "META-INF/lightwell-remediation.txt")
+PYEOF
+else
+  # No upstream jar to rebuild from. Fall back to a placeholder, but say so:
+  # the dependency will resolve and then fail at runtime.
+  echo "  WARN: could not fetch ${UPSTREAM_JAR}"
+  echo "        falling back to a placeholder -- the remediated dependency"
+  echo "        will resolve but will not run"
+  echo "remediated-${RHLW_VERSION}" > /tmp/lw-placeholder.txt
+  jar cf "${JAR_FILE}" /tmp/lw-placeholder.txt 2>/dev/null \
+    || python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],'w'); z.write(sys.argv[2],'lw-placeholder.txt'); z.close()" "${JAR_FILE}" /tmp/lw-placeholder.txt
+fi
 echo "  JAR created"
 
 # Create maven-metadata.xml
