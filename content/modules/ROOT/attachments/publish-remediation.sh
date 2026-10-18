@@ -60,6 +60,25 @@ echo ""
 # Create POM
 echo "--- Creating POM ---"
 POM_FILE=$(mktemp)
+
+# Carry the upstream licence into the remediated POM. A real Lightwell rebuild
+# keeps the original licence; a POM that declares none reads as "the licence
+# was removed" to anything comparing the two, which is exactly what the
+# merge request's License compliance check does.
+LICENSE_BLOCK=$(curl -sk --max-time 30 \
+  "https://${NEXUS_HOST}/repository/maven-public/${GROUP_PATH}/${ARTIFACT_ID}/${BASE_VERSION}/${ARTIFACT_ID}-${BASE_VERSION}.pom" 2>/dev/null \
+  | python3 -c "
+import re, sys
+pom = sys.stdin.read()
+m = re.search(r'<licenses>.*?</licenses>', pom, re.S)
+print(('    ' + m.group(0).strip()) if m else '')
+" 2>/dev/null || true)
+if [ -n "${LICENSE_BLOCK}" ]; then
+  echo "  Carrying upstream licence through"
+else
+  echo "  WARN: no <licenses> found upstream for ${ARTIFACT_ID} ${BASE_VERSION}"
+fi
+
 cat > "${POM_FILE}" <<POMEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -71,6 +90,7 @@ cat > "${POM_FILE}" <<POMEOF
     <version>${RHLW_VERSION}</version>
     <name>${DESCRIPTION}</name>
     <description>Lightwell-remediated build of ${ARTIFACT_ID} ${BASE_VERSION}</description>
+${LICENSE_BLOCK}
 </project>
 POMEOF
 echo "  POM created"
