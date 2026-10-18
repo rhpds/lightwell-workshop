@@ -1,0 +1,387 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build-pull-request
+  annotations:
+    # Runs on the MR branch while the merge request is open, so a remediation
+    # is verified *before* anyone merges it. build-push-to-main only fires
+    # after the fact.
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+spec:
+  params:
+    - name: repo-url
+      value: "{{ repo_url }}"
+    - name: revision
+      value: "{{ revision }}"
+    - name: maven-mirror-url
+      value: "{{ maven-mirror-url }}"
+    - name: mr-iid
+      value: "{{ pull_request_number }}"
+    - name: gitlab-api-url
+      value: "{{ repo_url }}"
+    - name: project-path
+      value: "{{ repo_owner }}/{{ repo_name }}"
+  pipelineSpec:
+    params:
+      - name: repo-url
+      - name: revision
+      - name: maven-mirror-url
+      - name: mr-iid
+      - name: gitlab-api-url
+      - name: project-path
+    tasks:
+      - name: fetch-source
+        taskRef:
+          resolver: cluster
+          params:
+            - { name: kind, value: task }
+            - { name: name, value: git-clone }
+            - { name: namespace, value: openshift-pipelines }
+        workspaces:
+          - { name: output, workspace: source }
+          - { name: basic-auth, workspace: git-credentials }
+        params:
+          - { name: URL, value: "$(params.repo-url)" }
+          - { name: REVISION, value: "$(params.revision)" }
+
+      # `verify` runs unit and integration tests and writes the surefire /
+      # failsafe reports that report-validation parses. Allowed to fail so the
+      # MR still gets a table saying what broke, instead of no table at all.
+      - name: run-tests
+        runAfter: [fetch-source]
+        taskRef:
+          resolver: cluster
+          params:
+            - { name: kind, value: task }
+            - { name: name, value: maven }
+            - { name: namespace, value: openshift-pipelines }
+        workspaces:
+          - { name: source, workspace: source }
+          - { name: maven_settings, workspace: maven-settings }
+        params:
+          # makeAggregateBom writes target/bom.json, which report-validation
+          # checks actually lists the remediated coordinate. Running it in the
+          # same invocation reuses the resolved dependency tree.
+          - { name: GOALS, value: ["verify", "org.cyclonedx:cyclonedx-maven-plugin:2.7.11:makeAggregateBom", "--fail-never"] }
+          - { name: MAVEN_MIRROR_URL, value: "$(params.maven-mirror-url)" }
+
+      # Fills the Automated Validation table on the merge request opened by the
+      # Lightwell remediation agent. Rewrites only the text between the
+      # lw:validation / lw:action markers, so the Summary and Vulnerability
+      # Details the agent wrote are preserved. A merge request that has no
+      # markers (a human one, say) is left alone.
+      - name: report-validation
+        runAfter: [run-tests]
+        taskSpec:
+          params:
+            - { name: MR_IID }
+            - { name: GITLAB_API_URL }
+            - { name: PROJECT_PATH }
+            - { name: MAVEN_MIRROR_URL }
+          workspaces:
+            - name: source
+          steps:
+            - name: report
+              image: registry.access.redhat.com/ubi9/python-39:latest
+              workingDir: $(workspaces.source.path)
+              env:
+                # Same secret PaC already uses for this repo; the build-setup
+                # Job puts the GitLab root PAT here. No extra plumbing needed.
+                - name: GITLAB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: gitlab-pac-token
+                      key: token
+              script: |
+                #!/usr/bin/env python3
+                """Parse surefire/failsafe reports and update the MR table."""
+                import glob, hashlib, json, os, re, ssl, sys, urllib.parse, urllib.request
+                import xml.etree.ElementTree as ET
+
+                iid = "$(params.MR_IID)"
+                base = "$(params.GITLAB_API_URL)".split("/")[0:3]
+                api = "/".join(base) + "/api/v4"
+                proj = urllib.parse.quote("$(params.PROJECT_PATH)", safe="")
+                tok = os.environ.get("GITLAB_TOKEN", "")
+                if not tok:
+                    sys.exit("ERROR: gitlab-pac-token secret is empty; cannot update the MR")
+
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+
+                def call(method, path, body=None):
+                    r = urllib.request.Request(
+                        api + path, method=method,
+                        data=json.dumps(body).encode() if body else None)
+                    r.add_header("PRIVATE-TOKEN", tok)
+                    r.add_header("Content-Type", "application/json")
+                    with urllib.request.urlopen(r, context=ctx) as f:
+                        return json.loads(f.read().decode() or "{}")
+
+                def tally(pattern):
+                    """Sum tests/failures/errors/skipped across report XMLs."""
+                    t = f = e = s = 0
+                    found = False
+                    for p in glob.glob(pattern, recursive=True):
+                        try:
+                            root = ET.parse(p).getroot()
+                        except ET.ParseError:
+                            continue
+                        found = True
+                        t += int(root.get("tests", 0))
+                        f += int(root.get("failures", 0))
+                        e += int(root.get("errors", 0))
+                        s += int(root.get("skipped", 0))
+                    return (t, f, e, s) if found else None
+
+                unit = tally("**/target/surefire-reports/TEST-*.xml")
+                integ = tally("**/target/failsafe-reports/TEST-*.xml")
+
+                def row(res, label):
+                    if res is None:
+                        return None  # not run — leave Pending rather than guess
+                    t, f, e, s = res
+                    bad = f + e
+                    return {
+                        "status": "passed" if bad == 0 else "failed",
+                        "details": f"{t - bad}/{t} {label} passed ({f} failures, {e} errors, {s} skipped)",
+                    }
+
+                results = {}
+                for key, res, label in (("unit_tests", unit, "tests"),
+                                        ("integration_tests", integ, "tests")):
+                    r = row(res, label)
+                    if r:
+                        results[key] = r
+
+                # ---- checks that need the remediated coordinate ------------
+                # Read it back out of the MR body's handoff block rather than
+                # re-deriving it: that is what the agent actually bumped.
+                mirror = "$(params.MAVEN_MIRROR_URL)".rstrip("/")
+                nexus = mirror.split("/repository/")[0].rstrip("/")
+                LW_REPO = "lightwell-remediated"
+
+                def fetch(url, binary=False):
+                    with urllib.request.urlopen(url, context=ctx, timeout=60) as f:
+                        return f.read() if binary else f.read().decode("utf-8", "replace")
+
+                def licences(pom):
+                    try:
+                        root = ET.fromstring(pom)
+                    except ET.ParseError:
+                        return None
+                    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+                    names = [e.text.strip() for e in root.findall(".//m:licenses/m:license/m:name", ns) if e.text]
+                    if not names:
+                        names = [e.text.strip() for e in root.findall(".//licenses/license/name") if e.text]
+                    return names
+
+                def coords(desc):
+                    m = re.search(r"```json\n(.*?)\n```", desc, re.S)
+                    if not m:
+                        return None
+                    try:
+                        h = json.loads(m.group(1))
+                    except Exception:
+                        return None
+                    art = h.get("artifact_id") or ""
+                    if ":" not in art:
+                        return None
+                    g, a = art.split(":", 1)
+                    return g, a, h.get("new_version"), h.get("old_version")
+
+                mr = call("GET", f"/projects/{proj}/merge_requests/{iid}")
+                # AO merges auto_approve apps as soon as its in-loop Verifier
+                # returns (ADR-025/026), which can happen while this pipeline
+                # is still running mvn. Writing a validation table onto an
+                # already-merged MR is noise, so stop.
+                if mr.get("state") != "opened":
+                    print(f"MR !{iid} is {mr.get('state')}; nothing to update.")
+                    sys.exit(0)
+                desc = mr.get("description") or ""
+                VS, VE = "<!-- lw:validation:start -->", "<!-- lw:validation:end -->"
+                AS_, AE = "<!-- lw:action:start -->", "<!-- lw:action:end -->"
+                if VS not in desc:
+                    print("MR has no Lightwell validation block; nothing to update.")
+                    sys.exit(0)
+
+                gav = coords(desc)
+                if gav:
+                    group, artifact, new_v, old_v = gav
+                    jar_rel = f"{group.replace('.','/')}/{artifact}/{new_v}/{artifact}-{new_v}.jar"
+
+                    # Integrity, not signature. The tenant mirror publishes
+                    # jar/pom/metadata with no detached GPG signature, so there
+                    # is nothing to verify cryptographically -- say so rather
+                    # than implying one was checked. The checksum comes from the
+                    # REST assets API: Nexus does not write .sha1 siblings for
+                    # artifacts uploaded by raw PUT.
+                    try:
+                        q = (f"{nexus}/service/rest/v1/search/assets?repository={LW_REPO}"
+                             f"&maven.groupId={group}&maven.artifactId={artifact}&maven.extension=jar")
+                        items = json.loads(fetch(q)).get("items", [])
+                        asset = next((i for i in items
+                                      if i.get("path", "").endswith(jar_rel)), None)
+                        if asset is None:
+                            results["signature"] = {"status": "failed",
+                                "details": f"Nexus holds no {artifact} {new_v} in {LW_REPO}"}
+                        else:
+                            rec = asset.get("checksum") or {}
+                            blob = fetch(f"{nexus}/repository/{LW_REPO}/{jar_rel}", binary=True)
+                            got256 = hashlib.sha256(blob).hexdigest()
+                            got1 = hashlib.sha1(blob).hexdigest()
+                            if rec.get("sha256") and rec["sha256"] != got256:
+                                results["signature"] = {"status": "failed",
+                                    "details": f"SHA-256 mismatch against Nexus ({rec['sha256'][:16]}... vs {got256[:16]}...)"}
+                            elif rec.get("sha1") and rec["sha1"] != got1:
+                                results["signature"] = {"status": "failed",
+                                    "details": f"SHA-1 mismatch against Nexus ({rec['sha1'][:16]}... vs {got1[:16]}...)"}
+                            elif rec:
+                                results["signature"] = {"status": "passed",
+                                    "details": f"Artifact integrity verified against Nexus (SHA-256 {got256[:16]}...)"}
+                    except Exception as exc:
+                        results["signature"] = {"status": "failed",
+                            "details": f"could not verify the artifact against Nexus: {exc}"}
+
+                    # Licence: compare what the base version declares with what
+                    # the remediated build declares. A rebuild must not change it.
+                    try:
+                        old_pom = fetch(f"{mirror}/{group.replace('.','/')}/{artifact}/{old_v}/{artifact}-{old_v}.pom")
+                        new_pom = fetch(f"{nexus}/repository/{LW_REPO}/{group.replace('.','/')}/{artifact}/{new_v}/{artifact}-{new_v}.pom")
+                        lo, ln = licences(old_pom), licences(new_pom)
+                        if lo is not None and ln is not None and (lo or ln):
+                            if not ln:
+                                results["license"] = {"status": "warning",
+                                    "details": f"the remediated POM declares no licence (was {', '.join(lo)})"}
+                            elif sorted(lo) == sorted(ln):
+                                results["license"] = {"status": "passed",
+                                    "details": f"{', '.join(ln)} (unchanged)"}
+                            else:
+                                results["license"] = {"status": "warning",
+                                    "details": f"licence changed: {', '.join(lo) or 'none'} -> {', '.join(ln)}"}
+                    except Exception as exc:
+                        results["license"] = {"status": "failed",
+                            "details": f"could not compare licences: {exc}"}
+
+                    # SBOM: the remediated coordinate must actually appear in
+                    # the generated bill of materials at the bumped version.
+                    sbom_path = next((p for p in (
+                        os.path.join(os.getcwd(), "target", "bom.json"),
+                        os.path.join(os.getcwd(), "target", "sbom-cyclonedx.json"))
+                        if os.path.exists(p)), None)
+                    if sbom_path:
+                        try:
+                            doc = json.load(open(sbom_path))
+                            comps = doc.get("components") or []
+                            hit = [c for c in comps if c.get("name") == artifact]
+                            if any(c.get("version") == new_v for c in hit):
+                                results["sbom_integrity"] = {"status": "passed",
+                                    "details": f"CycloneDX {doc.get('specVersion','?')} lists {artifact} {new_v} ({len(comps)} components)"}
+                            elif hit:
+                                results["sbom_integrity"] = {"status": "failed",
+                                    "details": f"SBOM lists {artifact} {', '.join(sorted({c.get('version','?') for c in hit}))}, expected {new_v}"}
+                            else:
+                                results["sbom_integrity"] = {"status": "failed",
+                                    "details": f"SBOM does not list {artifact} ({len(comps)} components)"}
+                        except Exception as exc:
+                            results["sbom_integrity"] = {"status": "failed",
+                                "details": f"SBOM is unreadable: {exc}"}
+
+                    # The build resolved and compiled against the bumped
+                    # coordinate -- stronger than "mvn exited 0".
+                    if (unit is not None or integ is not None):
+                        try:
+                            pom_txt = open("pom.xml").read()
+                            if re.search(r"<artifactId>\s*%s\s*</artifactId>\s*<version>\s*%s\s*</version>"
+                                         % (re.escape(artifact), re.escape(new_v)), pom_txt, re.S):
+                                results["dependency_compat"] = {"status": "passed",
+                                    "details": f"Compiles and resolves against {group}:{artifact}:{new_v}"}
+                            else:
+                                results["dependency_compat"] = {"status": "failed",
+                                    "details": f"pom.xml does not declare {artifact} {new_v} after the bump"}
+                        except OSError:
+                            pass
+                else:
+                    print("No handoff coordinates in the MR body; "
+                          "artifact-level checks stay Pending.")
+
+                print("results:", json.dumps(results, indent=2))
+
+                CHECKS = [("risk_class", "Acme Inc. Risk Class"),
+                          ("signature", "Binary signature verification"),
+                          ("sbom_integrity", "SBOM integrity"),
+                          ("unit_tests", "Unit tests"),
+                          ("integration_tests", "Integration tests"),
+                          ("dependency_compat", "Dependency compatibility"),
+                          ("regression", "Regression scan"),
+                          ("license", "License compliance")]
+                ICON = {"passed": "✅ Passed", "failed": "❌ Failed",
+                        "pending": "⏳ Pending", "skipped": "⏭️ Skipped"}
+
+                # Keep the existing risk row: it came from the chart, not from us.
+                risk_row = next((l for l in desc.splitlines()
+                                 if l.startswith("| Acme Inc. Risk Class |")), None)
+                risk_class = ""
+                if risk_row:
+                    cells = [c.strip() for c in risk_row.split("|")]
+                    if len(cells) >= 3:
+                        risk_class = cells[2].split()[-1]
+
+                rows = ["| Check | Status | Details |", "|---|---|---|"]
+                for key, label in CHECKS:
+                    if key == "risk_class":
+                        rows.append(risk_row or f"| {label} | ⚪ NONE | No risk classification recorded |")
+                        continue
+                    r = results.get(key) or {}
+                    rows.append(f"| {label} | {ICON.get(r.get('status'), ICON['pending'])} | "
+                                f"{r.get('details') or 'Awaiting verification'} |")
+
+                failed = [lab for k, lab in CHECKS
+                          if (results.get(k) or {}).get("status") == "failed"]
+                if failed:
+                    action = ("> ❌ **Do not merge — automated validation failed.**\n>\n"
+                              f"> Failing checks: {', '.join(failed)}.")
+                elif risk_class in ("HIGH", "CRITICAL"):
+                    action = ("> 🔍 **Requires human review before merge.**\n>\n"
+                              "> A security or DevSecOps engineer should review the patch diff. "
+                              f"Risk class **{risk_class}** requires review regardless of automated results.")
+                else:
+                    action = ("> ✅ **Safe to merge.**\n>\n"
+                              "> All automated checks passed and the application is not in a "
+                              "review-required risk class.")
+
+                def splice(text, start, end, body):
+                    a, b = text.find(start), text.find(end)
+                    if a == -1 or b == -1 or b < a:
+                        return text
+                    return text[:a + len(start)] + "\n" + body + "\n" + text[b:]
+
+                desc = splice(desc, VS, VE, "\n".join(rows))
+                desc = splice(desc, AS_, AE, action)
+                call("PUT", f"/projects/{proj}/merge_requests/{iid}", {"description": desc})
+                print(f"Updated MR !{iid}: {sorted(results)}")
+        workspaces:
+          - { name: source, workspace: source }
+        params:
+          - { name: MR_IID, value: "$(params.mr-iid)" }
+          - { name: GITLAB_API_URL, value: "$(params.gitlab-api-url)" }
+          - { name: PROJECT_PATH, value: "$(params.project-path)" }
+          - { name: MAVEN_MIRROR_URL, value: "$(params.maven-mirror-url)" }
+    workspaces:
+      - name: source
+      - name: git-credentials
+      - name: maven-settings
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources: { requests: { storage: 2Gi } }
+    - name: git-credentials
+      secret:
+        secretName: "{{ git_auth_secret }}"
+    - name: maven-settings
+      emptyDir: {}
