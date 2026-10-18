@@ -141,7 +141,16 @@ TPA_NS="tpa-${GUID}"
 # TPA:    tpa-{guid}.apps.{cluster}
 # SSO:    sso.apps.{cluster}
 APPS_DOMAIN=$(echo "${NEXUS_HOST}" | sed "s/^nexus-lightwell-nexus-${GUID}\.//")
-TPA_HOST="tpa-${GUID}.${APPS_DOMAIN}"
+# Prefer the real server Route. tpa-{guid} is the tpa-short-url Route, which
+# serves the UI redirect but not /api, so every API call against it returns
+# nothing and the script dies on pipefail with no message.
+TPA_HOST=$(oc get route -n "tpa-${GUID}" -l app.kubernetes.io/name=server \
+  -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+if [ -z "${TPA_HOST}" ]; then
+  TPA_HOST=$(oc get route -n "tpa-${GUID}" -o jsonpath='{range .items[*]}{.spec.host}{"\n"}{end}' 2>/dev/null \
+    | grep -E "^server-" | head -1)
+fi
+TPA_HOST="${TPA_HOST:-tpa-${GUID}.${APPS_DOMAIN}}"
 KC_HOST="sso.${APPS_DOMAIN}"
 
 echo "  TPA host: ${TPA_HOST}"
@@ -186,13 +195,26 @@ fi
 echo "OK"
 
 # Query TPA for existing vulnerabilities affecting this package
-VULN_IDS=$(curl -sk "https://${TPA_HOST}/api/v3/vulnerability?q=${ARTIFACT_ID}&limit=100" \
-  -H "Authorization: Bearer ${TPA_TOKEN}" | python3 -c "
+VULN_RAW=$(curl -sk --max-time 60 -w '\n%{http_code}' \
+  "https://${TPA_HOST}/api/v3/vulnerability?q=${ARTIFACT_ID}&limit=100" \
+  -H "Authorization: Bearer ${TPA_TOKEN}" || true)
+VULN_CODE=$(printf '%s' "${VULN_RAW}" | tail -1)
+if [ "${VULN_CODE}" != "200" ]; then
+  # Previously this was piped straight into python with 2>/dev/null, so an
+  # unreachable or erroring TPA killed the script on pipefail with no output
+  # at all. Say what happened instead.
+  echo ""
+  echo "  ERROR: TPA vulnerability query returned HTTP ${VULN_CODE:-000}"
+  echo "  URL: https://${TPA_HOST}/api/v3/vulnerability"
+  echo "  The Nexus upload above succeeded; only advisory publication is affected."
+  exit 1
+fi
+VULN_IDS=$(printf '%s' "${VULN_RAW}" | sed '$d' | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 ids = [v['identifier'] for v in data.get('items', []) if v.get('identifier','').startswith('CVE-')]
 print(' '.join(ids[:10]))
-" 2>/dev/null)
+")
 
 if [ -z "${VULN_IDS}" ]; then
   echo ""
