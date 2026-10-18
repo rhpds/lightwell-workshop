@@ -25,3 +25,7 @@ openspec/
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# local tooling noise
+.npm-global-cache/
+/lightwell-workshop
