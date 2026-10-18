@@ -1,0 +1,24 @@
+{{- /*
+  Tekton pipelines seeded into each Acme app repo.
+
+  They belong upstream in the redhat-ads-tech app repos, but nobody on the
+  Lightwell side has push access there, so the tenant injects them at seed
+  time the same way it injects .lightwell/policy.json. Once the upstream PR
+  lands this ConfigMap and the copy step in seed_app can both go away.
+
+  .Files.Get, not a heredoc: the pipelines are full of Pipelines-as-Code
+  placeholders ({{`{{ repo_url }}`}}, {{`{{ pull_request_number }}`}}) that Helm
+  would otherwise try to render as its own templating and fail on.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tekton-app-pipelines
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+{{- range $path, $_ := .Files.Glob "files/tekton/*.yaml" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
