@@ -230,17 +230,16 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    merged (`sha-7447545`).
    → [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact)
 
-0b. **Six PRs open upstream, all mergeable.** The app repos own their
-   pipelines — the chart does **not** inject them (that workaround was
-   removed in 24f3114, because James is iterating on the same PaC
-   pipelines and a seed-time copy would silently overwrite him).
-   | Repo | pipelines | integration tests |
-   |---|---|---|
-   | wire-transfer-svc | [#1](https://github.com/redhat-ads-tech/wire-transfer-svc/pull/1) | [#2](https://github.com/redhat-ads-tech/wire-transfer-svc/pull/2) |
-   | benefits-mgmt-app | [#1](https://github.com/redhat-ads-tech/benefits-mgmt-app/pull/1) | [#2](https://github.com/redhat-ads-tech/benefits-mgmt-app/pull/2) |
-   | report-generator-app | [#1](https://github.com/redhat-ads-tech/report-generator-app/pull/1) | [#2](https://github.com/redhat-ads-tech/report-generator-app/pull/2) |
-   Until the pipeline PRs merge, a tenant gets no pre-merge verification
-   and no promote, so ArgoCD keeps the seeded tag.
+0b. **Upstream PRs: six merged (18 Oct), three open.** The app repos own
+   their pipelines — the chart does not inject them (removed in 24f3114,
+   because James iterates on the same PaC pipelines and a seed-time copy
+   would silently overwrite him). `#1` pipelines and `#2` integration
+   tests are merged in all three repos. **`#3` artifact checks is open**
+   in each ([wire-transfer-svc](https://github.com/redhat-ads-tech/wire-transfer-svc/pull/3),
+   [benefits-mgmt-app](https://github.com/redhat-ads-tech/benefits-mgmt-app/pull/3),
+   [report-generator-app](https://github.com/redhat-ads-tech/report-generator-app/pull/3)):
+   those commits were pushed after `#1` had already been merged, so they
+   never reached main.
 
 0c. **Validation table: six of eight rows are real.** Unit and integration
    tests from surefire/failsafe; binary integrity verified against the
