@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-16 (rich remediation MR body, ADR-032)
+Last updated: 2026-10-18 (MR body + deploy loop verified end to end on cd2fp)
 
 ## Where the pieces live
 
@@ -223,46 +223,19 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
-0a. **Rich remediation MR body** is implemented but **not yet merged or tested
-   on a cluster**. Agent side is
-   [lw-sdlc-opencode#5](https://github.com/rhpds/lw-sdlc-opencode/pull/5)
-   (MR body builder, `mr-validation` subcommand, TPA advisory lookup in
-   `query-tpa.yml`, both SKILL.md files); chart side is on `main`
-   (`gitlab.appSeeds[].riskClass`, `APP_RISK_METADATA`). Needs: merge the PR,
-   rebuild the image, bump the tag in all six places, then run the chain and
-   confirm the validation table flips from Pending to real results.
-   Unverified against a live TPA: the `/api/v3/vulnerability` response field
-   names (`title` / `description` / `average_severity`) were taken from
-   `publish-remediation.sh`, not observed.
+0a. **Rich remediation MR body — verified end to end on `cd2fp` (18 Oct).**
+   Nexus event -> AO -> MR titled
+   `[LW] 🔴 Bump h2 to 2.2.224.rhlw-90007 to fix CVE-2023-48795` with a filled
+   Summary (CVE linked, CVSS, 🔴 HIGH risk) and a Pending validation table ->
+   `build-pull-request` pipeline fills it with real Surefire results
+   (`5/5 tests passed`) -> merge -> `build-push-to-main` ->
+   `promote-to-deployment-repo` bumps `acme-deployment` -> ArgoCD deploys the
+   remediated image. Agent side is
+   [lw-sdlc-opencode#5](https://github.com/rhpds/lw-sdlc-opencode/pull/5),
+   **still open** — merge it, then rebuild and bump the tag in all six places.
+   App pipelines are staged in `automation/app-pipelines/` and need a PR to
+   the three `redhat-ads-tech` repos (nobody here has push access).
    → [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact)
-
-0. **EDA rulebook must pass `snow_url` / `snow_svc_url` (and friends) in
-   `job_args.extra_vars`.** Activation vars are not merged into the Start
-   Orchestrator JT — seen on `cng2l`: first Nexus→EDA fire created AO run
-   then Create SNOW failed empty URL. Fixed locally in
-   `lw-sdlc-opencode` rulebook + bake-at-publish in `bootstrap-ao-tenant`;
-   needs push to `rhpds/lw-sdlc-opencode` + chart merge. Full AO path then
-   proven: SNOW INC0023249 → TPA → classify → Impact MR !1 → Verifier →
-   merge → finalize (~2.5 min). **Follow-up (cng2l both-trigger):** Create
-   SNOW worked (baked URL) but classify/iter/finalize SNOW Comment nodes
-   still used bare `${trigger.snow_url}` → empty → fail. Fixed in
-   `bootstrap-ao-tenant` comment/finalize vars; AO **v3** republished on
-   `cng2l`.
-
-0a. **Verifier still defaults to GitLab “MR open”**
-   (`verifier_use_opencode: false`) until the ephemeral OpenCode skill is
-   fixed in the image, then flip to `true`.
-   → [ADR-025](ADR.md#adr-025--drop-legacy-gitlab-mr-resume-verifier)
-
-0b. **Demo investigation re-run (2026-10-16)** on `cluster-5trcs` /
-   `cng2l` — full snapshot in
-   [`ao-trigger-helper/docs/DEMO-FLOW-INVESTIGATION.md`](ao-trigger-helper/docs/DEMO-FLOW-INVESTIGATION.md)
-   §0/§0b. Top gaps: (1) push local AO snow-bake (`b06b131`) before Argo
-   sync or OutOfSync CM reverts Comments; (2) TPA classify mis-routes
-   flyway → wire-transfer (benefits auto-approve never loops);
-   (3) natural Nexus webhooks still absent; (4) EDA SCM hash ≠ Controller
-   playbook rev on `lw-sdlc-opencode`.
-
 1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
    paths, `existingSecret` from `ao-bootstrap`). Keep SCM on
