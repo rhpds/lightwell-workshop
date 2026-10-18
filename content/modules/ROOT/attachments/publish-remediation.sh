@@ -175,13 +175,22 @@ if [ -z "${OIDC_SECRET}" ]; then
 fi
 
 echo -n "  Acquiring token... "
-TPA_TOKEN=$(curl -sk -X POST \
+# Not piped straight into python: an unreachable Keycloak returns an empty
+# body, python raises, and set -o pipefail turns that into a bare exit 1 with
+# nothing printed -- the failure path below never gets a chance to run.
+TOKEN_RAW=$(curl -sk --max-time 60 -X POST \
   "https://${KC_HOST}/realms/sso/protocol/openid-connect/token" \
   -d "grant_type=client_credentials" \
   -d "client_id=tpa-cli" \
   -d "client_secret=${OIDC_SECRET}" \
-  -d "scope=create:document read:document" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null)
+  -d "scope=create:document read:document" || true)
+TPA_TOKEN=$(printf '%s' "${TOKEN_RAW}" | python3 -c "
+import sys, json
+try:
+    print(json.load(sys.stdin).get('access_token',''))
+except Exception:
+    print('')
+" 2>/dev/null || true)
 
 if [ -z "${TPA_TOKEN}" ]; then
   echo "FAILED"
