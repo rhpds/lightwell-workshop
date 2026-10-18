@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-18 (MR body + deploy loop verified end to end on cd2fp)
+Last updated: 2026-10-18 (full chain verified on a freshly seeded tenant)
 
 ## Where the pieces live
 
@@ -223,18 +223,15 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
-0a. **Rich remediation MR body — verified end to end on `cd2fp` (18 Oct).**
-   Nexus event -> AO -> MR titled
-   `[LW] 🔴 Bump h2 to 2.2.224.rhlw-90007 to fix CVE-2023-48795` with a filled
-   Summary (CVE linked, CVSS, 🔴 HIGH risk) and a Pending validation table ->
-   `build-pull-request` pipeline fills it with real Surefire results
-   (`5/5 tests passed`) -> merge -> `build-push-to-main` ->
-   `promote-to-deployment-repo` bumps `acme-deployment` -> ArgoCD deploys the
-   remediated image. Agent side is
-   [lw-sdlc-opencode#5](https://github.com/rhpds/lw-sdlc-opencode/pull/5),
-   **still open** — merge it, then rebuild and bump the tag in all six places.
-   App pipelines are staged in `automation/app-pipelines/` and need a PR to
-   the three `redhat-ads-tech` repos (nobody here has push access).
+0a. **Verified on a freshly seeded tenant (`54dp7`, 18 Oct).** Group deleted
+   and re-seeded from the chart, nothing applied by hand: group public,
+   `acme-deployment` public, `.tekton` pipelines and `.lightwell/policy.json`
+   (with `riskClass`) injected at seed, PaC webhook on push + merge_request.
+   Then Nexus event -> AO -> MR `!1`
+   `[LW] 🔴 Bump h2 to 2.2.224.rhlw-70003 to fix CVE-2023-48795` ->
+   `build-pull-request` filled the table (`5/5 tests passed`) -> merge ->
+   `promote-to-deployment-repo` -> ArgoCD deployed `0126b6d`, pod 1/1.
+   lw-sdlc-opencode#5 is merged and the image is `sha-7447545`.
    → [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact)
 1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
