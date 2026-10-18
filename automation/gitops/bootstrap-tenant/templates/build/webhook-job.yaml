@@ -74,7 +74,7 @@ spec:
                   -X POST "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}/hooks" \
                   -d "url=${PAC_URL}" \
                   -d "push_events=true" \
-                  -d "merge_requests_events=false" \
+                  -d "merge_requests_events=true" \
                   -d "token=${WEBHOOK_SECRET}" \
                   -d "enable_ssl_verification=false")
 
