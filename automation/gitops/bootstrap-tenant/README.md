@@ -134,7 +134,7 @@ sdlc:
   # Default (empty): OpenShift integrated registry ImageStream from bootstrap-infra
   #   image-registry.openshift-image-registry.svc:5000/lightwell-images/sdlc-opencode:<tag>
   opencodeImage: ""
-  opencodeImageTag: sha-aad125a
+  opencodeImageTag: sha-7447545
 ```
 
 ## SCM vs GitOps

@@ -81,8 +81,8 @@ opencodeImage:
   namespace: lightwell-images
   name: sdlc-opencode
   gitUrl: https://github.com/rhpds/lw-sdlc-opencode.git
-  gitRef: "6fe8264"
-  tag: sha-6fe8264
+  gitRef: "7447545"
+  tag: sha-7447545
   dockerfilePath: container/Dockerfile
   contextDir: ""
 
