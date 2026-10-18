@@ -292,6 +292,21 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Gotchas worth knowing
 
+- **An Argo `refresh=hard` annotation is not a sync.** On `cd2fp` the app
+  reported `Synced` at the right revision while still serving a stale
+  manifest; only an explicit sync operation picked up a new ConfigMap key.
+- **The EDA activation's extra_vars never reach AO-launched job templates.**
+  AO passes its own payload, so anything set only on the activation is
+  invisible. Per-app data has to travel in `.lightwell/policy.json`, which
+  classify carries into `affected_repos`.
+- **`trigger-nexus-webhook.sh` synthesises a version that is not in Nexus.**
+  Fine for exercising AO, but any build of the resulting MR dies on
+  `Could not find artifact`. To test a build or a merge, trigger with a
+  version `publish-remediation.sh` actually published.
+- **After a hibernation everything takes minutes to serve.** GitLab, Keycloak,
+  TPA and the AAP gateway all return HTTP 000 until they are ready. macOS also
+  caches the negative DNS from while the cluster was down — use `--resolve`,
+  or fire requests from inside the cluster.
 - **TPA OIDC setup Job must not be a Sync hook.** ArgoCD processes hooks
   separately from regular resources. If the OIDC Job is a hook, the RBAC
   (Roles/RoleBindings) in the same sync never gets applied before the hook
