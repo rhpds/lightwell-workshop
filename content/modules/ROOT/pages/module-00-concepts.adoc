@@ -15,6 +15,17 @@ image::lightwell-product-icon.png[Lightwell product icon: a translucent red cube
 
 That matters because the slow part of patching is rarely the patch. It is finding a fixed version you trust, or backporting one yourself, and then proving to everyone downstream that it is safe to take. Lightwell removes that step. This lab exists to show what you can build once it is gone: if a trustworthy fixed artifact simply arrives, remediation becomes plumbing — notice the new build, work out which applications use the component, raise the change, ship it. The rest of this lab automates that plumbing two different ways.
 
+=== The Network and the Clearinghouse
+
+Lightwell is offered in two forms, and both names come up in this lab:
+
+* *Lightwell Network* — self-service access to signed libraries, remediations, and patched artifacts for eligible open source vulnerabilities as they are published, served from Red Hat secured repositories and pulled into your build alongside the public repositories you already use. This is where most organisations start, and it is the part the lab exercises end to end.
+* *Lightwell Clearinghouse* — everything the Network provides, plus the ability to request remediation of a specific vulnerability or package within an agreed scope, with verification, coordinated disclosure, and dedicated Red Hat security account support. It is a selective, higher-touch engagement rather than a self-service feed.
+
+The split is worth holding on to: the Clearinghouse is about *what gets remediated for you*, the Network is *how the result reaches you*. Everything downstream of that — the merge request, the build, the deployment — is the same either way, and it is what you will spend the rest of the lab automating.
+
+Module 1 introduces the Lightwell Network as a simulated repository inside your own Nexus. From there on, every remediation you see begins as an artifact landing in it.
+
 == What is a CVE?
 
 A *CVE* (Common Vulnerabilities and Exposures) is a public identifier for one specific flaw in one specific piece of software — for example `CVE-2023-24998`, a denial-of-service in Apache Commons FileUpload. The identifier is just a label; the useful part is the metadata attached to it.

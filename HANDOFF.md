@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (Deploy finalize parent from lc_deployed)
+Last updated: 2026-10-19 (VERIFIED on 8djv7: namespace fix + auto-merge work; auto_approve merges with validation table still Pending — see Next up 000)
 
 ## Where the pieces live
 
@@ -265,6 +265,45 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
   → [ADR-017](ADR.md#adr-017--keyless-signing-via-tas--tekton-chains)
 
 ## Next up
+
+000. **FAIL-OPEN: `auto_approve` merges with every validation row still
+   `Pending`.** Verified end to end on a fresh tenant (`8djv7`, 19 Oct,
+   flyway-core → `benefits-mgmt-app`). The MR was merged **33 s after it was
+   opened**, and the PR validation pipeline did not start until **43 s after
+   the merge**:
+
+   | time (UTC) | event |
+   |---|---|
+   | 19:59:20 | `impact-analyzer` opens MR !1, all 7 rows `⏳ Pending` |
+   | 19:59:53 | AO merges it. SNOW child says *"auto-merged after the verifier passed"*, `Verifier: ok` |
+   | 19:59:54 | `build-push-to-main` starts (triggered by the merge) |
+   | 20:00:36 | `build-pull-request` **starts** — 43 s too late to matter |
+   | 20:01:21 | PR pipeline ends; nothing writes back |
+
+   The merged MR still reads `⏳ Pending / Awaiting verification` on all seven
+   rows; `updated_at` equals the merge timestamp and the only two MR notes are
+   "changed the description" and the merge commit. **The verifier never ran
+   and never wrote anything** — it reported `ok` regardless. Almost certainly
+   the known gotcha below: the OpenCode job templates start the agent
+   asynchronously and report `successful` immediately, so `verifier_ok` is
+   testing nothing.
+
+   Why it matters beyond a demo wrinkle: ADR-032 exists so a reviewer can
+   trust the table, and the `auto_approve` path now merges production code on
+   a gate that is structurally incapable of failing. Module 3 claims the
+   pipeline fills the table *before* the merge, and Module 4's "evidence
+   arrives before the reviewer does" rests on the same thing. Both are
+   currently untrue on the auto path.
+
+   Fix direction (needs a decision): `verifier_ok` has to depend on real
+   results — either the Verifier JT blocks until the PR pipeline reports and
+   `mr-validation` has written the rows, or `merge_auto` gates on the GitLab
+   commit status for `build-pull-request` the way `poll_build` already gates
+   the Merged canvas (ADR-039 solved exactly this shape of problem).
+   Fail-closed until then: no results, no auto-merge.
+   → [ADR-011](ADR.md#adr-011--prefer-fail-closed-over-fail-open),
+   [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact),
+   [ADR-041](ADR.md#adr-041--ao-merges-auto_approve-after-verifier)
 
 00ab. **~~Deploy finalize empty parent~~ (lab cng2l).** Deploy *did* fire
    (bridge `20116e7b` → lifecycle OK with `parent_incident=INC0000001`);
