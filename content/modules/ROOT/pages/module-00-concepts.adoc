@@ -127,7 +127,7 @@ You will use this path to remediate the *report-generator-app* — a low-risk in
 
 === Path 2: Full Automation — AI-Driven Remediation
 
-The enterprise path. An event-driven workflow queries RHTPA to find affected applications, dispatches AI agents to assess risk and generate merge requests, and maintains a ServiceNow ticket throughout. Low-risk changes are auto-approved; high-risk changes are flagged for human review.
+The enterprise path. An event-driven workflow queries RHTPA to find affected applications, dispatches AI coding agents running on https://opencode.ai/[OpenCode^] to write the change, and maintains a ServiceNow ticket throughout. Whether a human signs off is decided by each application's own policy file, not by the agent: low-risk applications merge automatically, high-risk ones wait for a reviewer.
 
 .Path 2: Lightwell + Automation Orchestrator + AI + ServiceNow (click to enlarge)
 [mermaid, role=expand]

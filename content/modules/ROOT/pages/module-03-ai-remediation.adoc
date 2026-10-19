@@ -194,7 +194,13 @@ IMPORTANT: The webhook fires on *component created*. Re-publishing the same grou
 
 == Watching the Orchestrator Canvas
 
-Open the https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^] and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}`, and it holds the three workflows listed earlier. Open *Lightwell Remediation — Start*.
+Open the https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^] and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}`, and it holds the three workflows listed earlier.
+
+image::m3-ao-workflows-start.png["The Automation Orchestrator workflow list, with Lightwell Remediation — Start highlighted"]
+
+Click *Lightwell Remediation — Start*, then open the *Runs* view to see the executions this remediation produced. There are three, one per workflow, and they completed at different times — Start first, then Merged, then Deploy as each webhook arrived.
+
+image::m3-ao-three-executions.png["Workflow Runs showing separate Start, Merged and Deploy executions, all Completed"]
 
 Within a few seconds of the artifact landing you should see a new execution. Watch the nodes light up in order:
 
@@ -204,10 +210,13 @@ Within a few seconds of the artifact landing you should see a new execution. Wat
 . *MR Verifier* — the merge request is checked and the validation table filled in
 . *Auto-approve?* — the branch that decides whether a human is involved at all
 
-// TODO screenshot: the Start canvas mid-run for the `benefits-mgmt-app`
-// execution, with Prepare Remediation complete and the for-each loop in
-// progress. Capture the whole canvas so the node names are legible.
-image::ao-workspace.png[The Lightwell Remediation workflows published in the tenant's Automation Orchestrator project]
+Open the *Start* run. The canvas shows the shape of the flow, and the *Run details* table underneath names each node as it completes:
+
+image::m3-ao-start-canvas.png["The Lightwell Remediation — Start canvas for a completed run, with the Run details table listing each node"]
+
+TIP: The canvas is fit to the window, so node labels are small. Use the zoom control at the bottom left to read them — zoomed in, each node shows which AAP job template it launches.
+
+image::m3-ao-canvas-detail.png["A zoomed section of an Orchestrator canvas showing node names, the job template each one runs, and green success markers"]
 
 The candidate list comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the Orchestrator will not invent an application to remediate.
 
@@ -233,10 +242,15 @@ The children are where the detail goes. Each application's loop iteration commen
 
 The comments are not just prose, either. Open one and the merge request, the pipeline run and (later) the ArgoCD application and the running route are all clickable, so the ticket is a working console rather than a transcript.
 
-// TODO screenshot: the ServiceNow mock incident detail view for the
-// `benefits-mgmt-app` child, scrolled so the opening comment and at least one
-// iteration comment are both visible in the timeline.
-image::snow-incident-list.png[ServiceNow mock showing the remediation incidents raised by the Orchestrator]
+Your two incidents are at the top of the list, both raised by *Lightwell AO*. Open the parent — the one whose description starts with *remediate*:
+
+image::m3-snow-incident-list.png["The ServiceNow incident list with the parent remediation incident highlighted"]
+
+image::m3-snow-parent-incident.png["The parent incident, showing the blast-radius classification and the child tickets it opened"]
+
+Now follow the *Child incidents* link. The child is where the per-application detail lives — the policy that applied, the merge request, and what the agent reported:
+
+image::m3-snow-child-incident.png["The child incident for benefits-mgmt-app, showing approval policy auto_approve and the expected remediation flow"]
 
 This is the part that tends to matter most to the people who sign off on automation. The audit trail is not reconstructed from git history afterwards — it is written as the work happens, by the thing doing the work. Nothing in this flow is retrofitted to look compliant.
 
@@ -277,7 +291,11 @@ The diff itself is almost boring — the same single-line `pom.xml` change Renov
 | Derived, not guessed: a failed check means do not merge; a `HIGH` or `CRITICAL` risk class means human review even when everything passes
 |===
 
-image::gitlab-ai-mr-summary.png[AI-generated merge request showing the title and Summary table]
+image::m3-mr-summary.png["The agent's merge request: title, Summary table and Vulnerability Details"]
+
+Scroll to *Automated Validation*. Every row says `Pending` — the agent opened the merge request, it did not test it. That is the honest state of a change nobody has verified yet:
+
+image::m3-mr-validation-pending.png["The Automated Validation table with every check Pending, as the agent wrote it"]
 
 NOTE: The advisory data comes from a TPA lookup, not from the model. If your TPA has no advisory for the component, the Summary reads "not referenced" and "not scored" rather than a plausible-looking number. The agent is explicitly instructed not to invent security data — a fabricated CVSS score in an audit trail is worse than a blank one.
 
@@ -316,7 +334,7 @@ Refresh the merge request after a minute or two and the table will have filled i
 | Compares the licence declared by the base POM against the remediated POM, normalised so that equivalent phrasings do not raise a false alarm
 |===
 
-image::gitlab-ai-mr-validation-table.png[Automated Validation table in the merge request, filled in by the pipeline]
+image::m3-mr-validation-filled.png["The same table after build-pull-request has run: six checks Passed, Regression scan still Pending"]
 
 IMPORTANT: Six of those eight rows are measured. *Regression scan is not implemented* and renders as `Pending` — a behavioural diff would mean running the whole suite against the target-branch baseline as well, roughly doubling build time, and that call has not been made yet. Nothing here is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all.
 
@@ -326,7 +344,11 @@ Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge reque
 
 For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the green branch to *Merge MR (auto-approved)*. The Orchestrator marks the merge request ready and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
 
-Go back to GitLab and open the merge request. It is already merged, and the merge was performed by the automation account — you never touched it.
+Go back to GitLab and open the merge request again. It is already merged, and the merge was performed by the automation account — you never touched it:
+
+image::m3-mr-auto-merged.png["The merge request now showing Merged, with the full Summary table intact"]
+
+Check the timestamps while you are there. The merge happened roughly two minutes after the request was opened, not seconds — the Orchestrator was waiting for `build-pull-request` to report before it merged.
 
 This is the volume case, and it is the whole economic argument for the platform. An internal HR application, a compatible rebuild of a library, every automated check green: there is no decision here that a person adds value to, so no person is asked. Multiply that by forty remediations a week and the time saved is not the merge click — it is the context switch that surrounds it.
 
@@ -392,11 +414,11 @@ Read that again, because it is easy to misread as a failure. The Orchestrator ha
 *The pause lives in GitLab, not in the Orchestrator.* There is no approve button on the canvas and no task in a queue waiting for you to tick it. The human gate is the merge request itself — the artifact that actually carries the evidence — rather than a prompt in an automation tool that quotes a ticket number at you.
 ====
 
-// TODO screenshot: the child SNOW incident sitting at "awaiting GitLab merge"
-// side by side with the open Draft MR in GitLab. That pair *is* the pause, and
-// no single screen shows it.
+Check ServiceNow first. The child incident for `wire-transfer-svc` records that the merge request is ready and hands the decision to you — *please review and merge in GitLab when you are satisfied; CI/CD will continue from there*:
 
-Go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you need is in one page:
+image::m3-hr-snow-awaiting-merge.png["The wire-transfer-svc child incident showing the remediation is ready for review under the needs_approval policy"]
+
+Now go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you need is in one page:
 
 * The diff — a single version bump in `pom.xml`, the upstream version unchanged
 * The CVE and its CVSS score, pulled from TPA rather than from the model
@@ -413,6 +435,24 @@ ____
 🔍 *Requires human review before merge.* A security or DevSecOps engineer should review the patch diff. Risk class *HIGH* requires review regardless of automated results.
 ____
 
+Work through the page in order:
+
+. *Read the Summary.* The CVE is a real one, linked to the Red Hat advisory, with its severity — not a number the model made up:
++
+image::m3-hr-mr-summary.png["The high-risk merge request Summary, showing a linked CVE, its CVSS severity and a HIGH Lightwell risk score"]
+
+. *Check the evidence.* Six of the seven checks passed, measured on this exact change:
++
+image::m3-hr-mr-validation.png["The Automated Validation table for wire-transfer-svc with six checks Passed and Regression scan Pending"]
+
+. *Read the verdict.* The Risk Assessment explains the exposure in plain language, and the Recommended Action states the policy outright:
++
+image::m3-hr-recommended-action.png["Risk Assessment and Recommended Action, stating that HIGH risk requires review regardless of automated results"]
+
+. *Make the call, then merge it yourself.* Scroll to the bottom of the merge request and click *Merge*:
++
+image::m3-hr-merge-button.png["The Merge button at the bottom of the merge request, highlighted"]
+
 "Regardless of automated results" is the policy in one phrase. Six checks passed; the seventh was never claimed. None of that changes the answer.
 
 When you are satisfied, merge it yourself in GitLab.
@@ -425,14 +465,24 @@ image::argocd-acme-apps-synced.png[ArgoCD showing the Acme applications synced a
 
 == Proving It in TPA
 
-Open https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] (log in via SSO with `{user}` / `{password}`), go to *SBOMs* → *All SBOMs*, and search for the two applications you just remediated.
+Open https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] and sign in through SSO with `{user}` / `{password}`. The dashboard tells you how much it is holding for this tenant, and when the last SBOM arrived — which should be the build you just watched:
 
-Each has a new SBOM uploaded by the pipeline. Compare it against the previous build the same way you did in Module 2: the vulnerable coordinate is gone, the `.rhlw` build is present, and the vulnerability count has dropped by whatever the OSV advisories for that component cover.
+image::m3-tpa-dashboard.png["The Trusted Profile Analyzer dashboard showing total SBOMs, total advisories and the most recently ingested SBOM"]
 
-// TODO screenshot: the TPA SBOM list filtered to `wire-transfer-svc`, showing
-// the pre-remediation and post-remediation SBOMs side by side with their
-// vulnerability counts.
-// (no capture yet — see the TODO above)
+In the left-hand navigation, expand *SBOMs* and choose *All SBOMs*:
+
+image::m3-tpa-sboms-nav.png["The TPA left-hand navigation with All SBOMs highlighted"]
+
+Filter on one of the applications you just remediated. Every build it has ever produced is listed, newest first — the top entry is the one the pipeline uploaded minutes ago:
+
+image::m3-tpa-sbom-list.png["The All SBOMs list filtered to benefits-mgmt-app, showing one SBOM per build with dependency and vulnerability counts"]
+
+Open the newest SBOM and the one above it and compare them the way you did in Module 2: the vulnerable coordinate is gone and the `.rhlw` build is present in its place.
+
+[NOTE]
+====
+Whether the vulnerability count actually drops depends on the component. TPA can only subtract advisories it holds, so a component with no advisory in this tenant's dataset will show the same count before and after even though the dependency genuinely changed. The SBOM contents are the reliable evidence here; the count is a convenience.
+====
 
 The verification is not a separate exercise bolted on at the end. The pipeline uploaded the SBOM as part of the build, which means the evidence for the *next* remediation is already in place. That is what makes the loop a loop.
 
