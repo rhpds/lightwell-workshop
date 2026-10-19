@@ -17,6 +17,9 @@ lightwell-demo
 lightwell-tenant-config
 kubeconfig
 *.kubeconfig
+*-kubeconfig
+fresh-tenant-tmp
+*-tenant-tmp
 openspec/
 .playwright-mcp/
 .cursor

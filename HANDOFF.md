@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (Argo ignores ConfigMap /data on live tenants — see Next up 0000; ADR-050 PR-check gate verified)
+Last updated: 2026-10-20 (TPA CVE dataset does not ingest on fresh tenants — Next up 00000; Module 3 low-risk path now commons-text)
 
 ## Where the pieces live
 
@@ -287,6 +287,28 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    `cmdb_ci`/`gitlab_path`. Deploy **v5**; reinjected; catch-up finalize
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
+
+00000. **TPA CVE dataset silently does not ingest on a fresh tenant.**
+   Both tenants on `cluster-klrql` came up with `GHSA-OSV: 285` and
+   **`CVElist-v5: 0`**, while `8gmp5` on the older cluster has 222. The
+   `tpa-dataset-upload-cve` Job reports `HTTP response code: 201` and
+   "Upload and ingestion successful" — nothing lands. Consequence: no CVE
+   records at all, so `/api/v3/vulnerability` is empty and every remediation
+   MR renders `CVE: not referenced`, which is what made Module 3 look like it
+   had no advisory data.
+
+   **Workaround (verified):** re-POST the zip by hand and it ingests in ~7s —
+   `curl -k -X POST "$TPA/api/v3/dataset?labels.importer=CVElist-v5"
+   -H "Content-Type: application/zip" -H "Authorization: Bearer $TOK"
+   --data-binary @lb1815-cve.zip` → 201 with the full file list, and the count
+   goes 285 → 507.
+
+   **Unproven hypothesis:** the CVE and OSV upload Jobs both sit at sync-wave
+   3 and POST concurrently; one appears to be accepted and dropped. Serialising
+   them (wave 3 and 4) is the obvious thing to try. Not yet tested.
+
+   Worth fixing properly — a fresh tenant is what every attendee gets, and
+   this one fails silently with a success message.
 
 0000. **Gotcha, not a task: script ConfigMap edits never reach an *existing*
    tenant.** The tenant Argo Application sets
