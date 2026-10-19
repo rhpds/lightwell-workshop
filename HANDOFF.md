@@ -288,43 +288,31 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
 
-0000. **Argo never updates ConfigMap `/data` on a live tenant — script changes
-   silently do not land.** The tenant Application carries
-   `ignoreDifferences: [{jsonPointers: ["/data"], kind: ConfigMap}]` (listed
-   twice). That rule is in **neither** this repo nor agnosticv — it is set by
-   the RHDP side that creates the Application. Consequence: every file-backed
-   script ConfigMap is frozen at tenant-creation content for the life of the
-   tenant, while Argo reports `Synced` throughout. Affects
-   `cicd-eda-bridge/configmap.yaml`, `snow/configmap-code.yaml`,
-   `snow/configmap-static.yaml`, `nexus/scripts-configmap.yaml`,
-   `eda/scripts-configmap.yaml`, `ao/scripts-configmap.yaml`,
-   `sdlc/opencode-ui-gate.yaml`.
+0000. **Gotcha, not a task: script ConfigMap edits never reach an *existing*
+   tenant.** The tenant Argo Application sets
+   `ignoreDifferences: [{jsonPointers: ["/data"], kind: ConfigMap}]` — a rule
+   from the RHDP side, in neither this repo nor agnosticv. File-backed script
+   ConfigMaps are frozen at creation-time content while Argo reports
+   `Synced`. Affects `bridge.py`, `snow-mock` code/static,
+   `nexus-reconcile.py`, eda/ao bootstrap sources, `opencode-ui-gate`.
 
-   **How it bit us (19 Oct, `8djv7`):** Shaaf's ADR-049 promote-scoping landed
-   in `bridge.py`, Argo said Synced, and the live ConfigMap was still the old
-   401-line file (repo: 493). The bridge kept fanning Deploy out to every AO
-   path, so `wire-transfer-svc` — MR still open, never merged, never built —
-   collected three "Application deployed" comments and its parent INC was
-   Resolved. Directly contradicts Module 3's human-review story.
+   **Not a lab problem:** every attendee gets a newly ordered tenant, and
+   creation is not a diff — a fresh order always has current content. This
+   only bites a lab developer reusing one tenant across chart changes.
 
-   **Unblocked by hand on `8djv7`:** applied the current `bridge.py` with
-   `oc create configmap --dry-run=client | oc apply -f -`, restarted the
-   Deployment, re-ran the flow. Now correct:
-   `promote parse: title='promote benefits-mgmt-app to …' → paths=['acme-8djv7/benefits-mgmt-app']`
-   and `argo_app_health for 1 path(s)`.
-
-   **Scope:** a *freshly ordered* tenant renders current content, so the
-   shipped lab is fine. This bites iteration on a live tenant — which is most
-   of our debugging, and it fails silently.
-
-   **Fix options:** (a) hash-suffix the script ConfigMap names
-   (`cicd-eda-bridge-<sha8>`) so a content change creates a *new* object,
-   which `ignoreDifferences` does not block, and the Deployment referencing
-   it rolls automatically — self-contained in this chart; (b) get the RHDP
-   side to drop the `/data` rule, which is the real repair but not ours;
-   (c) keep hand-patching, which is what we have been doing without knowing.
-   Recommend (a) now and (b) raised with whoever owns the Application
-   template.
+   **Workaround when it does bite** (a plain sync will not do it, hard
+   refresh or not):
+   ```
+   oc create configmap <name> -n <ns> --from-file=<key>=<path> \
+     --dry-run=client -o yaml | oc apply -f -
+   oc rollout restart deploy/<name> -n <ns>
+   ```
+   How it surfaced: Shaaf's ADR-049 promote-scoping looked broken on `8djv7`
+   when his code was fine — the tenant was running a 401-line `bridge.py`
+   against 493 in the repo, so `wire-transfer-svc` (never merged) was marked
+   deployed three times. Patched by hand on both `8djv7` and `8gmp5`.
+   Decided **not** to engineer around it.
+   → [ADR-051](ADR.md#adr-051--script-configmap-edits-do-not-reach-an-existing-tenant-accepted)
 
 000. **FIXED (pending PR merge + AO republish): `auto_approve` merged with
    the validation table still `Pending`.** On `8djv7`, AO merged the MR ~33 s
