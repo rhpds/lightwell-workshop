@@ -18,7 +18,7 @@ data:
   GITLAB_URL: {{ include "bootstrap-tenant.gitlabHost" . | quote }}
   REMEDIATION_APP_GITLAB_PATH: {{ include "bootstrap-tenant.demoProjectPath" . | quote }}
   NEXUS_NAMESPACE: {{ include "bootstrap-tenant.nexusNamespace" . | quote }}
-  NEXUS_WEBHOOK_REPOSITORIES: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
+  NEXUS_WEBHOOK_REPOSITORIES: {{ include "bootstrap-tenant.nexusWebhookRepos" . | quote }}
   EDA_WEBHOOK_URL: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
   EDA_WEBHOOK_ROUTE_URL: {{ include "bootstrap-tenant.edaWebhookRouteUrl" . | quote }}
   GITLAB_WEBHOOK_TARGET_URL: {{ include "bootstrap-tenant.gitlabWebhookTargetUrl" . | quote }}
@@ -63,6 +63,6 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 data:
-  NEXUS_WEBHOOK_REPOSITORIES: {{ printf "%s,%s" (include "bootstrap-tenant.nexusRepoValidated" .) (include "bootstrap-tenant.nexusRepoRemediated" .) | quote }}
+  NEXUS_WEBHOOK_REPOSITORIES: {{ include "bootstrap-tenant.nexusWebhookRepos" . | quote }}
   EDA_WEBHOOK_URL: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
   SKIP_WEBHOOK_SETUP: {{ if .Values.sdlc.enabled }}"false"{{ else }}"true"{{ end }}

@@ -42,6 +42,25 @@
 {{- .Values.nexus.repoRemediated | default (printf "redhat-packages-remediated-%s" .Values.guid) -}}
 {{- end -}}
 
+{{/*
+Repositories the Nexus webhook fires from.
+
+Both the hosted Lightwell repos and the Lightwell Network proxies. The
+hosted pair is where publish-remediation.sh actually uploads, and they are
+created unconditionally by nexus-reconcile; the proxies only exist when
+nexus.lightwellNetwork is populated, and nexus-reconcile drops any it could
+not create before registering webhooks.
+
+Listing only the proxies -- which is what this used to do -- meant a tenant
+without Lightwell credentials got no webhook at all, so publishing a
+remediation fired nothing and the whole agentic path had no entry point.
+*/}}
+{{- define "bootstrap-tenant.nexusWebhookRepos" -}}
+{{- printf "lightwell-validated,lightwell-remediated,%s,%s"
+      (include "bootstrap-tenant.nexusRepoValidated" .)
+      (include "bootstrap-tenant.nexusRepoRemediated" .) -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.edaProjectName" -}}
 {{- .Values.sdlc.projectName | default (printf "SDLC %s" .Values.guid) -}}
 {{- end -}}
