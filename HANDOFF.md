@@ -295,12 +295,24 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    arrives before the reviewer does" rests on the same thing. Both are
    currently untrue on the auto path.
 
-   Fix direction (needs a decision): `verifier_ok` has to depend on real
-   results — either the Verifier JT blocks until the PR pipeline reports and
-   `mr-validation` has written the rows, or `merge_auto` gates on the GitLab
-   commit status for `build-pull-request` the way `poll_build` already gates
-   the Merged canvas (ADR-039 solved exactly this shape of problem).
-   Fail-closed until then: no results, no auto-merge.
+   **Narrowed by a second run (h2 → `wire-transfer-svc`, same tenant).** The
+   table filling is *not* broken. `build-pull-request` fills it and does so
+   correctly — the `needs_approval` MR came out with 6 of 7 rows ✅ Passed
+   (Regression `Pending` by design, ADR-032), risk class 🔴 HIGH, and a
+   Recommended Action of "Requires human review before merge … regardless of
+   automated results". It was left open, unmerged. That path is sound.
+
+   The whole defect is a **race on the auto path**: the table takes ~110 s
+   from MR creation to be filled, and AO merges at ~33 s.
+
+   **Fix (one change, no decision really needed): gate `merge_auto` on the
+   GitLab commit status `Pipelines as Code CI / build-pull-request` for the
+   MR head SHA.** Confirmed present and `success` on both MRs. This makes the
+   gate real *and* guarantees the table is filled before the merge, because
+   the thing being waited on is the thing that fills it. Reuses
+   `poll-build-status.yml` from ADR-039 — same mechanism, different context
+   name, polling the MR head instead of `merge_commit_sha`. Costs ~90 s on
+   the Start run. Fail-closed if the status is missing.
    → [ADR-011](ADR.md#adr-011--prefer-fail-closed-over-fail-open),
    [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact),
    [ADR-041](ADR.md#adr-041--ao-merges-auto_approve-after-verifier)

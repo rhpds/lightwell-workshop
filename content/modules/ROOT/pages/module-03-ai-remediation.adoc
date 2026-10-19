@@ -406,7 +406,14 @@ Go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you
 
 Read that last point again, because it is the whole argument. Every automated check passed. The platform still refused to merge it. The policy says that on a system that moves customer money a person signs off even on a change that looks perfect, and the platform is not allowed to talk itself out of that — not even with a full table of green ticks to point at.
 
-Note also what the merge request is still marked as: *Draft*. The same verifier that marked the `benefits-mgmt-app` request ready left this one in Draft on purpose, because its risk class demands a reviewer. The state of the merge request is itself part of the policy.
+Note the *Recommended Action* block at the bottom. For `benefits-mgmt-app` it said the change was safe to take. Here it reads:
+
+[quote]
+____
+🔍 *Requires human review before merge.* A security or DevSecOps engineer should review the patch diff. Risk class *HIGH* requires review regardless of automated results.
+____
+
+"Regardless of automated results" is the policy in one phrase. Six checks passed; the seventh was never claimed. None of that changes the answer.
 
 When you are satisfied, merge it yourself in GitLab.
 
@@ -466,7 +473,7 @@ You have just run the *Full Automation* path end to end:
 . The `impact-analyzer` agent opened a merge request carrying CVE data, risk class and a validation table
 . The `build-pull-request` pipeline tested the change and wrote the real results back into that table
 . `benefits-mgmt-app` was auto-approved and merged by the Orchestrator, without you
-. `wire-transfer-svc` passed every check, stayed in Draft, and waited for you to merge it in GitLab
+. `wire-transfer-svc` passed every check, and its merge request still said human review was required, so it waited for you to merge it in GitLab
 . Both were built, signed, promoted and deployed by the same pipeline and ArgoCD
 . The parent incident resolved once ArgoCD reported the deployment Healthy, carrying a complete, timestamped trail
 
