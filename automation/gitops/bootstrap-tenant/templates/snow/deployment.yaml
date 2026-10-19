@@ -45,6 +45,12 @@ spec:
           containerPort: 8080
           protocol: TCP
         env:
+        # Incidents live in memory. AO keeps executions open far longer than
+        # this pod lives, so without somewhere to write them a restart
+        # re-issues the seeded numbers and every later comment or finalize
+        # against an older incident 404s mid-demo.
+        - name: SNOW_STATE_FILE
+          value: /data/state.json
         - name: DEMO_USER_NAME
           value: {{ ((.Values.snow | default dict).demoUserName) | default "Demo User" | quote }}
         readinessProbe:
@@ -68,6 +74,8 @@ spec:
             memory: 512Mi
         {{- if not ((.Values.snow | default dict).image) }}
         volumeMounts:
+        - name: state
+          mountPath: /data
         - name: code
           mountPath: /opt/app/app.py
           subPath: app.py
@@ -79,6 +87,9 @@ spec:
         {{- end }}
       {{- if not ((.Values.snow | default dict).image) }}
       volumes:
+      - name: state
+        persistentVolumeClaim:
+          claimName: snow-mock-state
       - name: code
         configMap:
           name: snow-mock-code

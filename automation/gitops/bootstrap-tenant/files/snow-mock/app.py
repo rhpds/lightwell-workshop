@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, send_from_directory
 import os
+import json
 import datetime
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -651,6 +652,49 @@ def get_next_number(prefix, db_keys):
 comments_db = {}
 _comment_seq = 0
 
+# --- Persistence -----------------------------------------------------------
+# Incidents live in memory, which is fine until the pod restarts. The
+# Automation Orchestrator keeps executions open for far longer than this
+# process lives: after a restart the seeded numbers are re-issued and every
+# comment or finalize against an older incident fails with "Incident not
+# found", which is what breaks the ticket lifecycle mid-demo.
+#
+# Best effort by design: if STATE_FILE is unset or unwritable the mock still
+# runs exactly as before, just without surviving a restart.
+STATE_FILE = os.environ.get("SNOW_STATE_FILE", "")
+
+
+def _persist():
+    if not STATE_FILE:
+        return
+    try:
+        tmp = STATE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump({"incidents": incidents_db,
+                       "comments": comments_db,
+                       "comment_seq": _comment_seq}, f)
+        os.replace(tmp, STATE_FILE)  # atomic, so a crash cannot truncate it
+    except OSError as exc:
+        app.logger.warning("could not persist state to %s: %s", STATE_FILE, exc)
+
+
+def _restore():
+    global _comment_seq
+    if not STATE_FILE or not os.path.exists(STATE_FILE):
+        return
+    try:
+        with open(STATE_FILE) as f:
+            saved = json.load(f)
+    except (OSError, ValueError) as exc:
+        app.logger.warning("ignoring unreadable state file %s: %s", STATE_FILE, exc)
+        return
+    # Saved state wins over the seed data: the seeds are only there to make a
+    # fresh tenant look populated.
+    incidents_db.update(saved.get("incidents") or {})
+    comments_db.update(saved.get("comments") or {})
+    _comment_seq = max(_comment_seq, int(saved.get("comment_seq") or 0))
+    app.logger.info("restored %d incidents from %s", len(incidents_db), STATE_FILE)
+
 
 def _next_comment_id():
     global _comment_seq
@@ -674,7 +718,12 @@ def _append_comment(incident_number, body, created_by="api_user", comment_type="
     if key in incidents_db:
         incidents_db[key]["updated_on"] = now_iso
         incidents_db[key]["updated_by"] = created_by
+    _persist()
     return comment
+
+
+# Load any state left by a previous pod before serving.
+_restore()
 
 
 # --- Frontend ---
@@ -885,6 +934,7 @@ def create_incident():
 
     incidents_db[new_number] = new_incident
     comments_db[new_number] = []
+    _persist()
 
     # Optional initial comment on create (e.g. remediation context)
     initial = request.json.get("comment") or request.json.get("additional_comments")
@@ -935,6 +985,7 @@ def update_incident(incident_number):
         inc.setdefault("resolution_code", "Solved")
         inc.setdefault("resolved_by", "api_user_resolve")
 
+    _persist()
     result = dict(inc)
     result["comments"] = list(comments_db.get(key, []))
     return jsonify({"result": result})
