@@ -664,6 +664,22 @@ def start_workflow_definition(
         "guid": "${trigger.guid}",
         "validate_certs": False,
     }
+    # ADR-049: gate auto_approve on the pull-request pipeline before merging.
+    # AO merges ~33s after the MR opens; build-pull-request does not finish
+    # filling the validation table until ~110s, so without this the auto path
+    # merges with every row still Pending and the gate cannot fail. Waiting on
+    # the PR check also guarantees the table is populated, because it is the
+    # same pipeline that writes it. No continue_on_failure: a check that is
+    # not green must leave the MR open rather than merge it.
+    poll_pr_vars = {
+        **merge_vars,
+        "build_status_context": "build-pull-request",
+        "watch_mr_head": True,
+        # Generous: on a cold cluster Tekton pulls images before the first
+        # build starts. A tight budget would fail a slow-but-healthy run.
+        "build_poll_retries": 60,
+        "build_poll_delay": 10,
+    }
     parent_awaiting_vars = {
         "snow_url": trigger_common["snow_url"],
         "snow_svc_url": trigger_common["snow_svc_url"],
@@ -762,6 +778,15 @@ def start_workflow_definition(
                 },
             },
             _aap_jt_node(
+                "poll_pr_checks",
+                "Poll PR checks",
+                JT_POLL_BUILD,
+                aap_org,
+                aap_credential_id,
+                poll_pr_vars,
+                integration_id=aap_integration_id,
+            ),
+            _aap_jt_node(
                 "merge_auto",
                 "Merge GitLab MR (auto_approve)",
                 JT_MERGE,
@@ -842,9 +867,13 @@ def start_workflow_definition(
             {"from": "verifier_ok", "to": "snow_iter_fail", "from_port": "false"},
             {
                 "from": "approval_auto",
-                "to": "merge_auto",
+                "to": "poll_pr_checks",
                 "from_port": "true",
             },
+            # ADR-049: no merge until the PR pipeline reports green. The node
+            # has no continue_on_failure, so a failed or absent check ends the
+            # run with the MR still open — fail-closed.
+            {"from": "poll_pr_checks", "to": "merge_auto"},
             {
                 "from": "approval_auto",
                 "to": "snow_iter_mr_ready",

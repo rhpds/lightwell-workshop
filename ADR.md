@@ -519,6 +519,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) Finalize node vars use `${lc_deployed.artifacts.parent_incident}`. (2) Lifecycle/finalize `set_stats` never export `""` (AAP drops empty strings so AO cannot read the property). (3) Finalize playbook can re-resolve parent via `cmdb_ci`/`gitlab_path` when the var is missing. |
 | **Consequences** | Deploy ends Resolved on the parent after Healthy. Lab: Deploy **v5** + playbook inject on `cng2l`. Push `lw-sdlc-opencode` for SCM durability. |
 
+## ADR-049 — Gate `auto_approve` merges on the pull-request check
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | AO waits for `build-pull-request` before auto-merging |
+| **Context** | Verified on tenant `8djv7`. ADR-041 restored AO merge for `auto_approve`, but `verifier_ok` only asserts the Verifier *job template* returned successful — and the OpenCode JTs start the agent asynchronously and report success immediately (known gotcha). Measured: MR opened 19:59:20, AO merged it 19:59:53 (~33 s), `build-pull-request` did not start until 20:00:36 and finished 20:01:21. The merged MR still showed all seven validation rows `⏳ Pending`, `updated_at` equal to the merge timestamp, and no verifier note. SNOW nonetheless recorded "auto-merged after the verifier passed". The second scenario (h2 → `wire-transfer-svc`) proved the table filling itself is sound — 6/7 ✅ Passed, risk class 🔴 HIGH, "Requires human review before merge" — so this is purely a race on the auto path, not a broken verifier output. |
+| **Decision** | Insert one node, `Poll PR checks` (`SDLC Poll Build Status`), between `approval_auto`-true and `merge_auto`, with `build_status_context: build-pull-request` and `watch_mr_head: true`. It carries **no** `continue_on_failure`: a check that is not green ends the run with the MR still open. `poll-build-status.yml` gains those two optional vars, both defaulted so the Merged canvas is unchanged, and skips its default-branch fallback when `watch_mr_head` is set — pre-merge, `main`'s last build may be a stale `success` that would wave the MR through. Poll budget 60 × 10 s. |
+| **Consequences** | The auto path can now fail, and the validation table is populated before the merge because the pipeline being waited on is the one that writes it. Start runs ~90 s longer for `auto_approve` apps. A failed or absent check ends the execution Failed with no SNOW comment explaining it — accepted deliberately: this lab only demonstrates the happy path, and a second condition node plus a "withheld" SNOW comment is the upgrade if the failure path ever needs to be shown. The generous budget matters because Tekton pulls images on a cold cluster before the first build starts; a tight timeout would fail a slow-but-healthy run mid-demo. Needs `lw-sdlc-opencode` PR #7 merged, then an AO republish. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -568,6 +578,7 @@ Copy and fill for each new decision:
 | Merged+Build poll PaC (retire Build WF) | ADR-039 |
 | Start prep = one JT (Prepare Remediation) | ADR-040 |
 | AO merges auto_approve after Verifier | ADR-041 |
+| Gate auto_approve merges on the PR check | ADR-049 |
 | SNOW comments with MR / pipeline URLs | ADR-042 |
 | OpenCode session deep links + summary | ADR-043 |
 | snow-mock comment Markdown + autolink | ADR-044 |

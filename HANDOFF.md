@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (VERIFIED on 8djv7: namespace fix + auto-merge work; auto_approve merges with validation table still Pending — see Next up 000)
+Last updated: 2026-10-19 (ADR-049 gates auto_approve on the PR check; needs lw-sdlc-opencode PR #7 + AO republish)
 
 ## Where the pieces live
 
@@ -266,124 +266,41 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
-000. **FAIL-OPEN: `auto_approve` merges with every validation row still
-   `Pending`.** Verified end to end on a fresh tenant (`8djv7`, 19 Oct,
-   flyway-core → `benefits-mgmt-app`). The MR was merged **33 s after it was
-   opened**, and the PR validation pipeline did not start until **43 s after
-   the merge**:
+000. **FIXED (pending merge + republish): `auto_approve` merged with the
+   validation table still `Pending`.** Found on tenant `8djv7`: AO merged the
+   MR ~33 s after it opened, while `build-pull-request` — the pipeline that
+   fills the table — did not start until 43 s *after* the merge. The merged
+   MR showed all seven rows `⏳ Pending`, and SNOW still said "auto-merged
+   after the verifier passed". `verifier_ok` only checks that the Verifier
+   job template returned successful, and the OpenCode JTs report success the
+   moment they launch the async agent (see the gotcha below), so the gate
+   could not fail.
 
-   | time (UTC) | event |
-   |---|---|
-   | 19:59:20 | `impact-analyzer` opens MR !1, all 7 rows `⏳ Pending` |
-   | 19:59:53 | AO merges it. SNOW child says *"auto-merged after the verifier passed"*, `Verifier: ok` |
-   | 19:59:54 | `build-push-to-main` starts (triggered by the merge) |
-   | 20:00:36 | `build-pull-request` **starts** — 43 s too late to matter |
-   | 20:01:21 | PR pipeline ends; nothing writes back |
+   The second scenario (h2 → `wire-transfer-svc`) cleared the table logic:
+   that MR came out 6/7 ✅ Passed, risk class 🔴 HIGH, "Requires human review
+   before merge … regardless of automated results", and was correctly left
+   open. So it was only ever a race on the auto path.
 
-   The merged MR still reads `⏳ Pending / Awaiting verification` on all seven
-   rows; `updated_at` equals the merge timestamp and the only two MR notes are
-   "changed the description" and the merge commit. **The verifier never ran
-   and never wrote anything** — it reported `ok` regardless. Almost certainly
-   the known gotcha below: the OpenCode job templates start the agent
-   asynchronously and report `successful` immediately, so `verifier_ok` is
-   testing nothing.
+   **Fix:** one `Poll PR checks` node between `approval_auto`-true and
+   `merge_auto`, watching commit status `Pipelines as Code CI /
+   build-pull-request` on the MR head. No `continue_on_failure` — a check
+   that is not green leaves the MR open. Waiting on that pipeline also
+   guarantees the table is filled, since it is the same pipeline.
 
-   Why it matters beyond a demo wrinkle: ADR-032 exists so a reviewer can
-   trust the table, and the `auto_approve` path now merges production code on
-   a gate that is structurally incapable of failing. Module 3 claims the
-   pipeline fills the table *before* the merge, and Module 4's "evidence
-   arrives before the reviewer does" rests on the same thing. Both are
-   currently untrue on the auto path.
+   **To land:** `lw-sdlc-opencode`
+   [PR #7](https://github.com/rhpds/lw-sdlc-opencode/pull/7) must merge
+   (adds `build_status_context` + `watch_mr_head` to
+   `poll-build-status.yml`, both defaulted so Merged is unaffected), then AO
+   needs a republish. Then re-run both scenarios and confirm the auto-merged
+   MR shows a filled table.
+   → [ADR-049](ADR.md#adr-049--gate-auto_approve-merges-on-the-pull-request-check)
 
-   **Narrowed by a second run (h2 → `wire-transfer-svc`, same tenant).** The
-   table filling is *not* broken. `build-pull-request` fills it and does so
-   correctly — the `needs_approval` MR came out with 6 of 7 rows ✅ Passed
-   (Regression `Pending` by design, ADR-032), risk class 🔴 HIGH, and a
-   Recommended Action of "Requires human review before merge … regardless of
-   automated results". It was left open, unmerged. That path is sound.
-
-   The whole defect is a **race on the auto path**: the table takes ~110 s
-   from MR creation to be filled, and AO merges at ~33 s.
-
-   **Fix (one change, no decision really needed): gate `merge_auto` on the
-   GitLab commit status `Pipelines as Code CI / build-pull-request` for the
-   MR head SHA.** Confirmed present and `success` on both MRs. This makes the
-   gate real *and* guarantees the table is filled before the merge, because
-   the thing being waited on is the thing that fills it. Reuses
-   `poll-build-status.yml` from ADR-039 — same mechanism, different context
-   name, polling the MR head instead of `merge_commit_sha`. Costs ~90 s on
-   the Start run. Fail-closed if the status is missing.
-   → [ADR-011](ADR.md#adr-011--prefer-fail-closed-over-fail-open),
-   [ADR-032](ADR.md#adr-032--remediation-mr-body-as-the-review-artifact),
-   [ADR-041](ADR.md#adr-041--ao-merges-auto_approve-after-verifier)
-
-00ab. **~~Deploy finalize empty parent~~ (lab cng2l).** Deploy *did* fire
-   (bridge `20116e7b` → lifecycle OK with `parent_incident=INC0000001`);
-   finalize failed because Deploy EDA has no `trigger.parent_incident`.
-   Fix: finalize ← `${lc_deployed.artifacts.parent_incident}`; lifecycle
-   never exports `""` (AAP drops it); finalize also looks up by
-   `cmdb_ci`/`gitlab_path`. Deploy **v5**; reinjected; catch-up finalize
-   **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
-
-00aa. **~~AO `completed_with_errors` on Start/Merged/Deploy~~ (lab cng2l).**
-   Root cause: AO fails when `${…}` keys are **absent** (AAP drops `""`
-   `set_stats`; GitLab/EDA omit `merge_commit_sha`). Fixes: Impact always
-   exports `n/a` for OpenCode summary fields; lifecycle resolves SHA from MR;
-   canvas drops required `trigger.merge_commit_sha`. Finalize parent wiring
-   corrected in **00ab** (was wrongly pointed at `trigger.parent_incident`).
-   Merged **v6** / Deploy **v5**.
-
-00z. **Parked: OpenCode as ITSM journal writer.** Evaluate later — rewrite
-   every AO SNOW comment via a tool-light agent. Prefer hybrid (templates
-   for status ticks; LLM only when Impact/Verifier narrative exists) once
-   Start/Merged/Deploy are solid end-to-end. Do not implement yet.
-
-00y. **~~Deploy missed after promote~~ → ADR-045 (live on cng2l).** Bridge
-   deploy key is now `{sync}/{health}@{rev}`. Restart catch-up POSTed
-   `argo_app_health` → AO Deploy / SNOW lifecycle for benefits (+ wire
-   fan-out). Next promote should fire without a restart.
-   → [ADR-045](ADR.md#adr-045--deploy-bridge-signal-keyed-by-argo-revision)
-
-00x. **~~Deploy SNOW deep links~~ → ADR-046 (lab on cng2l).** Child deploy
-   comments → Argo; finalize → Route + console project (+ Argo). Deploy
-   **v3**; playbooks injected. Next Deploy run shows the links.
-   → [ADR-046](ADR.md#adr-046--deploy-snow-comments-link-argo--route--console)
-
-00w. **~~Rich SNOW INC descriptions~~ (lab on cng2l).** Parent/child create
-   playbooks emit Markdown; Description panel uses the comment MD renderer.
-   Sample on INC0000003 — hard-refresh snow-mock. Next Start shows full shape.
-
-00v. **~~Parent INC = top-level status only~~ → ADR-047 (lab on cng2l).**
-   Parent comments = brief workflow finish + **[open child]** links; detail
-   on children. JT `SDLC SNOW Parent Status` (#25); Start **v8** / Merged
-   **v5** / Deploy **v3**; playbooks re-injected; project #7 `scm_clean=false`
-   so injects stick. Smoke OK on INC0000002. Still push `lw-sdlc-opencode`.
-   → [ADR-047](ADR.md#adr-047--parent-inc-holds-top-level-status-only)
-
-00. **~~auto_approve auto-merge~~ → ADR-041.** After Verifier pass, Start
-   conditions on `loop.item.approval`: `auto_approve` → JT Merge GitLab MR;
-   `needs_approval` → SNOW `awaiting_merge` (MR stays open). No Approval
-   gates. Unblock Module 3 “low-risk merges itself” copy against this.
-   → [ADR-041](ADR.md#adr-041--ao-merges-auto_approve-after-verifier)
-
-0z. **~~SNOW comments with MR / pipeline URLs~~ → ADR-042 (lab inject on
-   cng2l).** Iteration + lifecycle headlines + MR URL + PaC `build_url`.
-   Start **v6** / Merged **v4**; playbooks injected into AAP project #7.
-   Still push `lw-sdlc-opencode` for SCM durability.
-   → [ADR-042](ADR.md#adr-042--meaningful-snow-comments-with-mr--pipeline-urls)
-
-0y. **~~OpenCode deep link + agent summary~~ → ADR-043 (lab inject on
-   cng2l).** Impact idle → `/session/{id}/message` summary in AAP stdout +
-   SNOW; UI `…/global/session/{id}`. Start **v7** (`OPENCODE_UI_URL` baked).
-   Still push `lw-sdlc-opencode` for SCM durability.
-   → [ADR-043](ADR.md#adr-043--opencode-session-deep-links--summary-in-aapsnow)
-
-0x. **~~snow-mock Markdown + autolink~~ → ADR-044 (live on cng2l).**
-   Activity renders headings, lists, bold/italic/code, links. Duplicate
-   “Work notes list” panel removed (comments only under Activities).
-   Iteration/lifecycle playbooks emit Markdown. Sample comment posted if
-   an INC exists after wipe — refresh the snow-mock UI.
-   → [ADR-044](ADR.md#adr-044--snow-mock-comment-markdown--autolink)
+000a. **Idea (Natale): pre-pull Tekton images with a DaemonSet.** The PR
+   pipeline took 45 s to run but did not start until ~76 s after the MR
+   opened — cold-cluster image pulls. That is why the poll budget above is
+   10 minutes rather than tight. A prepuller DaemonSet on the build images
+   would cut first-build latency for every student, not just this gate, and
+   would make the Module 3 timings predictable enough to write down.
 
 0a. **Remediation MR body — verified end to end on a freshly seeded tenant
    (`54dp7`, 18 Oct).** Seed -> Nexus event -> AO -> MR
