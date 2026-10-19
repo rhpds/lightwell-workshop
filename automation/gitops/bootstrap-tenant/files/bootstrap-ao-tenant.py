@@ -666,6 +666,21 @@ def start_workflow_definition(
         # Demo pacing — leave the MR open briefly before AO merges (ADR-041).
         "merge_delay_seconds": 120,
     }
+    # ADR-049: gate auto_approve on the pull-request pipeline before merging.
+    # Measured on 8djv7: AO merged ~33s after the MR opened, while
+    # build-pull-request (the pipeline that fills the validation table) did
+    # not start until 43s AFTER the merge — so the auto path merged with every
+    # row still Pending and the gate could not fail. Waiting on that check
+    # also guarantees the table is populated, since it is the same pipeline.
+    # No continue_on_failure: a check that is not green leaves the MR open.
+    poll_pr_vars = {
+        **{k: v for k, v in merge_vars.items() if k != "merge_delay_seconds"},
+        "build_status_context": "build-pull-request",
+        "watch_mr_head": True,
+        # Generous: a cold cluster pulls Tekton images before the first build.
+        "build_poll_retries": 60,
+        "build_poll_delay": 10,
+    }
     parent_awaiting_vars = {
         "snow_url": trigger_common["snow_url"],
         "snow_svc_url": trigger_common["snow_svc_url"],
@@ -764,6 +779,15 @@ def start_workflow_definition(
                 },
             },
             _aap_jt_node(
+                "poll_pr_checks",
+                "Poll PR checks",
+                JT_POLL_BUILD,
+                aap_org,
+                aap_credential_id,
+                poll_pr_vars,
+                integration_id=aap_integration_id,
+            ),
+            _aap_jt_node(
                 "merge_auto",
                 "Wait 2m + merge GitLab MR (auto_approve)",
                 JT_MERGE,
@@ -844,9 +868,11 @@ def start_workflow_definition(
             {"from": "verifier_ok", "to": "snow_iter_fail", "from_port": "false"},
             {
                 "from": "approval_auto",
-                "to": "merge_auto",
+                "to": "poll_pr_checks",
                 "from_port": "true",
             },
+            # ADR-049: no merge until the PR pipeline reports green.
+            {"from": "poll_pr_checks", "to": "merge_auto"},
             {
                 "from": "approval_auto",
                 "to": "snow_iter_mr_ready",
