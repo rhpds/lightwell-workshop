@@ -28,7 +28,7 @@ Also: [HANDOFF.md](../../HANDOFF.md), [ADR.md](../../ADR.md), Showroom under
 | AO | Project `lightwell-cng2l`; Start / Merged(+build poll) / Deploy (ADR-039); start path `lightwell-remediation-start-cng2l` |
 | EDA | Activation running; rulebook `sdlc-remediation.yml` (AO bridge only — no MR-open → Resume) |
 | Nexus | Hosted `lightwell-remediated` / `lightwell-validated` + `oci`; LW Network proxies/webhooks often **missing** (empty creds) |
-| Path 2 entry | Use [`trigger-nexus-webhook.sh`](../trigger-nexus-webhook.sh) to POST a Nexus-shaped `CREATED` to the EDA route (bypasses Nexus upload) |
+| Path 2 entry | [`publish-remediation.sh`](../publish-remediation.sh) → Nexus → EDA → AO (`trigger-nexus-webhook.sh` is **testing only**) |
 | Path 2 E2E | Proven 2026-10-16: SNOW → TPA → classify → Impact → Verifier → merge → finalize (0 failed JTs after AO v3 snow URL bake) |
 
 Older snapshots (`t8s2n` / `62b79`, infra-only `j88nz`) live in
@@ -49,7 +49,7 @@ The lab is **two paths that share CI/CD and diverge on who creates the MR**:
 
 | Stage | Path 1 | Path 2 |
 |-------|--------|--------|
-| Trigger | Upload `.rhlw` → Renovate poll | `.rhlw` webhook → **EDA → AO** (or `trigger-nexus-webhook.sh`) |
+| Trigger | Upload `.rhlw` → Renovate poll | `publish-remediation.sh` → Nexus webhook → **EDA → AO** |
 | Who finds apps | Renovate on one repo’s `pom.xml` | **TPA SBOM query** → classify by `.lightwell/policy.json` |
 | Who writes the fix | Renovate Bot | **OpenCode** Impact Analyzer |
 | Approval | Always you | `auto_approve` (benefits) / **`needs_approval`** (wire-transfer) |
@@ -70,14 +70,17 @@ The lab is **two paths that share CI/CD and diverge on who creates the MR**:
 
 | Script | Purpose |
 |--------|---------|
-| [`trigger-nexus-webhook.sh`](../trigger-nexus-webhook.sh) | POST Nexus-shaped `CREATED` to EDA for `needs-approval` (h2) and/or `auto-approve` (flyway-core) |
+| [`publish-remediation.sh`](../publish-remediation.sh) | Upload `.rhlw` to Nexus (+ TPA advisories) — **demo / e2e entry** |
 | [`reset-demo-repos.sh`](../reset-demo-repos.sh) | Re-seed `acme-<guid>/*` from GitHub + policies; close MRs; delete `update-artifact-*` branches |
+| [`trigger-nexus-webhook.sh`](../trigger-nexus-webhook.sh) | **Testing only** — synthetic EDA POST (skip for demos) |
 
 ```bash
 cd ao-trigger-helper
 ./reset-demo-repos.sh cng2l
-./trigger-nexus-webhook.sh cng2l needs-approval --watch
-# or: ./trigger-nexus-webhook.sh cng2l both --watch
+export GUID=cng2l
+./publish-remediation.sh com.h2database:h2:2.2.224 "rhlw-$(date +%H%M%S)" "H2"
+# or flyway for auto_approve:
+# ./publish-remediation.sh org.flywaydb:flyway-core:4.1.2 "rhlw-$(date +%H%M%S)" "Flyway"
 ```
 
 ---
@@ -120,7 +123,7 @@ there is no Resume Orchestrator on MR open.
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Trigger as Nexus or<br/>trigger-nexus-webhook.sh
+  participant Trigger as publish-remediation.sh<br/>→ Nexus webhook
   participant EDA as EDA<br/>sdlc-remediation-{guid}
   participant AAP as AAP Controller<br/>org user-{guid}
   participant AO as Automation Orchestrator<br/>lightwell-{guid}
@@ -192,9 +195,9 @@ Trigger → EDA → Start Orchestrator → AO
 
 ## Notes / gotchas that affect demos
 
-- **Path 2 entry without Nexus webhooks:** use
-  [`trigger-nexus-webhook.sh`](../trigger-nexus-webhook.sh). Production story is
-  still Nexus `component CREATED`.
+- **Path 2 entry:** [`publish-remediation.sh`](../publish-remediation.sh) only.
+  `trigger-nexus-webhook.sh` is testing/debug when Nexus→EDA is broken — not
+  for demos.
 - **Reset between demos:** [`reset-demo-repos.sh`](../reset-demo-repos.sh) so
   Impact does not short-circuit as `already_current` on an already-bumped pom.
 - **Classify = TPA only:** do not invent apps; multi-app demos need SBOM

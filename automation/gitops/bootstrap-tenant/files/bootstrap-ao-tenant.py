@@ -553,7 +553,8 @@ def _lifecycle_common() -> dict:
         "guid": "${trigger.guid}",
         "gitlab_path": "${trigger.gitlab_path}",
         "merge_request_iid": "${trigger.merge_request_iid}",
-        "merge_commit_sha": "${trigger.merge_commit_sha}",
+        # Omit merge_commit_sha — often absent on trigger (AO property error).
+        # Poll-build resolves SHA from MR; Deploy never needs it.
         "project_id": "${trigger.project_id}",
         "gitlab_url": gitlab_url if gitlab_url else "${trigger.gitlab_url}",
         "gitlab_token": gitlab_token if gitlab_token else "${trigger.gitlab_token}",
@@ -874,7 +875,6 @@ def merged_workflow_definition(
         "gitlab_token": lc["gitlab_token"],
         "gitlab_path": "${trigger.gitlab_path}",
         "merge_request_iid": "${trigger.merge_request_iid}",
-        "merge_commit_sha": "${trigger.merge_commit_sha}",
         "project_id": "${trigger.project_id}",
         "guid": "${trigger.guid}",
         "validate_certs": False,
@@ -885,7 +885,6 @@ def merged_workflow_definition(
         "status": "${poll_build.artifacts.status}",
         "build_url": "${poll_build.artifacts.build_url}",
         "signal_source": "ao_poll_gitlab_pac",
-        "merge_commit_sha": "${poll_build.artifacts.merge_commit_sha}",
     }
     return {
         "name": WF_MERGED,
@@ -972,6 +971,8 @@ def deploy_workflow_definition(
     finalize_vars = {
         "snow_url": lc["snow_url"],
         "snow_svc_url": lc["snow_svc_url"],
+        # Deploy EDA payload has no parent — lc_deployed looks up by gitlab_path
+        # and exports it (must be non-empty; AAP drops "").
         "parent_incident": "${lc_deployed.artifacts.parent_incident}",
         "snow_incident": "${lc_deployed.artifacts.parent_incident}",
         "guid": "${trigger.guid}",
@@ -982,7 +983,6 @@ def deploy_workflow_definition(
         "openshift_console_url": lc["openshift_console_url"],
         "apps_namespace": lc["apps_namespace"],
         "apps_domain": lc["apps_domain"],
-        # Body built in snow-finalize.yml (Markdown + Route/console/Argo links).
     }
     return {
         "name": WF_DEPLOY,

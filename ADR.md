@@ -340,7 +340,7 @@ Copy and fill for each new decision:
 | **Date** | 2026-10-16 |
 | **Title** | Repo-local script to fire Path 2 (AO) via EDA without Nexus upload |
 | **Context** | Demo / operator smoke needs a repeatable way to start the multi-app AO canvas for both approval policies. Real Nexus webhooks are often missing (empty Lightwell Network creds) and a cached GAV cannot re-fire. Showroom `inject-remediation.sh` uploads to Nexus for Renovate (Path 1), not EDA. |
-| **Decision** | Keep an AO Path 2 operator helper under [`ao-trigger-helper/`](ao-trigger-helper/): (1) `trigger-nexus-webhook.sh` POSTs a Nexus-shaped `action=CREATED` body to the tenant EDA route (discovered from `tenant-integration` / Route). Two cases map to Acme policies — `needs-approval` → `com.h2database:h2` / wire-transfer; `auto-approve` → `org.flywaydb:flyway-core` / benefits — with unique `.rhlw-HHMMSS` versions. (2) `reset-demo-repos.sh` re-seeds `acme-<guid>/*` from the upstream GitHub sources (same as `create-gitlab-tenant`), re-injects `.lightwell/policy.json`, force-pushes `main`, and cleans open MRs / `update-artifact-*` branches. (3) AO-context docs in [`ao-trigger-helper/docs/`](ao-trigger-helper/docs/): `DEMO-FLOW.md` (intended Path 2 narrative), `architecture.md` (per-tenant wiring), `DEMO-FLOW-INVESTIGATION.md` (dated live vs chart snapshot). Entry: [`ao-trigger-helper/README.md`](ao-trigger-helper/README.md). |
+| **Decision** | Keep an AO Path 2 operator helper under [`ao-trigger-helper/`](ao-trigger-helper/): (1) **Demo entry** = `publish-remediation.sh` (Nexus upload → real webhook → EDA → AO). (2) `trigger-nexus-webhook.sh` is **testing only** (synthetic `CREATED` when Nexus→EDA is broken). (3) `reset-demo-repos.sh` re-seeds `acme-<guid>/*` from GitHub + `.lightwell/policy.json`. (4) Docs in [`ao-trigger-helper/docs/`](ao-trigger-helper/docs/). Entry: [`ao-trigger-helper/README.md`](ao-trigger-helper/README.md). |
 | **Consequences** | Operators can demo AO without seeding Nexus and reset GitLab apps between runs without re-provisioning the tenant. Docs stay with the helper so Path 2 wiring / investigation are not confused with Showroom or Path 1. Auto-approve still depends on TPA SBOM coverage for the chosen GAV (override `AUTO_APPROVE_GAV` if needed). Scripts are not student Showroom content; Path 1 keeps using `inject-remediation.sh`. Upstream GitHub repos are never modified. |
 
 ## ADR-032 — Remediation MR body as the review artifact
@@ -509,6 +509,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) JT `SDLC SNOW Parent Status` + shared task posts a short headline/plain body + **[open child]** links. (2) Start canvas ends with that JT after `apps_loop` complete. (3) Lifecycle (`merged`/`build_*`/`deploy*`) posts the same brief parent rollup after the child comment. (4) Finalize only PATCHes parent to Resolved — no detail comment. (5) Create-children posts one “Child tickets opened” status with all new child links. |
 | **Consequences** | Parent thread = event milestones; child thread = operator detail. Lab: inject playbooks, create JT, republish Start/Merged/Deploy. Push `lw-sdlc-opencode` for SCM durability. |
 
+## ADR-048 — Deploy finalize reads parent from lifecycle artifacts
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Deploy finalize uses `lc_deployed.artifacts.parent_incident`, not the EDA trigger |
+| **Context** | Bridge/EDA `argo_app_health` payloads carry `gitlab_path` but not SNOW INC numbers. Lifecycle looked up the child and exported `parent_incident`, yet Deploy finalize was wired to `${trigger.parent_incident}` (always empty) → AO `completed_with_errors` after a successful Deploy signal. |
+| **Decision** | (1) Finalize node vars use `${lc_deployed.artifacts.parent_incident}`. (2) Lifecycle/finalize `set_stats` never export `""` (AAP drops empty strings so AO cannot read the property). (3) Finalize playbook can re-resolve parent via `cmdb_ci`/`gitlab_path` when the var is missing. |
+| **Consequences** | Deploy ends Resolved on the parent after Healthy. Lab: Deploy **v5** + playbook inject on `cng2l`. Push `lw-sdlc-opencode` for SCM durability. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -564,3 +574,4 @@ Copy and fill for each new decision:
 | Deploy bridge signal keyed by Argo revision | ADR-045 |
 | Deploy SNOW comments link Argo / Route / console | ADR-046 |
 | Parent INC = top-level status + child links only | ADR-047 |
+| Deploy finalize parent from lifecycle artifacts | ADR-048 |

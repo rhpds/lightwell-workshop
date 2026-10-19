@@ -32,30 +32,32 @@ re-probe, and keep DEMO-FLOW / architecture aligned when the canvas changes.
 - Kube context with access to `lightwell-tenant-<guid>` / GitLab root PAT
 - Tenant already bootstrapped (`eda-bootstrap` / AO path enabled)
 
-## Trigger AO
+## Start a remediation (demo path)
+
+**Use `publish-remediation.sh`.** It uploads the `.rhlw` artifact to Nexus (and
+TPA advisories when CVEs exist). Nexus → EDA → AO is the real path.
 
 ```bash
 cd ao-trigger-helper
+export GUID=<guid>   # required when oc whoami is not user-<guid>
 
-# Human-gated app (wire-transfer-svc → needs_approval)
-./trigger-nexus-webhook.sh <guid> needs-approval
+# Human-gated (wire-transfer-svc → needs_approval)
+./publish-remediation.sh com.h2database:h2:2.2.224 "rhlw-$(date +%H%M%S)" "H2"
 
-# Auto-merge app (benefits-mgmt-app → auto_approve)
-./trigger-nexus-webhook.sh <guid> auto-approve
-
-# Both, sequentially (~90s pause between)
-./trigger-nexus-webhook.sh <guid> both --watch
+# Auto-merge (benefits-mgmt-app → auto_approve)
+./publish-remediation.sh org.flywaydb:flyway-core:4.1.2 "rhlw-$(date +%H%M%S)" "Flyway"
 ```
 
-| Case | Default GAV | Expected app / policy |
-|------|-------------|------------------------|
-| `needs-approval` | `com.h2database:h2:2.2.224` | `acme-<guid>/wire-transfer-svc` / `needs_approval` |
-| `auto-approve` | `org.flywaydb:flyway-core:4.1.2` | `acme-<guid>/benefits-mgmt-app` / `auto_approve` |
+| GAV | Expected app / policy |
+|-----|------------------------|
+| `com.h2database:h2:2.2.224` | `acme-<guid>/wire-transfer-svc` / `needs_approval` |
+| `org.flywaydb:flyway-core:4.1.2` | `acme-<guid>/benefits-mgmt-app` / `auto_approve` |
 
-Useful flags: `--dry-run`, `--watch`, `--version <full.rhlw-…>`.
+### Testing only — do not use for demos
 
-Overrides: `EDA_WEBHOOK_ROUTE_URL`, `NEEDS_APPROVAL_GAV`, `AUTO_APPROVE_GAV`
-(`group:artifact:baseVersion`).
+`trigger-nexus-webhook.sh` POSTs a synthetic Nexus `CREATED` body straight at
+EDA (bypasses upload). Keep it for lab/debug when Nexus webhooks are missing;
+**do not** use it for operator demos or e2e “real path” runs.
 
 ## Signal CI/CD lifecycle (after merge)
 
@@ -92,10 +94,9 @@ from the upstream GitHub sources (same as tenant bootstrap), re-injects
 
 ## Notes
 
-- Each trigger stamps a unique `.rhlw-HHMMSS` so Impact does not treat the fix
-  as `already_current` after a prior merge — still reset repos between demos
+- Stamp a unique `rhlw-*` suffix on each publish so Impact does not treat the
+  fix as `already_current` after a prior merge — still reset repos between demos
   so students see a real pom bump.
-- Do not fire within ~1 minute of a tenant Argo sync (EDA activation restart).
-- Auto-approve only loops benefits if TPA’s SBOM lists that GAV; otherwise
-  override `AUTO_APPROVE_GAV` or seed the SBOM.
-- Trigger bypasses Nexus upload; production path is artifact → Nexus webhook → EDA.
+- Do not publish within ~1 minute of a tenant Argo sync (EDA activation restart).
+- Auto-approve only loops benefits if TPA’s SBOM lists that GAV.
+- Demo path: `publish-remediation.sh` → Nexus webhook → EDA → AO.

@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (merged upstream/main; Module 3 auto_approve rewrite)
+Last updated: 2026-10-19 (Deploy finalize parent from lc_deployed)
 
 ## Where the pieces live
 
@@ -266,6 +266,22 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
+00ab. **~~Deploy finalize empty parent~~ (lab cng2l).** Deploy *did* fire
+   (bridge `20116e7b` → lifecycle OK with `parent_incident=INC0000001`);
+   finalize failed because Deploy EDA has no `trigger.parent_incident`.
+   Fix: finalize ← `${lc_deployed.artifacts.parent_incident}`; lifecycle
+   never exports `""` (AAP drops it); finalize also looks up by
+   `cmdb_ci`/`gitlab_path`. Deploy **v5**; reinjected; catch-up finalize
+   **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
+
+00aa. **~~AO `completed_with_errors` on Start/Merged/Deploy~~ (lab cng2l).**
+   Root cause: AO fails when `${…}` keys are **absent** (AAP drops `""`
+   `set_stats`; GitLab/EDA omit `merge_commit_sha`). Fixes: Impact always
+   exports `n/a` for OpenCode summary fields; lifecycle resolves SHA from MR;
+   canvas drops required `trigger.merge_commit_sha`. Finalize parent wiring
+   corrected in **00ab** (was wrongly pointed at `trigger.parent_incident`).
+   Merged **v6** / Deploy **v5**.
+
 00z. **Parked: OpenCode as ITSM journal writer.** Evaluate later — rewrite
    every AO SNOW comment via a tool-light agent. Prefer hybrid (templates
    for status ticks; LLM only when Impact/Verifier narrative exists) once
@@ -467,6 +483,10 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
   AO passes its own payload, so anything set only on the activation is
   invisible. Per-app data has to travel in `.lightwell/policy.json`, which
   classify carries into `affected_repos`.
+- **Demo Path 2 entry = `publish-remediation.sh` only.** Do **not** use
+  `trigger-nexus-webhook.sh` for demos/e2e — testing/debug when Nexus→EDA
+  webhooks are missing. Real path: publish → Nexus CREATED webhook → EDA → AO.
+
 - **`trigger-nexus-webhook.sh` synthesises a version that is not in Nexus.**
   Fine for exercising AO, but any build of the resulting MR dies on
   `Could not find artifact`. To test a build or a merge, trigger with a
