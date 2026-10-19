@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (ADR-043 OpenCode session summary)
+Last updated: 2026-10-19 (snow-mock Markdown comments)
 
 ## Where the pieces live
 
@@ -283,6 +283,12 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    SNOW; UI `…/global/session/{id}`. Start **v7** (`OPENCODE_UI_URL` baked).
    Still push `lw-sdlc-opencode` for SCM durability.
    → [ADR-043](ADR.md#adr-043--opencode-session-deep-links--summary-in-aapsnow)
+
+0x. **~~snow-mock Markdown + autolink~~ → ADR-044 (live on cng2l).**
+   Activity/Work notes render headings, lists, bold/italic/code, links.
+   Iteration/lifecycle playbooks emit Markdown. Sample comment posted if
+   an INC exists after wipe — refresh the snow-mock UI.
+   → [ADR-044](ADR.md#adr-044--snow-mock-comment-markdown--autolink)
 
 0a. **Remediation MR body — verified end to end on a freshly seeded tenant
    (`54dp7`, 18 Oct).** Seed -> Nexus event -> AO -> MR

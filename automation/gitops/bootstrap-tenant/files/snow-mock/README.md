@@ -33,3 +33,16 @@ Example lifecycle lookup:
 
 Aliases accepted on POST: `body`, `text`, `comment`, `value`, `work_notes`, `additional_comments`.
 `POST /api/v1/incidents` accepts optional `guid` (stored on the record for list filter).
+
+## Comment UI (Markdown + autolink)
+
+Bodies are stored as plain text. The SPA renders a **small Markdown subset**
+(escape-first — raw HTML in `body` is never executed):
+
+- Headings `#` / `##` / `###`
+- Bullet / numbered lists
+- Horizontal rules (`---`)
+- `**bold**`, `*italic*`, `` `code` ``
+- `[label](https://…)` and bare `http(s)://…` autolinks (new tab)
+
+Use this for AO remediation comments so Activity / Work notes look readable.

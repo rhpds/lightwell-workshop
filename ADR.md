@@ -468,6 +468,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) Bake `OPENCODE_UI_URL` (`https://opencode-ui-sdlc-{guid}.{domain}`) into Start nodes. (2) Task `opencode-session-summary.yml` after idle: fetch session + messages, summarize last assistant text (`files/opencode_session_summary.py`), log to AAP stdout, export `opencode_session_ui_url` (`…/global/session/{id}`), title, summary. (3) Iteration SNOW comments include OpenCode link + truncated summary; lifecycle keeps pipeline URL. |
 | **Consequences** | Demo path: click OpenCode from the child INC; AAP Impact job Output shows the same summary. Transcripts still die on OpenCode pod restart. |
 
+## ADR-044 — snow-mock comment Markdown + autolink
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Render journal comments with a safe Markdown subset in the mock UI |
+| **Context** | ADR-042/043 put URLs and agent summaries into comments, but the SPA escaped everything as plain `pre-wrap` text. |
+| **Decision** | Client-side escape-first renderer: headings, lists, `hr`, bold/italic/code, `[label](https://…)`, bare `http(s)` autolinks (`target=_blank`). No raw HTML. AO comment playbooks emit that Markdown. |
+| **Consequences** | Activity feed is readable in demos; XSS surface stays closed. Roll `snow-mock-static` ConfigMap on existing tenants. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -519,3 +529,4 @@ Copy and fill for each new decision:
 | AO merges auto_approve after Verifier | ADR-041 |
 | SNOW comments with MR / pipeline URLs | ADR-042 |
 | OpenCode session deep links + summary | ADR-043 |
+| snow-mock comment Markdown + autolink | ADR-044 |
