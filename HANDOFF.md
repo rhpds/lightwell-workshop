@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (argo-notifications-eda namespace fix; three failed tenant orders recovered)
+Last updated: 2026-10-19 (Module 3 SNOW bookends; auto-merge decision pending — see Next up 00)
 
 ## Where the pieces live
 
@@ -265,6 +265,25 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
   → [ADR-017](ADR.md#adr-017--keyless-signing-via-tas--tekton-chains)
 
 ## Next up
+
+00. **DECISION NEEDED (Shaaf): does `auto_approve` still auto-merge?**
+   ADR-035 removed every AO Approval node *and* the AO merge job template,
+   so today **nothing merges on its own** — `gitlab_api.py mr-merge` exists
+   but no playbook or rulebook calls it (checked at `lw-sdlc-opencode`
+   `9d7affa`). Both `benefits-mgmt-app` and `wire-transfer-svc` wait for a
+   student merge in GitLab; `approval` only changes what the MR *says*
+   (undrafted + "safe to merge" vs. Draft + "human review required").
+   Was losing auto-merge intended, or a side effect of killing the Approval
+   nodes? Module 3 is meant to contrast *full automation* (low risk) against
+   *human-in-the-loop* (wire transfer), and that contrast is currently flat.
+   Two ways out: (a) `mr-verifier` calls `mr-merge` when
+   `approval == auto_approve` and every check passed — small, the CLI
+   command is already there; or (b) keep it manual and rewrite Module 3
+   around "rubber-stamp vs. read it carefully". **Module 3 sections are
+   marked BLOCKED in the adoc pending this** — the canvas diagram, "The
+   Low-Risk Application Merges Itself", "The Judgement Call" and two Summary
+   bullets all still describe the ADR-033/034 flow.
+   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes)
 
 0a. **Remediation MR body — verified end to end on a freshly seeded tenant
    (`54dp7`, 18 Oct).** Seed -> Nexus event -> AO -> MR
