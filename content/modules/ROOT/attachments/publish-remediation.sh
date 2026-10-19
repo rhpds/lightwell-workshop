@@ -111,10 +111,31 @@ if curl -sfk --max-time 120 -o "${JAR_FILE}" "${UPSTREAM_JAR}" && [ -s "${JAR_FI
   # Stamp it so the remediated build is distinguishable from the original.
   printf 'Lightwell-Remediation: %s\nLightwell-Base-Version: %s\n' \
     "${RHLW_VERSION}" "${BASE_VERSION}" > /tmp/lw-remediation.txt
-  python3 - "${JAR_FILE}" <<'PYEOF' || true
-import sys, zipfile
-with zipfile.ZipFile(sys.argv[1], "a") as z:
-    z.write("/tmp/lw-remediation.txt", "META-INF/lightwell-remediation.txt")
+  python3 - "${JAR_FILE}" "${GROUP_ID}" "${ARTIFACT_ID}" "${RHLW_VERSION}" <<'PYEOF' || true
+import sys, zipfile, io
+jar_path, group_id, artifact_id, rhlw_version = sys.argv[1:5]
+props_path = f"META-INF/maven/{group_id}/{artifact_id}/pom.properties"
+with zipfile.ZipFile(jar_path, "r") as zin:
+    entries = {i.filename: zin.read(i) for i in zin.infolist()}
+# Update pom.properties to reflect the rhlw version
+if props_path in entries:
+    old = entries[props_path].decode("utf-8", "replace")
+    new = "\n".join(
+        f"version={rhlw_version}" if line.startswith("version=") else line
+        for line in old.splitlines()
+    ) + "\n"
+    entries[props_path] = new.encode("utf-8")
+# Also update the embedded pom.xml if present
+pom_path = f"META-INF/maven/{group_id}/{artifact_id}/pom.xml"
+if pom_path in entries:
+    old = entries[pom_path].decode("utf-8", "replace")
+    import re
+    new = re.sub(r"<version>[^<]+</version>", f"<version>{rhlw_version}</version>", old, count=1)
+    entries[pom_path] = new.encode("utf-8")
+entries["META-INF/lightwell-remediation.txt"] = open("/tmp/lw-remediation.txt", "rb").read()
+with zipfile.ZipFile(jar_path, "w", zipfile.ZIP_DEFLATED) as zout:
+    for name, data in entries.items():
+        zout.writestr(name, data)
 PYEOF
 else
   # No upstream jar to rebuild from. Fall back to a placeholder, but say so:
