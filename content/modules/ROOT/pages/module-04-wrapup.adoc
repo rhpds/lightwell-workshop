@@ -33,7 +33,7 @@ You have now used both approaches to automating CVE remediation with Red Hat Lig
 
 | *ITSM integration*
 | None
-| ServiceNow parent incident per event, a child per affected application, commented at every stage
+| ServiceNow parent incident per event holding milestones, a child per affected application holding the detail and the deep links
 
 | *Best for*
 | Getting started; small portfolios; teams without Ansible

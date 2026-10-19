@@ -58,18 +58,33 @@ The back half of both paths is the same. Path 2 only replaces *who decides what 
 
 == The Orchestrated Pipeline
 
-Event-Driven Ansible is deliberately thin here. It is a sensor: it recognises the `.rhlw` artifact event and launches one job template, `SDLC Start Orchestrator`, which posts to the Automation Orchestrator webhook. Everything after that is a node on the Orchestrator canvas, which means the whole flow is visible in one place and every step is recorded as it runs.
+Event-Driven Ansible is deliberately thin here. It is a sensor: it recognises the `.rhlw` artifact event and launches a job template, which posts to an Automation Orchestrator webhook. Everything after that is a node on an Orchestrator canvas, recorded as it runs.
 
-.Path 2: the Automation Orchestrator canvas
+Your project contains *three* workflows, not one, and the split is the first thing worth understanding:
+
+[cols="1,3",options="header"]
+|===
+| Workflow | Runs when
+
+| *Lightwell Remediation — Start*
+| Nexus publishes a remediated artifact. Ends when the merge requests are ready.
+
+| *— Merged*
+| A merge request is merged — by you or by the Orchestrator. Follows the build through.
+
+| *— Deploy*
+| ArgoCD reports the application healthy. Closes the incident out.
+|===
+
+They are separate because the Orchestrator cannot pause a run and resume it on an outside event. Rather than hold a job open for the hours a human review might take, each stage is its own short execution, woken by a webhook. The ServiceNow incident is what ties them back into one story.
+
+.Start: from artifact to reviewable merge request
 [mermaid]
 ----
 flowchart TD
   NX["Nexus<br/>component CREATED"]
   EDA["Event-Driven Ansible<br/>(sensor only)"]
-  SN1["Create parent<br/>SNOW incident"]
-  TPA["Query TPA<br/>which SBOMs contain this component?"]
-  CL["Classify affected apps<br/>reads .lightwell/policy.json"]
-  SN2["Create child incidents<br/>one per affected app"]
+  PREP["Prepare Remediation<br/>SNOW parent · query TPA · classify · child incidents"]
   LOOP{{"For each affected app"}}
   IMP["Impact Analyzer<br/>AI agent opens the MR"]
   VER["MR Verifier"]
@@ -77,7 +92,7 @@ flowchart TD
   AUTO["Merge MR<br/>(auto-approved)"]
   WAIT["SNOW — awaiting<br/>GitLab merge"]
   HUMAN(["Human merges<br/>in GitLab"])
-  NX --> EDA --> SN1 --> TPA --> CL --> SN2 --> LOOP
+  NX --> EDA --> PREP --> LOOP
   LOOP --> IMP --> VER --> APPR
   APPR -->|auto_approve| AUTO
   APPR -->|needs_approval| WAIT -.-> HUMAN
@@ -86,26 +101,31 @@ flowchart TD
   style IMP fill:#cfe2ff,stroke:#0d6efd,stroke-width:2px
 ----
 
-The merge — by the Orchestrator or by you — is where Path 2 rejoins Path 1. From there both applications follow exactly the same route, and the Orchestrator picks each stage up again as a webhook arrives:
+All the preparation — opening the parent incident, asking TPA which applications contain the component, classifying each against its policy, raising a child incident per application — is a single *Prepare Remediation* node. It is one Ansible job running several plays, so the canvas shows you the decision points rather than the plumbing.
 
-.After the merge: three short webhook-driven runs
+The merge — by the Orchestrator or by you — is where Path 2 rejoins Path 1:
+
+.Merged and Deploy: two more short runs
 [mermaid]
 ----
 flowchart LR
   MG(["MR merged<br/>(AO or human)"])
-  LC1["AO: SNOW — MR merged"]
-  PIPE["Tekton build-push-to-main<br/>build, SBOM, sign, push, promote"]
-  LC2["AO: SNOW — build succeeded"]
+  LC1["Merged: SNOW — MR merged"]
+  POLL["Poll Build Status<br/>watches PaC commit status"]
+  PIPE["Tekton build-push-to-main<br/>build · SBOM · sign · push · promote"]
+  LC2["SNOW — build succeeded"]
   ARGO["ArgoCD syncs<br/>new imageTag"]
-  LC3["AO: SNOW — deploy Healthy"]
-  FIN["AO: SNOW finalize<br/>parent Resolved"]
-  MG --> LC1
-  MG --> PIPE --> LC2
+  LC3["Deploy: SNOW — deploy Healthy"]
+  FIN["SNOW finalize<br/>parent Resolved"]
+  MG --> LC1 --> POLL
+  MG --> PIPE
+  PIPE -.commit status.-> POLL
+  POLL --> LC2
   PIPE --> ARGO --> LC3 --> FIN
   style FIN fill:#d1e7dd,stroke:#146c43
 ----
 
-Each of those is a *separate* Orchestrator execution, started by an Event-Driven Ansible webhook rather than by waiting around. The first run ends as soon as the merge requests are ready; nothing sits idle holding a job open for the hours a human might take.
+The *Merged* workflow does not get a webhook when the build finishes — Tekton does not send one. Instead it polls the GitLab commit status that Pipelines-as-Code already mirrors from the PipelineRun. That is why one Merged execution can run for several minutes: it is watching your build.
 
 NOTE: The `report-generator-app` you remediated in Module 2 never enters this loop. Its policy marks Renovate as the remediation owner, so the classify step records it and skips it. Two tools, one portfolio, no collisions.
 
@@ -174,20 +194,20 @@ IMPORTANT: The webhook fires on *component created*. Re-publishing the same grou
 
 == Watching the Orchestrator Canvas
 
-Open the https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^] and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}` and the workflow is called *Lightwell Remediation*.
+Open the https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^] and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}`, and it holds the three workflows listed earlier. Open *Lightwell Remediation — Start*.
 
 Within a few seconds of the artifact landing you should see a new execution. Watch the nodes light up in order:
 
-. *Create SNOW incident* — the ticket exists before any change is proposed, not after
-. *Query TPA* — the component is looked up against every SBOM TPA holds for your applications
-. *Classify affected apps* — each returned repository is matched to its `.lightwell/policy.json`
-. *SNOW classify comment* — the incident records what was found and who owns each fix
-. *Remediate AO apps* — a for-each loop over the applications the Orchestrator owns
+. *Prepare Remediation* — one job that opens the parent incident, queries TPA, classifies each returned repository against its `.lightwell/policy.json`, and raises a child incident per affected application
+. *For each affected app* — a loop over the applications the Orchestrator owns
+. *Impact Analyzer* — the agent opens the merge request
+. *MR Verifier* — the merge request is checked and the validation table filled in
+. *Auto-approve?* — the branch that decides whether a human is involved at all
 
-// TODO screenshot: the AO canvas mid-run for the `benefits-mgmt-app` execution,
-// with the incident, TPA and classify nodes already complete and the for-each
-// loop in progress. Capture the whole canvas so the node names are legible.
-image::ao-workspace.png[The Lightwell Remediation workflow published in the tenant's Automation Orchestrator project]
+// TODO screenshot: the Start canvas mid-run for the `benefits-mgmt-app`
+// execution, with Prepare Remediation complete and the for-each loop in
+// progress. Capture the whole canvas so the node names are legible.
+image::ao-workspace.png[The Lightwell Remediation workflows published in the tenant's Automation Orchestrator project]
 
 The candidate list comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the Orchestrator will not invent an application to remediate.
 
@@ -199,7 +219,7 @@ The candidate list comes from TPA and nowhere else. If TPA has no SBOM containin
 
 == The Incident Opens Before the Change Does
 
-Look at the order of the nodes again. *Create parent SNOW incident* is the first thing on the canvas — before TPA is queried, before anything is classified, before a single line of anyone's `pom.xml` is read. The platform raises the ticket and then does the work, which is the opposite of how most automation behaves.
+Look at the order again. Opening the parent incident is the *first* thing *Prepare Remediation* does — before TPA is queried, before anything is classified, before a single line of anyone's `pom.xml` is read. The platform raises the ticket and then does the work, which is the opposite of how most automation behaves.
 
 Switch to the https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow mock^] (no login required). Your incident is at the top of the list, with the most recent state.
 
@@ -208,7 +228,9 @@ What you are looking at is a small hierarchy, not one ticket:
 * A *parent* incident for the remediation event itself — one artifact, one Lightwell publication, one thread to follow.
 * A *child* incident per affected application, created straight after classify, once the Orchestrator knows which applications are genuinely in scope.
 
-The children are where the detail goes. Each application's loop iteration comments on its own child as it completes — merge request opened, verifier passed, awaiting merge — so two applications remediated from one event do not interleave their history into a single unreadable timeline. The parent carries the event-level story: what was published, what TPA found, who owns each fix.
+The children are where the detail goes. Each application's loop iteration comments on its own child as it completes — merge request opened, verifier passed, awaiting merge — so two applications remediated from one event do not interleave their history into a single unreadable timeline. The parent gets short milestone notes with links down into the children, and nothing else. An operator reads the parent to find out *where things are*, and opens a child to find out *what happened*.
+
+The comments are not just prose, either. Open one and the merge request, the pipeline run and (later) the ArgoCD application and the running route are all clickable, so the ticket is a working console rather than a transcript.
 
 // TODO screenshot: the ServiceNow mock incident detail view for the
 // `benefits-mgmt-app` child, scrolled so the opening comment and at least one
@@ -411,20 +433,21 @@ The verification is not a separate exercise bolted on at the end. The pipeline u
 
 Go back to the https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow mock^] tab you left open.
 
-The parent incident is now *Resolved*, and the comment that resolved it is a rollup: what was published, which child incidents were raised, and where the per-application detail lives. Read the whole thread from the top. It is the complete history of the remediation, written as it happened:
+The parent incident is now *Resolved*. Read its thread from the top — it is deliberately short, a sequence of milestones with links down into the children:
 
 . The incident was raised the moment Nexus announced the artifact — before anything was known about who was affected
-. TPA's answer was recorded: which applications actually contain the component
-. A child incident was opened for each one, and the classify result named who owns each fix
-. Each child collected its own iteration comments as the agent worked
-. Merge, build and deploy were each written in as they completed
-. The parent resolved only once ArgoCD reported the application Healthy
+. Child tickets were opened, one per application TPA said was genuinely affected
+. Each application reached a reviewable merge request
+. Merge, build and deploy were each noted as they landed
+. The parent moved to *Resolved* once ArgoCD reported the application Healthy
 
-Notice what resolved it. Not the merge, and not a green pipeline — the *deploy*. On the canvas, `SNOW finalize` hangs off the deploy branch, so the ticket stays open until the remediated code is actually running. A build that passes and never ships does not close anything.
+Now open a child. That is where the work actually is: the merge request link, the CVE, the verifier outcome, the pipeline run, the ArgoCD application and the route the fixed code is now serving on. The parent tells an operator where things stand; the child tells them what happened.
 
-That is also why the Orchestrator shows you several executions rather than one long-running job. The start execution ends when the merge requests are ready; merge, build and deploy each arrive later as webhooks and start their own short execution. The incident is what stitches them back into a single story — which is precisely the job a ticket is supposed to do.
+Notice what resolved it. Not the merge, and not a green pipeline — the *deploy*. `SNOW finalize` only runs in the Deploy workflow, so the ticket stays open until the remediated code is actually running. A build that passes and never ships does not close anything.
 
-NOTE: The child incidents stay open. Only the parent is resolved today; per-application close on deploy success has not been wired up yet. If you are demonstrating this to an auditor, show them the parent.
+That is also why three workflows rather than one long-running job. The Start run ends when the merge requests are ready; merge and deploy arrive later as webhooks and start their own short executions. The incident is what stitches them back into a single story — which is precisely the job a ticket is supposed to do.
+
+NOTE: The child incidents stay open. Only the parent is resolved today; per-application close on deploy success is not wired up. If you are demonstrating this to an auditor, show them the parent and let them click down.
 
 [TIP]
 ====
