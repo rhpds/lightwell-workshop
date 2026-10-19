@@ -239,7 +239,7 @@ Scroll down and click _Merge_ to approve the merge request and update the source
 
 == Watching the Pipeline
 
-Merging the MR triggers a Tekton CI pipeline run. Switch to the OpenShift Console (login with `{user}` and `{password}` if needed) and navigate to *Pipelines* and click the *PipelineRuns* tab, and ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details.
+Merging the MR triggers a Tekton CI pipeline run. Switch to the OpenShift Console (login with `{user}` and `{password}` if needed) and expand the left-side navigation menu, then navigate to *Pipelines* → *Pipelines* and click the *PipelineRuns* tab. Ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details.
 
 image::pipeline-run-renovate.png[Tekton pipeline building the remediated app]
 
@@ -261,7 +261,7 @@ Click *SBOMs* → *All SBOMs* in the left navigation, then type `report-generato
 
 image::tpa-sbom-comparison.png[TPA showing both SBOMs with reduced vulnerability count after remediation]
 
-That is the Lightwell value in one screenshot: the same application, the same upstream version of `jackson-databind`, but the remediated `.rhlw-00001` build eliminates known CVEs without changing your application code or upgrading to an untested major version.
+That is the Lightwell value in one screenshot: the same application, the same upstream version of `jackson-databind`, but the remediated `.rhlw-00001` build eliminates known CVEs without changing your application code or upgrading to an untested major version. A handful of resolved CVEs from a single dependency is a modest win — but the real value emerges at scale, when Lightwell is continuously remediating dozens, hundreds, or thousands of libraries across your entire application portfolio, integrated with your change management and approval workflows. That is what the next module is about.
 
 == Summary
 
