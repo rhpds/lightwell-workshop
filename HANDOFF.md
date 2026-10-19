@@ -308,22 +308,22 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    → [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch),
    [ADR-034](ADR.md#adr-034--student-merges-needs_approval-mrs-in-gitlab)
 
-1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
+2. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
    paths, `existingSecret` from `ao-bootstrap`). Keep SCM on
    `rhpds/lw-sdlc-opencode`. The `APP_INTEGRATION_URL_ALLOWED_HOSTS` gap is
    **closed** — verified on `8vjv7`, the AAP route host is present on the
    backend, background-worker and worker, and the AAP integration created
    cleanly. → [ADR-008](ADR.md#adr-008--automation-orchestrator-on-the-shared-platform)
-2. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
+3. **CI on `rhpds/lw-sdlc-opencode` is dead** (org/Actions policy). Lab path is
    now **shared BuildConfig → ImageStream (OpenShift integrated registry)** via
    `bootstrap-infra` `opencodeImage` (ADR-013). Tenants leave
    `sdlc.opencodeImage` empty. External quay.io pins remain an override only.
    → [ADR-013](ADR.md#adr-013--shared-opencode-image-build-to-openshift-integrated-registry)
-3. **First infra sync after enablement** must finish Job
+4. **First infra sync after enablement** must finish Job
    `opencode-image-publish` (ImageStream build) before OpenCode pods can pull.
    Bump `opencodeImage.gitRef`/`tag` and tenant `sdlc.opencodeImageTag` together.
-4. **`nexus.lightwellNetwork` is still empty in AgnosticV**, so a fresh tenant
+5. **`nexus.lightwellNetwork` is still empty in AgnosticV**, so a fresh tenant
    comes up green with no Lightwell proxy repos and therefore **no Nexus
    webhooks** — the whole chain has no entry point until credentials are
    injected (`scripts/inject-env-secrets.sh`, then `nexus-reconcile` re-runs
@@ -342,16 +342,16 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    `com.h2database:h2` qualifies (upstream has no `org/apache/struts/`), so
    `benefits-mgmt-app` and `report-generator-app` cannot yet be targets.
    → [ADR-016](ADR.md#adr-016--trigger-artifacts-must-be-declared-dependencies-of-a-seeded-app)
-5. **Renovate module content (Module 2) tested end-to-end (18 Oct).**
+6. **Renovate module content (Module 2) tested end-to-end (18 Oct).**
    `publish-remediation.sh` publishes a remediated JAR (real upstream binary
    with patched `pom.properties` so Syft reports the `.rhlw` version) and
    OSV advisories to TPA. Renovate detects the bump, student merges, Tekton
    builds, TPA shows reduced vuln count. Screenshots added.
    **Remaining:** AgnosticV needs Showroom UI tabs for TPA and Nexus
    (currently patched manually on test clusters via `SHOWROOM_UI_CONFIG`).
-6. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
+7. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
    before the org-scoping fix). Re-run the bootstrap job or re-order them.
-7. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
+8. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
    Artifactory / Deep Agent / RHACM.** The Showroom content under `content/`
    was updated to Nexus / Lightwell OpenCode Agents / TSSC + DevSecOps; the
    outlines were not.

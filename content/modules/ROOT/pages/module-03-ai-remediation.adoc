@@ -234,9 +234,6 @@ The diff itself is almost boring — the same single-line `pom.xml` change Renov
 | Derived, not guessed: a failed check means do not merge; a `HIGH` or `CRITICAL` risk class means human review even when everything passes
 |===
 
-// TODO screenshot: the top of the agent-generated merge request in GitLab,
-// showing the title with the severity dot and the Summary table. Crop out the
-// left sidebar.
 image::gitlab-ai-mr-summary.png[AI-generated merge request showing the title and Summary table]
 
 NOTE: The advisory data comes from a TPA lookup, not from the model. If your TPA has no advisory for the component, the Summary reads "not referenced" and "not scored" rather than a plausible-looking number. The agent is explicitly instructed not to invent security data — a fabricated CVSS score in an audit trail is worse than a blank one.
@@ -276,9 +273,6 @@ Refresh the merge request after a minute or two and the table will have filled i
 | Compares the licence declared by the base POM against the remediated POM, normalised so that equivalent phrasings do not raise a false alarm
 |===
 
-// TODO screenshot: the Automated Validation table in the merge request
-// description after `build-pull-request` has completed, showing the mix of
-// passed rows and the still-pending regression scan row.
 image::gitlab-ai-mr-validation-table.png[Automated Validation table in the merge request, filled in by the pipeline]
 
 IMPORTANT: Six of those eight rows are measured. *Regression scan is not implemented* and renders as `Pending` — a behavioural diff would mean running the whole suite against the target-branch baseline as well, roughly doubling build time, and that call has not been made yet. Nothing here is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all.
@@ -377,8 +371,6 @@ Make your decision, then return to the Orchestrator and approve the task. The ca
 
 From here it is the same spine as before: `build-push-to-main`, SBOM to TPA, Tekton Chains signature, image to the Nexus OCI registry, `imageTag` promoted into `acme-deployment`, ArgoCD syncs, the new pod rolls out in `{user}-app`. Return to the ServiceNow mock and confirm the incident has been finalised and closed with the full timeline.
 
-// TODO screenshot: ArgoCD showing `acme-apps-{guid}` synced and healthy after
-// the `wire-transfer-svc` rollout, with the workload tree visible.
 image::argocd-acme-apps-synced.png[ArgoCD showing the Acme applications synced and healthy after remediation]
 
 == Proving It in TPA
