@@ -9,7 +9,9 @@ There is nothing to run here. Read it through, then start Module 1.
 
 == What is Red Hat Lightwell?
 
-Lightwell supplies remediated rebuilds of open source components. When a CVE lands against a widely used library, Red Hat rebuilds the affected version with the fix applied, signs it, and publishes it together with machine-readable metadata describing which CVEs that rebuild resolves. The rebuild keeps the upstream version number and the original API, with an `.rhlw` suffix marking it as remediated — so adopting it is a version bump rather than an upgrade.
+Lightwell is a joint initiative between Red Hat and IBM focused on securing the open source software supply chain. It extends Red Hat's proven model of enterprise open source maintenance by providing access to security remediations and mitigations far beyond our traditional product footprint.
+
+In practice, that means remediated rebuilds of open source components. When a CVE lands against a widely used library, Red Hat rebuilds the affected version with the fix applied, signs it, and publishes it together with machine-readable metadata describing which CVEs that rebuild resolves. The rebuild keeps the upstream version number and the original API, with an `.rhlw` suffix marking it as remediated — so adopting it is a version bump rather than an upgrade.
 
 image::lightwell-product-icon.png[Lightwell product icon: a translucent red cube assembled from smaller blocks, resting on concentric tracks dotted with small spheres]
 
