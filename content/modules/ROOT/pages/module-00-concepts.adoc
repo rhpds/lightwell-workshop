@@ -13,7 +13,7 @@ Lightwell is a joint initiative between Red Hat and IBM focused on securing the 
 
 In practice, that means remediated rebuilds of open source components. When a CVE lands against a widely used library, Red Hat rebuilds the affected version with the fix applied, signs it, and publishes it together with machine-readable metadata describing which CVEs that rebuild resolves. The rebuild keeps the upstream version number and the original API, with an `.rhlw` suffix marking it as remediated — so adopting it is a version bump rather than an upgrade.
 
-image::lightwell-product-icon.png[Lightwell product icon: a translucent red cube assembled from smaller blocks, resting on concentric tracks dotted with small spheres]
+image::lightwell-product-icon.png["Lightwell product icon: a translucent red cube assembled from smaller blocks, resting on concentric tracks dotted with small spheres"]
 
 That matters because the slow part of patching is rarely the patch. It is finding a fixed version you trust, or backporting one yourself, and then proving to everyone downstream that it is safe to take. Lightwell removes that step. This lab exists to show what you can build once it is gone: if a trustworthy fixed artifact simply arrives, remediation becomes plumbing — notice the new build, work out which applications use the component, raise the change, ship it. The rest of this lab automates that plumbing two different ways.
 
@@ -108,10 +108,10 @@ This lab demonstrates two approaches to automating CVE remediation with Lightwel
 
 The simplest path. No AI, no orchestration. https://docs.renovatebot.com/[Renovate^] (an open source dependency update tool) watches your Lightwell mirror for new remediated versions and mechanically creates merge requests to bump your dependencies. Standard CI/CD handles the rest.
 
-.Path 1: Lightwell + Renovate + CI/CD
-[mermaid]
+.Path 1: Lightwell + Renovate + CI/CD (click to enlarge)
+[mermaid, role=expand]
 ----
-flowchart LR
+flowchart TB
   LW["Lightwell<br/>Network"]
   NX["Nexus<br/>mirror"]
   RN["Renovate"]
@@ -129,10 +129,10 @@ You will use this path to remediate the *report-generator-app* — a low-risk in
 
 The enterprise path. An event-driven workflow queries RHTPA to find affected applications, dispatches AI agents to assess risk and generate merge requests, and maintains a ServiceNow ticket throughout. Low-risk changes are auto-approved; high-risk changes are flagged for human review.
 
-.Path 2: Lightwell + Automation Orchestrator + AI + ServiceNow
-[mermaid]
+.Path 2: Lightwell + Automation Orchestrator + AI + ServiceNow (click to enlarge)
+[mermaid, role=expand]
 ----
-flowchart LR
+flowchart TB
   LW["Lightwell<br/>Network"]
   NX["Nexus<br/>mirror"]
   AO["Ansible<br/>Orchestrator"]
