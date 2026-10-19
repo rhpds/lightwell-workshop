@@ -175,7 +175,7 @@ Within a few seconds of the artifact landing you should see a new execution. Wat
 // TODO screenshot: the AO canvas mid-run for the `benefits-mgmt-app` execution,
 // with the incident, TPA and classify nodes already complete and the for-each
 // loop in progress. Capture the whole canvas so the node names are legible.
-image::ao-canvas-running.png[Automation Orchestrator canvas part-way through a remediation run]
+image::ao-workspace.png[The Lightwell Remediation workflow published in the tenant's Automation Orchestrator project]
 
 The candidate list comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the Orchestrator will not invent an application to remediate.
 
@@ -195,7 +195,7 @@ The Orchestrator comments on it at each stage rather than writing one summary at
 // TODO screenshot: the ServiceNow mock incident detail view for the
 // `benefits-mgmt-app` run, scrolled so the opening comment and at least one
 // iteration comment are both visible in the timeline.
-image::snow-incident-timeline.png[ServiceNow mock showing the remediation incident and its comment timeline]
+image::snow-incident-list.png[ServiceNow mock showing the remediation incidents raised by the Orchestrator]
 
 This is the part that tends to matter most to the people who sign off on automation. The audit trail is not reconstructed from git history afterwards — it is written as the work happens, by the thing doing the work.
 
@@ -299,7 +299,7 @@ Merging to `main` starts the `build-push-to-main` pipeline. Open the OpenShift C
 
 // TODO screenshot: the PipelineRun detail view for `build-push-to-main` on
 // `benefits-mgmt-app` with every task complete, including the promote task.
-image::pipeline-run-push-to-main.png[Tekton pipeline building, signing and promoting the remediated application]
+// (no capture yet — see the TODO above)
 
 That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Open the https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[ArgoCD console^] (log in via OpenShift) and find the `acme-apps-{guid}` application. It syncs the new image tag and rolls the deployment in your `{user}-app` namespace.
 
@@ -350,7 +350,8 @@ The gate has a 24-hour decision window and, if nobody answers in that time, it f
 // TODO verify: the exact navigation path to a pending approval in the AO web UI
 // (tasks list, canvas node, or both) — the node name and prompt text are
 // confirmed from the tenant bootstrap, the UI route to them is not.
-image::ao-approval-pending.png[Pending approval task in the Automation Orchestrator]
+// (no capture yet — and AO approvals were removed on 19 Oct, so verify this
+// section still reflects the flow before capturing anything)
 
 Before you answer it, go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you need is in one page:
 
@@ -382,7 +383,7 @@ Each has a new SBOM uploaded by the pipeline. Compare it against the previous bu
 // TODO screenshot: the TPA SBOM list filtered to `wire-transfer-svc`, showing
 // the pre-remediation and post-remediation SBOMs side by side with their
 // vulnerability counts.
-image::tpa-sbom-path2-comparison.png[TPA comparing the pre- and post-remediation SBOMs for the remediated applications]
+// (no capture yet — see the TODO above)
 
 The verification is not a separate exercise bolted on at the end. The pipeline uploaded the SBOM as part of the build, which means the evidence for the *next* remediation is already in place. That is what makes the loop a loop.
 
