@@ -367,16 +367,15 @@ Publish a remediation for a dependency that `wire-transfer-svc` declares — the
 ----
 curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/modules/_attachments/publish-remediation.sh \
   | bash -s -- \
-  com.h2database:h2:2.2.224 \
+  com.h2database:h2:1.4.200 \
   rhlw-00001 \
   "H2 Database Engine"
 ----
 
-// TODO verify: the `h2` base version declared by `wire-transfer-svc`. The AO
-// trigger helper and the 18 Oct end-to-end run both use `2.2.224`, but an
-// earlier tenant snapshot recorded `1.4.200` in that pom. The published base
-// version must match the pom exactly or the agent cannot find the dependency
-// to bump.
+// VERIFIED (19 Oct, tenant 8djv7): wire-transfer-svc declares h2 1.4.200.
+// The module previously said 2.2.224, which matches nothing in the pom, so
+// the agent would have had no dependency to bump. flyway-core 4.1.2 above is
+// correct as written.
 
 Everything you just watched happens again, identically: incident opened, TPA queried, application classified, agent dispatched, merge request opened, pipeline runs, validation table filled in. Follow it on the canvas if you like — it is the same shape.
 
