@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (ADR-036 CI/CD→EDA bridge live on cng2l)
+Last updated: 2026-10-19 (argo-notifications-eda namespace fix; three failed tenant orders recovered)
 
 ## Where the pieces live
 
@@ -23,6 +23,17 @@ Last updated: 2026-10-19 (ADR-036 CI/CD→EDA bridge live on cng2l)
 
 ## Recently done
 
+- **`argo-notifications-eda` namespace fix (19 Oct).** The Job was
+  templated into `{{ .Release.Namespace }}` (`openshift-gitops`) while
+  requesting the `lightwell-tenant-jobs` SA, which only exists in
+  `lightwell-tenant-{guid}`. No pod was ever created, so the Sync hook
+  never reached a terminal phase and every tenant order parked at wave 4
+  until the RHDP playbook timed out — three orders failed this way before
+  it was spotted. Now uses the `bootstrap-tenant.jobNamespace` helper
+  like every other Job in the chart. The three live tenants were
+  recovered by hand (terminate op, strip the hook finalizer, delete the
+  stale Job, hard refresh), so **a fresh order is still the only real
+  proof** — worth one before the next demo. → [ADR-036](ADR.md#adr-036--cicd--eda-bridge-pipelinerun--argo-producers)
 - **`publish-remediation.sh` JAR fix (18 Oct).** Natale's change to
   republish the real upstream JAR meant Syft read `version=2.13.5` from
   the embedded `pom.properties`, so the SBOM showed no version change.
@@ -362,6 +373,15 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Gotchas worth knowing
 
+- **Never use `.Release.Namespace` in `bootstrap-tenant`.** The chart is
+  deployed by an Application whose destination is `openshift-gitops`, so
+  `.Release.Namespace` renders as `openshift-gitops` — not the tenant
+  namespace you probably meant. Jobs belong in
+  `{{ include "bootstrap-tenant.jobNamespace" . }}`, which is where the
+  `lightwell-tenant-jobs` SA lives. A Job pointed elsewhere never gets a
+  pod (`error looking up service account ...: not found`), and as a Sync
+  hook it then blocks the whole tenant sync forever. `helm template`
+  renders it happily; only a real order catches it.
 - **Argo needs both a hard refresh and a sync when chart *files* change.**
   An explicit sync alone picked up a changed ConfigMap *key* on `cd2fp`,
   but on `54dp7` a change to `files/snow-mock/app.py` (pulled in by
