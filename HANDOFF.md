@@ -342,9 +342,14 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Gotchas worth knowing
 
-- **An Argo `refresh=hard` annotation is not a sync.** On `cd2fp` the app
-  reported `Synced` at the right revision while still serving a stale
-  manifest; only an explicit sync operation picked up a new ConfigMap key.
+- **Argo needs both a hard refresh and a sync when chart *files* change.**
+  An explicit sync alone picked up a changed ConfigMap *key* on `cd2fp`,
+  but on `54dp7` a change to `files/snow-mock/app.py` (pulled in by
+  `.Files.Get`) was invisible: the app reported `Synced` at the right
+  revision, did not list the ConfigMap as OutOfSync, and the live object
+  had not been touched for three days. `argocd.argoproj.io/refresh=hard`
+  first, *then* sync. Pods also need a rollout restart afterwards —
+  a ConfigMap change does not restart them.
 - **The EDA activation's extra_vars never reach AO-launched job templates.**
   AO passes its own payload, so anything set only on the activation is
   invisible. Per-app data has to travel in `.lightwell/policy.json`, which
