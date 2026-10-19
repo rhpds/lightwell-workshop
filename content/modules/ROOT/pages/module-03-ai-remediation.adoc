@@ -135,8 +135,7 @@ NOTE: The `report-generator-app` you remediated in Module 2 never enters this lo
 // upstream in lw-sdlc-opencode: query-tpa.yml now computes the blast radius
 // from real Acme SBOM package matches via files/tpa_blast_radius.py and says
 // so explicitly ("Does NOT invent apps via REMEDIATION_APP_GITLAB_PATH").
-// Still worth one live run to confirm a flyway-core event lands on
-// benefits-mgmt-app and nothing else.
+// Confirmed on 8gmp5: a commons-text event lands on benefits-mgmt-app alone.
 
 == Two Applications, Two Policies
 
@@ -176,9 +175,9 @@ Run the following command in the terminal on the right:
 ----
 curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/modules/_attachments/publish-remediation.sh \
   | bash -s -- \
-  org.flywaydb:flyway-core:4.1.2 \
+  org.apache.commons:commons-text:1.9 \
   rhlw-00001 \
-  "Flyway Core"
+  "Apache Commons Text"
 ----
 
 This is the same script you used in Module 2. It publishes the remediated JAR to the `lightwell-remediated` repository in your Nexus and pushes the matching OSV advisories to TPA.
@@ -220,12 +219,12 @@ image::m3-ao-canvas-detail.png["A zoomed section of an Orchestrator canvas showi
 
 The candidate list comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the Orchestrator will not invent an application to remediate.
 
-// TODO verify (live run): confirm a flyway-core event lands on
-// benefits-mgmt-app alone. The old behaviour, routing every event onto
-// wire-transfer-svc, was a
-// query-tpa bug, fixed upstream — see the note above "Two Applications, Two
-// Policies". If the wrong app still appears in the loop, read the classify
-// job output rather than assuming it is an SBOM labelling problem.
+// VERIFIED (8gmp5): commons-text 1.9 classifies onto benefits-mgmt-app
+// alone and auto-merges. Chosen over flyway-core, which has no advisory in
+// OSV.dev at all, and over h2, which is declared test-scoped by
+// benefits-mgmt-app so it is absent from the runtime SBOM and only ever
+// matches wire-transfer-svc. CVE-2022-42889 (Text4Shell) is already in the
+// seeded dataset, so no dataset change was needed.
 
 == The Incident Opens Before the Change Does
 
@@ -396,8 +395,8 @@ curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/mo
 
 // VERIFIED (19 Oct, tenant 8djv7): wire-transfer-svc declares h2 1.4.200.
 // The module previously said 2.2.224, which matches nothing in the pom, so
-// the agent would have had no dependency to bump. flyway-core 4.1.2 above is
-// correct as written.
+// the agent would have had no dependency to bump. The low-risk trigger uses
+// commons-text 1.9, which benefits-mgmt-app declares.
 
 Everything you just watched happens again, identically: incident opened, TPA queried, application classified, agent dispatched, merge request opened, pipeline runs, validation table filled in. Follow it on the canvas if you like — it is the same shape.
 

@@ -364,7 +364,12 @@ for i in $(seq 0 $((CVE_COUNT - 1))); do
       "type": "WEB"
     }
   ],
-  "summary": "${DESCRIPTION}: Lightwell remediation for ${CVE_ID}",
+  # Include the Maven coordinate so query-tpa.yml can find this advisory
+  # from group:artifact alone. TPA free-text search matches the human
+  # product name, not the artifactId, so without the coordinate here the
+  # MR Summary renders "CVE: not referenced" even though we just
+  # published the advisory that names it.
+  "summary": "${DESCRIPTION} (${GROUP_ID}:${ARTIFACT_ID}): Lightwell remediation for ${CVE_ID}",
   "details": "${GROUP_ID}:${ARTIFACT_ID} ${BASE_VERSION} is affected by ${CVE_ID}. The Lightwell-remediated build ${RHLW_VERSION} resolves this vulnerability while preserving API compatibility.",
   "aliases": ["${CVE_ID}"],
   "affected": [
