@@ -285,6 +285,20 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    decision** — "behavioural diff" means running the suite against the
    target-branch baseline too, which doubles build time. Nothing is ever
    reported green without having been measured.
+1. **The auto-approve path cannot happen: every event routes to one app.**
+   `query-tpa.yml` builds `affected_repos` as a single hardcoded entry from
+   `REMEDIATION_APP_GITLAB_PATH`, which the chart pins to
+   `wire-transfer-svc`; `match_reason: sbom_label_and_dependency_coordinate`
+   is a label, not a lookup. Verified on `54dp7`: a `flyway-core` event (the
+   dependency `benefits-mgmt-app` declares) produced
+   `classify candidates=1 -> wire-transfer-svc`, then Impact reused that
+   app's existing h2 merge request. So `benefits-mgmt-app`'s `auto_approve`
+   / `riskClass: LOW` policy is never exercised and module 3's "two
+   applications, two policies" centrepiece does not occur. Fixing it means
+   resolving the affected app from the artifact coordinate — TPA holds
+   per-app SBOMs, so the data exists. Owner question for James/shaaf, since
+   it is their AO/classify design.
+
 1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook
    paths, `existingSecret` from `ao-bootstrap`). Keep SCM on
