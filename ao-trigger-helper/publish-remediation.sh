@@ -297,6 +297,28 @@ ids = [v['identifier'] for v in data.get('items', []) if v.get('identifier','').
 print(' '.join(ids[:10]))
 ")
 
+# TPA free-text search matches the advisory's product name, not the Maven
+# artifactId, so hyphenated ids miss: 'commons-text' returns nothing while
+# 'Apache Commons Text' returns CVE-2022-42889. 'h2' and 'jackson-databind'
+# happen to appear verbatim in their advisories, which is why this was not
+# noticed earlier. Retry with the human-readable DESCRIPTION before giving up.
+if [ -z "${VULN_IDS}" ] && [ -n "${DESCRIPTION}" ] \
+   && [ "${DESCRIPTION}" != "Lightwell-remediated build" ]; then
+  echo "  No match on '${ARTIFACT_ID}' — retrying as '${DESCRIPTION}'..."
+  DESC_Q=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${DESCRIPTION}")
+  VULN_RETRY=$(curl -sk --max-time 60 -w '\n%{http_code}' \
+    "https://${TPA_HOST}/api/v3/vulnerability?q=${DESC_Q}&limit=100" \
+    -H "Authorization: Bearer ${TPA_TOKEN}" || true)
+  if [ "$(printf '%s' "${VULN_RETRY}" | tail -1)" = "200" ]; then
+    VULN_IDS=$(printf '%s' "${VULN_RETRY}" | sed '$d' | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+ids = [v['identifier'] for v in data.get('items', []) if v.get('identifier','').startswith('CVE-')]
+print(' '.join(ids[:10]))
+")
+  fi
+fi
+
 if [ -z "${VULN_IDS}" ]; then
   echo ""
   echo "  No CVEs found for ${ARTIFACT_ID} in TPA — skipping advisory publication."
