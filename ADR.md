@@ -446,8 +446,8 @@ Copy and fill for each new decision:
 | **Date** | 2026-10-19 |
 | **Title** | Restore AO merge for `auto_approve`; keep `needs_approval` open in GitLab |
 | **Context** | ADR-035 removed AO Approval gates *and* the Merge JT, so both policy types waited for a student merge — Module 3’s low-risk vs human-gate contrast went flat (HANDOFF 00). |
-| **Decision** | After Verifier pass on Start: condition `${loop.item.approval} == "auto_approve"` → JT `SDLC Merge GitLab MR` → SNOW `merged`; else → SNOW `awaiting_merge` (MR stays open). No Approval nodes. Merged/Deploy webhooks unchanged (student or AO merge both fire GitLab `action=merge`). |
-| **Consequences** | Benefits/low-risk auto-merges in AO; wire-transfer stays for GitLab review. Bake `GITLAB_URL`/`GITLAB_TOKEN` into the Merge node. Republish Start. |
+| **Decision** | After Verifier pass on Start: condition `${loop.item.approval} == "auto_approve"` → JT `SDLC Merge GitLab MR` (pauses `merge_delay_seconds`, default **120**) → SNOW `merged`; else → SNOW `awaiting_merge` (MR stays open). No Approval nodes. Merged/Deploy webhooks unchanged (student or AO merge both fire GitLab `action=merge`). |
+| **Consequences** | Benefits/low-risk auto-merges in AO after a short demo window so the open MR is visible; wire-transfer stays for GitLab review. Bake `GITLAB_URL`/`GITLAB_TOKEN`/`merge_delay_seconds` into the Merge node. Republish Start + inject `merge-gitlab-mr.yml`. |
 
 ## ADR-042 — Meaningful SNOW comments with MR / pipeline URLs
 
@@ -519,6 +519,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) Finalize node vars use `${lc_deployed.artifacts.parent_incident}`. (2) Lifecycle/finalize `set_stats` never export `""` (AAP drops empty strings so AO cannot read the property). (3) Finalize playbook can re-resolve parent via `cmdb_ci`/`gitlab_path` when the var is missing. |
 | **Consequences** | Deploy ends Resolved on the parent after Healthy. Lab: Deploy **v5** + playbook inject on `cng2l`. Push `lw-sdlc-opencode` for SCM durability. |
 
+## ADR-049 — Deploy signals only the promoted app; finalize soft-skips orphans
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Narrow bridge Deploy fan-out; never fail finalize without a parent INC |
+| **Context** | Shared Argo Application `acme-apps-{guid}` goes Synced/Healthy on any `acme-deployment` promote. Bridge POSTed `argo_app_health` for **every** AO-owned path (benefits + wire). Wire had no child INC → lifecycle `parent=unknown` → finalize assert fail → AO Deploy `completed_with_errors` on every auto_approve run even when benefits finalized correctly. |
+| **Decision** | (1) Bridge reads the promote commit title via GitLab (`promote <app> to <sha>`) and POSTs Deploy only for matching `AO_APP_PATHS`; fall back to full fan-out if token/parse unavailable. (2) `snow-finalize.yml` soft-skips (success + `finalize_skipped=true`) when parent cannot be resolved after `cmdb_ci` lookup — never fail the JT for orphan paths. |
+| **Consequences** | One Deploy execution per real promote in the common case; orphan fan-out (if any) no longer reds the AO canvas. Requires bridge ConfigMap + env (GITLAB_URL/TOKEN) + playbook inject; push `lw-sdlc-opencode` for finalize durability. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -575,3 +585,4 @@ Copy and fill for each new decision:
 | Deploy SNOW comments link Argo / Route / console | ADR-046 |
 | Parent INC = top-level status + child links only | ADR-047 |
 | Deploy finalize parent from lifecycle artifacts | ADR-048 |
+| Deploy promote-scoped signal + finalize soft-skip | ADR-049 |

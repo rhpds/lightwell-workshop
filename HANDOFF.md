@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (Deploy finalize parent from lc_deployed)
+Last updated: 2026-10-19 (auto_approve merge waits 2m)
 
 ## Where the pieces live
 
@@ -266,6 +266,19 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
+00ad. **~~auto_approve merge waits 2 minutes~~ → ADR-041 (lab on cng2l).**
+   Start Merge JT pauses `merge_delay_seconds=120` before GitLab merge so
+   the open MR is visible. Node renamed “Wait 2m + merge…”. Inject
+   `merge-gitlab-mr.yml` + republish Start; push `lw-sdlc-opencode`.
+
+00ac. **~~Deploy fan-out → wire finalize fail~~ → ADR-049 (lab on cng2l).**
+   Bridge POSTed Deploy for every AO path on shared Argo Healthy; wire had
+   no child → finalize failed → `completed_with_errors`. Fix: bridge POSTs
+   only the app in the promote commit title; finalize soft-skips when no
+   parent. Bridge promote-scoped + finalize soft-skip live on `cng2l`; push
+   `lw-sdlc-opencode` for SCM durability.
+   → [ADR-049](ADR.md#adr-049--deploy-signals-only-the-promoted-app-finalize-soft-skips-orphans)
+
 00ab. **~~Deploy finalize empty parent~~ (lab cng2l).** Deploy *did* fire
    (bridge `20116e7b` → lifecycle OK with `parent_incident=INC0000001`);
    finalize failed because Deploy EDA has no `trigger.parent_incident`.
@@ -273,6 +286,7 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    never exports `""` (AAP drops it); finalize also looks up by
    `cmdb_ci`/`gitlab_path`. Deploy **v5**; reinjected; catch-up finalize
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
+   Superseded for fan-out noise by **00ac** / ADR-049.
 
 00aa. **~~AO `completed_with_errors` on Start/Merged/Deploy~~ (lab cng2l).**
    Root cause: AO fails when `${…}` keys are **absent** (AAP drops `""`

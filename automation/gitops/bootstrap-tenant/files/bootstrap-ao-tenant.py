@@ -663,6 +663,8 @@ def start_workflow_definition(
         "project_id": "${verifier.artifacts.project_id}",
         "guid": "${trigger.guid}",
         "validate_certs": False,
+        # Demo pacing — leave the MR open briefly before AO merges (ADR-041).
+        "merge_delay_seconds": 120,
     }
     parent_awaiting_vars = {
         "snow_url": trigger_common["snow_url"],
@@ -763,7 +765,7 @@ def start_workflow_definition(
             },
             _aap_jt_node(
                 "merge_auto",
-                "Merge GitLab MR (auto_approve)",
+                "Wait 2m + merge GitLab MR (auto_approve)",
                 JT_MERGE,
                 aap_org,
                 aap_credential_id,

@@ -9,11 +9,14 @@ re-enable does not storm EDA; POSTs are off unless POST_BUILD_EVENTS=true.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -36,6 +39,38 @@ POST_BUILD_EVENTS = os.environ.get("POST_BUILD_EVENTS", "false").lower() in (
     "true",
     "yes",
 )
+# Optional: narrow Deploy POSTs to apps named in the acme-deployment promote
+# commit (ADR-049). Without token/URL, fall back to all AO_APP_PATHS.
+GITLAB_URL = os.environ.get("GITLAB_URL", "").rstrip("/")
+DEPLOY_GITLAB_PATH = os.environ.get(
+    "DEPLOY_GITLAB_PATH", f"acme-{GUID}/acme-deployment"
+)
+# PaC promote commit title: "promote benefits-mgmt-app to <sha>"
+_PROMOTE_RE = re.compile(r"promote\s+([a-z0-9][a-z0-9-]*)\s+to\s+", re.I)
+_gitlab_token_cache: str | None = None
+
+
+def gitlab_token() -> str:
+    """Env override, else build-{guid}/gitlab-pac-token (ADR-049)."""
+    global _gitlab_token_cache
+    env = os.environ.get("GITLAB_TOKEN", "")
+    if env:
+        return env
+    if _gitlab_token_cache is not None:
+        return _gitlab_token_cache
+    code, sec = k8s_request(
+        "GET", f"/api/v1/namespaces/{BUILD_NS}/secrets/gitlab-pac-token"
+    )
+    if code != 200:
+        print(f"gitlab-pac-token: {code} — promote-scoped Deploy disabled")
+        _gitlab_token_cache = ""
+        return ""
+    raw = (sec.get("data") or {}).get("token") or ""
+    try:
+        _gitlab_token_cache = base64.b64decode(raw).decode() if raw else ""
+    except Exception:  # noqa: BLE001
+        _gitlab_token_cache = ""
+    return _gitlab_token_cache
 
 ANN_BUILD = "lightwell.io/eda-build-signaled"
 ANN_DEPLOY = "lightwell.io/eda-deploy-signaled"
@@ -271,6 +306,63 @@ def deploy_signal_key(sync: str, health: str, revision: str) -> str:
     return f"{sync or 'Unknown'}/{health}@{revision}"
 
 
+def _ssl_ctx_gitlab() -> ssl.SSLContext | None:
+    if VERIFY_TLS:
+        return None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def gitlab_commit_title(revision: str) -> str:
+    """Return commit title for acme-deployment @ revision, or '' if unavailable."""
+    token = gitlab_token()
+    if not GITLAB_URL or not token or not revision or revision == "unknown":
+        return ""
+    proj = urllib.parse.quote(DEPLOY_GITLAB_PATH, safe="")
+    sha = urllib.parse.quote(revision, safe="")
+    url = f"{GITLAB_URL}/api/v4/projects/{proj}/repository/commits/{sha}"
+    req = urllib.request.Request(
+        url,
+        headers={"PRIVATE-TOKEN": token, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, context=_ssl_ctx_gitlab(), timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+            return (data.get("title") or data.get("message") or "").split("\n", 1)[0]
+    except Exception as e:  # noqa: BLE001
+        print(f"gitlab commit {revision[:12]}…: {e}")
+        return ""
+
+
+def deploy_paths_for_revision(revision: str) -> list[str]:
+    """Prefer the app(s) named in the PaC promote commit; else all AO paths.
+
+    Shared Argo app-of-apps goes Healthy on any promote. Signaling every AO
+    path starts a Deploy run with no SNOW child for untouched apps (ADR-049).
+    """
+    default = AO_APP_PATHS or [f"acme-{GUID}/wire-transfer-svc"]
+    title = gitlab_commit_title(revision)
+    if not title:
+        return default
+    apps = _PROMOTE_RE.findall(title)
+    if not apps:
+        print(f"promote parse: no app in commit title {title!r} — fan-out all")
+        return default
+    matched: list[str] = []
+    for app in apps:
+        for path in default:
+            if path == app or path.endswith("/" + app):
+                if path not in matched:
+                    matched.append(path)
+    if not matched:
+        print(f"promote parse: apps={apps} not in AO_APP_PATHS — fan-out all")
+        return default
+    print(f"promote parse: title={title!r} → paths={matched}")
+    return matched
+
+
 def scan_argo_app() -> None:
     code, app = k8s_request(
         "GET",
@@ -296,7 +388,7 @@ def scan_argo_app() -> None:
         _deploy_signaled.add(signal_key)
         return
 
-    paths = AO_APP_PATHS or [f"acme-{GUID}/wire-transfer-svc"]
+    paths = deploy_paths_for_revision(revision)
     print(
         f"argo {ACME_APP}: {sync}/{health} rev={revision[:12]}… → "
         f"EDA argo_app_health for {len(paths)} path(s)"

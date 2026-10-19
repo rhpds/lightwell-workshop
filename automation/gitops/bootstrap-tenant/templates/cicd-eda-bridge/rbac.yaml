@@ -23,6 +23,11 @@ rules:
   - apiGroups: ["tekton.dev"]
     resources: ["pipelineruns"]
     verbs: ["get", "list", "watch", "patch", "update"]
+  # ADR-049: read PaC GitLab token to resolve promote commit → Deploy path.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["gitlab-pac-token"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

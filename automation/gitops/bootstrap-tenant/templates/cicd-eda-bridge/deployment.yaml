@@ -46,6 +46,14 @@ spec:
               value: acme-apps-{{ .Values.guid }}
             - name: AO_APP_PATHS
               value: {{ join "," $aoPaths | quote }}
+            - name: GITLAB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tenant-integration
+                  key: GITLAB_URL
+            - name: DEPLOY_GITLAB_PATH
+              value: {{ printf "%s/acme-deployment" (include "bootstrap-tenant.gitlabGroup" .) | quote }}
+            # Token loaded at runtime from build-{guid}/gitlab-pac-token (RBAC).
             - name: POLL_SECONDS
               value: {{ .Values.cicdEdaBridge.pollSeconds | default "15" | quote }}
             - name: PRIME_WITHOUT_POST
