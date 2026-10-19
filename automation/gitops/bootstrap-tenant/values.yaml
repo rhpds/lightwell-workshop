@@ -229,6 +229,7 @@ sdlc:
     baseUrl: ""
     projectName: "" # default lightwell-{guid}
     # Empty → lightwell-remediation-{start,merged,build,deploy}-{guid}
+    # One path per AO workflow (ADR-038).
     startWebhookPath: ""
     mergedWebhookPath: ""
     buildWebhookPath: ""

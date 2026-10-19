@@ -76,17 +76,28 @@ spec:
               export AAP_BASE_URL="https://{{ .Values.aap.routeHost | default (printf "aap-%s.%s" .Values.aap.namespace .Values.deployer.domain) }}"
               # Full clone URL for Impact Analyzer (AO cannot concat expressions).
               export REMEDIATION_APP_GIT_URL="{{ include "bootstrap-tenant.gitlabHost" . }}/{{ include "bootstrap-tenant.demoProjectPath" . }}.git"
-              # Bake into AO node vars so Create SNOW / merge work even when the
+              # Bake into AO node vars so Create SNOW / Impact work even when the
               # EDA rulebook job_args omit these (activation vars are not merged).
               export SNOW_URL="{{ include "bootstrap-tenant.snowUrl" . }}"
               export SNOW_SVC_URL="http://snow-mock.snow-{{ .Values.guid }}.svc:8080"
               GITLAB_NS="{{ .Values.gitlab.namespace | default "gitlab" }}"
+              export GITLAB_URL="{{ include "bootstrap-tenant.gitlabHost" . }}"
               export GITLAB_TOKEN=$(oc get secret root-user-personal-token -n "${GITLAB_NS}" -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
               JOB_NS="{{ include "bootstrap-tenant.jobNamespace" . }}"
               TPA_NS="tpa-{{ .Values.guid }}"
               export TPA_OAUTH_CLIENT_SECRET=$(oc get secret tpa-oidc-cli -n "${JOB_NS}" -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || true)
               if [ -z "${TPA_OAUTH_CLIENT_SECRET:-}" ]; then
                 export TPA_OAUTH_CLIENT_SECRET=$(oc get secret oidc-cli -n "${TPA_NS}" -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || true)
+              fi
+              # OpenCode Basic auth — empty ${trigger.opencode_server_password}
+              # makes Impact 401 on POST /session.
+              SDLC_NS="{{ include "bootstrap-tenant.sdlcNamespace" . }}"
+              export OPENCODE_BASE_URL="{{ include "bootstrap-tenant.opencodeBaseUrl" . }}"
+              export OPENCODE_UI_URL="{{ include "bootstrap-tenant.opencodeUiUrl" . }}"
+              export OPENCODE_SERVER_USERNAME="{{ .Values.sdlc.opencodeServerUsername | default "opencode" }}"
+              export OPENCODE_SERVER_PASSWORD=$(oc get secret opencode-server -n "${SDLC_NS}" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
+              if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+                export OPENCODE_SERVER_PASSWORD="{{ include "bootstrap-tenant.opencodeServerPassword" . }}"
               fi
               export VALIDATE_CERTS=false
               echo "Bootstrapping AO project=${AO_PROJECT_NAME} base=${AO_BASE_URL} aap_org=${AAP_ORGANIZATION_NAME}"

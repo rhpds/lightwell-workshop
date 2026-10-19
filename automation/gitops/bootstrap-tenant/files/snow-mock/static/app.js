@@ -29,6 +29,140 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+/**
+ * Lightweight Markdown + autolink for journal comments (demo UI).
+ * Escape-first so raw HTML in bodies cannot execute; then apply a small
+ * subset: headings, lists, hr, **bold**, *italic*, `code`, [text](url),
+ * and bare http(s) URLs.
+ */
+function formatCommentHtml(raw) {
+    if (!raw) return '';
+    const lines = String(raw).replace(/\r\n/g, '\n').split('\n');
+    const blocks = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+            i += 1;
+            continue;
+        }
+
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+            blocks.push('<hr class="sn-md-hr">');
+            i += 1;
+            continue;
+        }
+
+        const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+        if (heading) {
+            const level = heading[1].length;
+            blocks.push(
+                `<h${level} class="sn-md-h sn-md-h${level}">${formatInlineMd(heading[2])}</h${level}>`
+            );
+            i += 1;
+            continue;
+        }
+
+        if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
+            const ordered = /^\d+\.\s+/.test(trimmed);
+            const items = [];
+            while (i < lines.length) {
+                const t = lines[i].trim();
+                if (!t) break;
+                const m = ordered ? t.match(/^\d+\.\s+(.+)$/) : t.match(/^[-*]\s+(.+)$/);
+                if (!m) break;
+                items.push(`<li>${formatInlineMd(m[1])}</li>`);
+                i += 1;
+            }
+            const tag = ordered ? 'ol' : 'ul';
+            blocks.push(`<${tag} class="sn-md-list">${items.join('')}</${tag}>`);
+            continue;
+        }
+
+        const para = [trimmed];
+        i += 1;
+        while (i < lines.length) {
+            const t = lines[i].trim();
+            if (!t) break;
+            if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) break;
+            if (/^#{1,3}\s+/.test(t)) break;
+            if (/^[-*]\s+/.test(t) || /^\d+\.\s+/.test(t)) break;
+            para.push(t);
+            i += 1;
+        }
+        blocks.push(`<p class="sn-md-p">${formatInlineMd(para.join(' '))}</p>`);
+    }
+
+    return `<div class="sn-comment-body">${blocks.join('') || '<p class="sn-md-p"></p>'}</div>`;
+}
+
+function formatInlineMd(text) {
+    // Escape first — all subsequent inserts are our own tags / sanitized hrefs.
+    let s = escapeHtml(text);
+    const slots = [];
+    const stash = (html) => {
+        const key = `\u0000MD${slots.length}\u0000`;
+        slots.push(html);
+        return key;
+    };
+
+    // [label](https://…) — href must be http(s) only
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, label, href) => {
+        const safeHref = sanitizeUrl(href);
+        if (!safeHref) return label;
+        return stash(
+            `<a class="sn-md-link" href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`
+        );
+    });
+
+    // `code`
+    s = s.replace(/`([^`]+)`/g, (_, code) => stash(`<code class="sn-md-code">${code}</code>`));
+
+    // Bare URLs (not already stashed). Trailing punctuation peeled off.
+    s = s.replace(/(https?:\/\/[^\s<]+)/g, (match) => {
+        let url = match;
+        let trail = '';
+        while (/[.,;:!?)\]}'"]$/.test(url)) {
+            trail = url.slice(-1) + trail;
+            url = url.slice(0, -1);
+        }
+        const safeHref = sanitizeUrl(url);
+        if (!safeHref) return match;
+        return stash(
+            `<a class="sn-md-link" href="${safeHref}" target="_blank" rel="noopener noreferrer">${url}</a>`
+        ) + trail;
+    });
+
+    // **bold** then *italic* (avoid matching across slots)
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+
+    for (let n = 0; n < slots.length; n += 1) {
+        s = s.split(`\u0000MD${n}\u0000`).join(slots[n]);
+    }
+    return s;
+}
+
+function sanitizeUrl(href) {
+    if (!href) return '';
+    // After escapeHtml, & → &amp; — decode for validation only
+    const decoded = String(href)
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"');
+    if (!/^https?:\/\//i.test(decoded)) return '';
+    // Re-escape attribute-sensitive chars for href
+    return decoded
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 // ===== ROUTING =====
 function showView(viewId) {
     document.querySelectorAll('.sn-view').forEach(v => v.style.display = 'none');
@@ -452,7 +586,7 @@ async function loadDetail(number) {
                             <span class="sn-activity-date"> &bull; ${formatDatetime(c.created_on)}</span>
                         </span>
                     </div>
-                    <div class="sn-activity-fields" style="white-space:pre-wrap;">${escapeHtml(c.body || '')}</div>
+                    <div class="sn-activity-fields sn-activity-comment">${formatCommentHtml(c.body || '')}</div>
                 </div>
             </div>`).join('')}
         </div>
@@ -479,7 +613,7 @@ async function loadDetail(number) {
                     &bull; ${formatDatetime(c.created_on)}
                     &bull; ${escapeHtml(c.type === 'work_notes' ? 'Work notes' : 'Additional comments')}
                 </div>
-                <div style="white-space:pre-wrap;font-size:13px;">${escapeHtml(c.body || '')}</div>
+                <div class="sn-worknote-body">${formatCommentHtml(c.body || '')}</div>
             </div>`).join('')}
         </div>
 

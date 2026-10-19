@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Watch tenant PipelineRuns + Acme Argo Application; POST lifecycle events to EDA.
+"""Watch Acme Argo Application (and optionally PipelineRuns); POST to EDA.
 
-Emits the same JSON shapes as ao-trigger-helper/trigger-cicd-signal.sh so the
-existing EDA rules (pipelinerun_terminal / argo_app_health) fire AO build/deploy
-triggers. Idempotent via annotations on the watched objects.
+Deploy: emits argo_app_health for AO Deploy (ADR-036).
+
+Build: PipelineRun→EDA→AO Build was retired (ADR-039). Merged AO polls PaC
+commit status instead. scan_pipelineruns still primes annotations so a future
+re-enable does not storm EDA; POSTs are off unless POST_BUILD_EVENTS=true.
 """
 from __future__ import annotations
 
@@ -28,6 +30,12 @@ AO_APP_PATHS = [
 ]
 POLL_SEC = int(os.environ.get("POLL_SECONDS", "15"))
 VERIFY_TLS = os.environ.get("VERIFY_TLS", "false").lower() in ("1", "true", "yes")
+# ADR-039: Merged canvas polls PaC; do not POST pipelinerun_terminal by default.
+POST_BUILD_EVENTS = os.environ.get("POST_BUILD_EVENTS", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 ANN_BUILD = "lightwell.io/eda-build-signaled"
 ANN_DEPLOY = "lightwell.io/eda-deploy-signaled"
@@ -200,21 +208,28 @@ def scan_pipelineruns() -> None:
         if not path:
             print(f"PR {name}: no gitlab_path labels — skip")
             continue
-        ok = post_eda(
-            {
-                "type": "pipelinerun_terminal",
-                "guid": GUID,
-                "gitlab_path": path,
-                "status": status,
-                "pipelinerun": name,
-            }
-        )
-        if ok:
-            patch_annotation(
-                f"/apis/tekton.dev/v1/namespaces/{BUILD_NS}/pipelineruns/{name}",
-                ANN_BUILD,
-                status,
+        if POST_BUILD_EVENTS:
+            ok = post_eda(
+                {
+                    "type": "pipelinerun_terminal",
+                    "guid": GUID,
+                    "gitlab_path": path,
+                    "status": status,
+                    "pipelinerun": name,
+                }
             )
+            if not ok:
+                continue
+        else:
+            print(
+                f"PR {name}: terminal {status} path={path} — "
+                "skip EDA POST (ADR-039 Merged polls PaC)"
+            )
+        patch_annotation(
+            f"/apis/tekton.dev/v1/namespaces/{BUILD_NS}/pipelineruns/{name}",
+            ANN_BUILD,
+            status,
+        )
 
 
 def app_health_sync(app: dict) -> tuple[str, str]:

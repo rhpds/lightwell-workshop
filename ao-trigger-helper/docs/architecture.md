@@ -91,7 +91,7 @@ flowchart LR
   SHOW["trigger-nexus-webhook.sh<br/>showcase POST"] --> EDA
   EDA -- "JT Start Orchestrator only" --> AAP
   AAP -- "POST AO EDA start path" --> AO
-  AO -- "Launch SDLC JTs<br/>SNOW / TPA / classify / Impact / Verifier / merge" --> AAP
+  AO -- "Launch SDLC JTs<br/>Prepare / Impact / Verifier / lifecycle" --> AAP
   AAP -- "HTTP :4096 session + prompt_async" --> OC
   AAP -- "query SBOM / CVE" --> TPA
   AAP -- "create / comment / finalize" --> SNOW
@@ -239,22 +239,25 @@ Steps worth understanding rather than just watching:
 - **Worker AAP jobs are launchers for Impact.** Green JT ≠ agent done; watch
   the OpenCode UI. Verifier currently defaults to a lightweight GitLab “MR open”
   check until the ephemeral OpenCode skill is fixed.
-- **SNOW URLs are baked at AO publish** into node `extra_vars` (`snow_url` /
-  `snow_svc_url` from `tenant-integration`). EDA historically omitted them from
-  the Start payload — do not rely on bare `${trigger.snow_url}` alone.
+- **SNOW URLs and OpenCode Basic auth are baked at AO publish** into node
+  `extra_vars` (`snow_url` / `snow_svc_url`; `opencode_base_url` /
+  `opencode_server_username` / `opencode_server_password`). EDA historically
+  omitted them from the Start payload — do not rely on bare
+  `${trigger.snow_url}` / `${trigger.opencode_server_password}` alone
+  (empty OpenCode password → Impact 401 on `POST /session`).
 - **Two agents, deliberately disjoint.** `/app/opencode.json` defines
   `impact-analyzer` and `mr-verifier` as primary agents with mutually denied
   skills when Verifier uses OpenCode.
 - **`already_current` short-circuit.** If `main` already has the fix GAV, Impact
   skips Verifier/merge and writes a SNOW iteration note (ADR-027). Reset repos
   between demos or you will only see that path.
-- **Post-merge is webhook-driven (no AO Approvals).** AO `Wait` is duration-only
-  and cannot resume on events; Approval+PATCH was retired (ADR-035). The start
-  run ends when MRs are ready. Students merge in GitLab. EDA then fires JT
-  `SDLC AO Lifecycle Webhook` → AO `merged` / `build` / `deploy` eda_triggers
-  (short executions that bookkeep SNOW). Never Start a second Nexus remediation.
-  **Producers:** GitLab MR hook → EDA; per-tenant Deployment `cicd-eda-bridge`
-  POSTs `pipelinerun_terminal` / `argo_app_health` (ADR-036). Manual fallback:
+- **Post-merge is webhook + in-JT poll (no AO Approvals).** AO `Wait` is
+  duration-only; Approval+PATCH was retired (ADR-035). Start ends when MRs are
+  ready. Students merge in GitLab → EDA → **Merged** workflow: SNOW merged →
+  poll PaC commit status → SNOW build (ADR-039). **Deploy** stays a separate
+  Argo-driven execution. Never Start a second Nexus remediation.
+  **Producers:** GitLab MR hook → EDA; `cicd-eda-bridge` POSTs `argo_app_health`
+  only by default (ADR-036/039). Manual fallback:
   [`trigger-cicd-signal.sh`](../trigger-cicd-signal.sh).
 
 ---
@@ -306,7 +309,7 @@ the filter never gets a chance to run until creds are injected and
 | AO canvas | AO UI → project `lightwell-{guid}` → Lightwell Remediation run |
 | SNOW lifecycle | `https://snow-mock-snow-{guid}.<apps-domain>` — INC + comments |
 | TPA / classify | JT `SDLC Query TPA` / `SDLC Classify Affected Apps` artifacts (`ao_apps`) |
-| **Agent reasoning** | **OpenCode UI** `https://opencode-ui-sdlc-{guid}.<apps-domain>` (via ui-gate) |
+| **Agent reasoning** | **OpenCode UI** deep link on child INC / Impact artifacts (`…/global/session/{id}`); AAP Impact job Output also prints a short assistant summary (ADR-043) |
 | Dependency bump | GitLab MR on `acme-{guid}/…`, branch `update-artifact-*` |
 | Human gate | AO Approval node (wire-transfer) and/or GitLab |
 | Post-merge CI | PipelineRuns in `build-{guid}`; Nexus OCI; Argo app sync |

@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-19 (ADR-036 CI/CD→EDA bridge producers)
+Last synced with HANDOFF: 2026-10-19 (ADR-039 Merged+Build poll PaC)
 
 ---
 
@@ -384,6 +384,7 @@ Copy and fill for each new decision:
 | **Context** | Approval gates (`await_gitlab_merge` / `await_build` / `await_deploy`) and AO merge for `auto_approve` made the UX look like AO is the human gate. Product Wait cannot resume on events; Approval+PATCH was a workaround (ADR-033). Operators want a simple story: student merges in GitLab → webhook → pipelines continue; AO listens via `eda_trigger` webhooks. |
 | **Decision** | (1) **No** `type: approval` nodes and **no** AO Merge JT on the canvas. (2) Start path: Nexus → SNOW → TPA → classify → for-each (Impact → Verifier → SNOW `awaiting_merge`) → parent note; execution completes. (3) Students merge **only** in GitLab (policy labels remain informational). (4) Additional AO `eda_trigger` paths — `merged` / `build` / `deploy` — each start a short execution that books SNOW (resolve child by `gitlab_path`). (5) EDA rules POST those paths via JT `SDLC AO Lifecycle Webhook` (never Start remediation; never MR-open). (6) MR webhooks on **all** AO-owned apps. |
 | **Consequences** | One Nexus start run no longer spans deploy; lifecycle is a series of webhook-driven AO executions (honest for AO’s trigger model). Supersedes Approval parking in ADR-033/034. Requires republish AO + push `lw-sdlc-opencode` rulebook/playbooks + AAP/EDA sync. Old parked Approval executions on tenants should be cancelled. |
+| **Superseded in part by** | [ADR-037](#adr-037--single-ao-eda_trigger--switch-on-triggertype) (one webhook path; multi-trigger → switch). |
 
 ## ADR-036 — CI/CD → EDA bridge (PipelineRun + Argo producers)
 
@@ -394,6 +395,78 @@ Copy and fill for each new decision:
 | **Context** | ADR-035 added AO `build`/`deploy` eda_triggers and EDA rules for `pipelinerun_terminal` / `argo_app_health`, but only GitLab MR-merged was wired as a producer. PaC push webhooks go to the PaC controller (not EDA). OpenShift GitOps on this cluster has the Notifications CRD but no notifications controller pod; owning cluster-wide `argocd-notifications-cm` is multi-tenant fraught (ADR-033 deferred). |
 | **Decision** | Deploy `cicd-eda-bridge` per tenant (`bootstrap-tenant/templates/cicd-eda-bridge/`): a small Python poller (SA in `lightwell-tenant-{guid}`) that (1) lists PipelineRuns in `build-{guid}` with PaC `push` event-type, and on terminal Succeeded/Failed POSTs `pipelinerun_terminal` with `gitlab_path` from PaC labels; (2) watches Application `acme-apps-{guid}`, and on Synced+Healthy or Degraded/Missing POSTs `argo_app_health` for each AO-owned `gitlab.appSeeds` path. Idempotency via annotations `lightwell.io/eda-build-signaled` / `lightwell.io/eda-deploy-signaled`. Startup primes existing terminal objects without POSTing. Keep `trigger-cicd-signal.sh` as a manual fallback. |
 | **Consequences** | Build/deploy AO lifecycle runs fire without changing Acme `.tekton/` pipelines or enabling cluster Notifications. Deploy fan-out may comment SNOW for every AO app when the shared Acme Application goes Healthy (acceptable for demo; tighten with per-app Argo apps later). Bridge must stay Running; hibernation delays signals until the next poll after wake. The companion `argo-notifications-eda-{guid}` Sync hook annotates the Applications; it runs in `lightwell-tenant-{guid}` because that is where its `lightwell-tenant-jobs` SA lives, while its Role/RoleBinding stay in `openshift-gitops` where the Applications are. Templating that Job into `openshift-gitops` instead broke every tenant order on 19 Oct — see the Handoff gotcha. |
+
+## ADR-037 — Single AO eda_trigger + switch on trigger.type
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Collapse four AO webhook paths into one; route with switch |
+| **Context** | ADR-035 used four `eda_trigger` paths (`start` / `merged` / `build` / `deploy`). Feedback: prefer a single trigger and branch on payload. AO switch uses ordered `cases[{port,label,condition}]` + `default_port` (not value-match); ADR-026’s conflict was case port == `default_port`. A single path does **not** make one continuous execution — each EDA POST still starts a new run. |
+| **Decision** | (1) One `eda_trigger` on `lightwell-remediation-{guid}` (shorter than the old `*-start-*` path). (2) Switch `route` cases on `${trigger.type}` → `start` / `merged` / `build` / `deploy`; `default_port: unmatched` (no downstream). (3) Chart helpers alias merged/build/deploy/resume paths to that single path unless overridden. (4) EDA lifecycle rules set `ao_lifecycle_webhook_path` to `ao_start_webhook_path`. (5) Keep separate Start vs Lifecycle JTs so lifecycle never re-enters Nexus remediation (ADR-025). (6) When republishing over a multi-trigger canvas, `POST …/unpublish` then publish — if AO still returns `WEBHOOK_TRIGGER_PATH_CONFLICT` on the old path, publish with the new `lightwell-remediation-{guid}` path (seen on `cng2l` v8→v10). |
+| **Consequences** | Simpler AO surface and EDA→AO wiring; still N short executions for merge/build/deploy. Republish AO + sync `lw-sdlc-opencode` rulebook/playbook + refresh EDA activation extra vars (all path keys → single path). |
+| **Superseded by** | [ADR-038](#adr-038--four-ao-workflows-one-eda_trigger-each) |
+
+## ADR-038 — Four AO workflows (one eda_trigger each)
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Split remediation into Start / Merged / Build / Deploy workflows |
+| **Context** | ADR-037 put start + lifecycle on one canvas behind a switch. That hid the apps `for_each` loop next to short lifecycle branches and made demos hard to follow. Product still cannot resume a run on external events, so merge/build/deploy remain separate executions either way. |
+| **Decision** | (1) Four published workflows per tenant: `Lightwell Remediation — Start` (Nexus → SNOW → TPA → classify → **apps_loop** Impact/Verifier), `— Merged`, `— Build`, `— Deploy`. (2) One `eda_trigger` + guid-scoped path each (`…-start/merged/build/deploy-{guid}`). (3) Bootstrap retires legacy monolith `Lightwell Remediation` (unpublish + disable). (4) EDA Start JT → start path; Lifecycle JT → merged/build/deploy paths. |
+| **Consequences** | Start canvas is only the multi-app loop; lifecycle canvases stay short. Students see four workflows in the project. Republish AO + refresh EDA extra vars + sync rulebook. **OpenCode bake:** `ao-bootstrap` exports `OPENCODE_BASE_URL` / username / password (from `opencode-server` secret or chart default); `_trigger_common` writes them into Start node `extra_vars` so Impact does not 401 when EDA omits the password (same class of bug as empty `snow_url`). |
+| **Superseded in part by** | [ADR-039](#adr-039--mergedbuild-one-canvas-poll-pac) (Build canvas folded into Merged). |
+
+## ADR-039 — Merged+Build one canvas (poll PaC)
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Fold Build into Merged; poll PaC commit status instead of PipelineRun webhook |
+| **Context** | ADR-038 used separate Merged / Build AO executions. AO cannot resume on Tekton events; `cicd-eda-bridge` POSTed `pipelinerun_terminal` to start Build. Demos want one story from student merge through CI. AAP JTs already poll (OpenCode idle / GitLab MR); PaC already mirrors PipelineRun onto GitLab commit statuses. |
+| **Decision** | (1) **Merged** workflow: SNOW `merged` → JT `SDLC Poll Build Status` (GitLab commit statuses for `build-push-to-main` on `merge_commit_sha`) → condition → SNOW `build_succeeded` / `build_failed`. (2) On `build_failed`, SNOW lifecycle sets `fail_on_bad_outcome` so the JT fails after commenting — the AO run ends **Failed** (no `continue_on_failure`). (3) Retire AO workflow `Lightwell Remediation — Build` (unpublish + disable). (4) EDA drops PipelineRun→AO rules; chart `aoBuildWebhookPath` aliases to merged. (5) Bridge stops POSTing `pipelinerun_terminal` by default (`POST_BUILD_EVENTS=false`); still watches Argo for Deploy. (6) Bake `GITLAB_URL` / `GITLAB_TOKEN` into Merged node vars. |
+| **Consequences** | Three AO workflows (Start / Merged / Deploy). Merged runs longer (poll up to ~15 min). Failed PaC builds fail the Merged execution (SNOW note still written). Deploy unchanged. Requires `lw-sdlc-opencode` playbook + rulebook sync + AO republish + bridge rollout. |
+
+## ADR-040 — Start prep as one AAP JT (Prepare Remediation)
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Collapse Start canvas prep (SNOW→TPA→classify→children) into one JT |
+| **Context** | ADR-038 Start had five AAP nodes before `apps_loop` (Create SNOW, Query TPA, Classify, SNOW Comment, Create Children). That made the canvas noisy and forced AO to thread `parent_incident` / `affected_repos` / `ao_apps` across node artifacts. Facts already persist across plays in one Controller job via `set_fact`. |
+| **Decision** | (1) New playbook `prepare-remediation.yml` (`import_playbook` of create → TPA → classify → comment → children). (2) JT `SDLC Prepare Remediation`. (3) Start canvas: `eda_trigger` → **prepare** → `apps_loop` (Impact → Verifier → iteration SNOW) → parent awaiting-merge note. (4) Final `set_stats` from create-children still export `ao_apps` (with `child_incident`) + `parent_incident` + `package_info` for the loop. |
+| **Consequences** | Start shows one prep node before the multi-app loop. Lab: JT inject + Start **v4** on `cng2l`. Push `lw-sdlc-opencode` for SCM durability (`scm_update_on_launch` stays false until then). |
+
+## ADR-041 — AO merges auto_approve after Verifier
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Restore AO merge for `auto_approve`; keep `needs_approval` open in GitLab |
+| **Context** | ADR-035 removed AO Approval gates *and* the Merge JT, so both policy types waited for a student merge — Module 3’s low-risk vs human-gate contrast went flat (HANDOFF 00). |
+| **Decision** | After Verifier pass on Start: condition `${loop.item.approval} == "auto_approve"` → JT `SDLC Merge GitLab MR` → SNOW `merged`; else → SNOW `awaiting_merge` (MR stays open). No Approval nodes. Merged/Deploy webhooks unchanged (student or AO merge both fire GitLab `action=merge`). |
+| **Consequences** | Benefits/low-risk auto-merges in AO; wire-transfer stays for GitLab review. Bake `GITLAB_URL`/`GITLAB_TOKEN` into the Merge node. Republish Start. |
+
+## ADR-042 — Meaningful SNOW comments with MR / pipeline URLs
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | SNOW iteration/lifecycle comments carry human headlines + clickable URLs |
+| **Context** | Demo comments were sparse bullets (`outcome`, `MR: !N`, `guid`). Impact already exported `merge_request_url`; PaC commit statuses expose `target_url` — neither reached the SNOW body. |
+| **Decision** | (1) `snow-iteration-comment` / `snow-lifecycle-event` use outcome headlines and append MR URL (artifact or `{gitlab_url}/{path}/-/merge_requests/{iid}`) and build/pipeline URL. (2) `poll-build-status` exports `build_url` from GitLab status `target_url`. (3) Merge JT exports `merge_request_url`. (4) AO Start/Merged bake `gitlab_url` + pass `merge_request_url` / `build_url` into comment JTs. |
+| **Consequences** | Child INC comments link straight to GitLab MR and Tekton/PaC UI. Lab: reinject playbooks + republish Start/Merged; push `lw-sdlc-opencode` for SCM durability. |
+
+## ADR-043 — OpenCode session deep links + summary in AAP/SNOW
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | After Impact idle, export UI deep link + short agent summary |
+| **Context** | AO/AAP only showed `opencode_session_id`. Full reasoning lives in OpenCode UI; operators had to hunt sessions. `GET /session/{id}/message` returns the transcript while the pod’s emptyDir still holds it (ADR-029). |
+| **Decision** | (1) Bake `OPENCODE_UI_URL` (`https://opencode-ui-sdlc-{guid}.{domain}`) into Start nodes. (2) Task `opencode-session-summary.yml` after idle: fetch session + messages, summarize last assistant text (`files/opencode_session_summary.py`), log to AAP stdout, export `opencode_session_ui_url` (`…/global/session/{id}`), title, summary. (3) Iteration SNOW comments include OpenCode link + truncated summary; lifecycle keeps pipeline URL. |
+| **Consequences** | Demo path: click OpenCode from the child INC; AAP Impact job Output shows the same summary. Transcripts still die on OpenCode pod restart. |
 
 ---
 
@@ -439,3 +512,10 @@ Copy and fill for each new decision:
 | Student merges needs_approval in GitLab | ADR-034 (superseded → ADR-035 all merges in GitLab) |
 | Webhook-driven AO, no Approval nodes | ADR-035 |
 | CI/CD → EDA bridge (PipelineRun + Argo) | ADR-036 |
+| Single AO eda_trigger + type switch | ADR-037 (superseded) |
+| Four AO workflows (start/merged/build/deploy) | ADR-038 (Build superseded → ADR-039) |
+| Merged+Build poll PaC (retire Build WF) | ADR-039 |
+| Start prep = one JT (Prepare Remediation) | ADR-040 |
+| AO merges auto_approve after Verifier | ADR-041 |
+| SNOW comments with MR / pipeline URLs | ADR-042 |
+| OpenCode session deep links + summary | ADR-043 |

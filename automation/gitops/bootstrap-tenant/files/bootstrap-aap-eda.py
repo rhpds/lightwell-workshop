@@ -80,10 +80,13 @@ SDLC_WORKER_JOB_TEMPLATES = [
     ("SDLC Classify Affected Apps", "playbooks/classify-affected-apps.yml"),
     ("SDLC SNOW Comment", "playbooks/snow-comment.yml"),
     ("SDLC SNOW Create Children", "playbooks/snow-create-children.yml"),
+    # Start prep: parent SNOW + TPA + classify + comment + children (ADR-040).
+    ("SDLC Prepare Remediation", "playbooks/prepare-remediation.yml"),
     ("SDLC SNOW Iteration Comment", "playbooks/snow-iteration-comment.yml"),
     ("SDLC SNOW Finalize", "playbooks/snow-finalize.yml"),
     ("SDLC Merge GitLab MR", "playbooks/merge-gitlab-mr.yml"),
     ("SDLC SNOW Lifecycle Event", "playbooks/snow-lifecycle-event.yml"),
+    ("SDLC Poll Build Status", "playbooks/poll-build-status.yml"),
 ]
 
 # Automation Orchestrator entry points. sdlc-remediation.yml launches these

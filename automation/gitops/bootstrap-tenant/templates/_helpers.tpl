@@ -109,6 +109,15 @@ remediation fired nothing and the whole agentic path had no entry point.
 {{- end -}}
 {{- end -}}
 
+{{- /* Browser Route for OpenCode SPA (via ui-gate). Deep links: {url}/global/session/{id} */ -}}
+{{- define "bootstrap-tenant.opencodeUiUrl" -}}
+{{- if .Values.sdlc.opencodeUiUrl -}}
+{{- .Values.sdlc.opencodeUiUrl | trimSuffix "/" -}}
+{{- else -}}
+{{- printf "https://opencode-ui-%s.%s" (include "bootstrap-tenant.sdlcNamespace" .) .Values.deployer.domain -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.opencodeServerPassword" -}}
 {{- .Values.sdlc.opencodeServerPassword | default .Values.password -}}
 {{- end -}}
@@ -214,7 +223,7 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 {{- end -}}
 {{- end -}}
 
-{{- /* Guid-scoped webhook paths so tenants cannot fire each other's AO triggers. */ -}}
+{{- /* Guid-scoped webhook paths — one path per AO workflow (ADR-038). */ -}}
 {{- define "bootstrap-tenant.aoStartWebhookPath" -}}
 {{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.startWebhookPath -}}
 {{- .Values.sdlc.orchestrator.startWebhookPath -}}
@@ -223,7 +232,6 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 {{- end -}}
 {{- end -}}
 
-{{- /* Merged path — student merges in GitLab; EDA POSTs this AO trigger. */ -}}
 {{- define "bootstrap-tenant.aoMergedWebhookPath" -}}
 {{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.mergedWebhookPath -}}
 {{- .Values.sdlc.orchestrator.mergedWebhookPath -}}
@@ -241,11 +249,12 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 {{- end -}}
 {{- end -}}
 
+{{- /* Retired ADR-039 — alias to merged path so stale activation vars are harmless. */ -}}
 {{- define "bootstrap-tenant.aoBuildWebhookPath" -}}
 {{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.buildWebhookPath -}}
 {{- .Values.sdlc.orchestrator.buildWebhookPath -}}
 {{- else -}}
-{{- printf "lightwell-remediation-build-%s" .Values.guid -}}
+{{- include "bootstrap-tenant.aoMergedWebhookPath" . -}}
 {{- end -}}
 {{- end -}}
 

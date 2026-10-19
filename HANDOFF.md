@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (Module 3 SNOW bookends; auto-merge decision pending — see Next up 00)
+Last updated: 2026-10-19 (ADR-043 OpenCode session summary)
 
 ## Where the pieces live
 
@@ -266,24 +266,23 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
-00. **DECISION NEEDED (Shaaf): does `auto_approve` still auto-merge?**
-   ADR-035 removed every AO Approval node *and* the AO merge job template,
-   so today **nothing merges on its own** — `gitlab_api.py mr-merge` exists
-   but no playbook or rulebook calls it (checked at `lw-sdlc-opencode`
-   `9d7affa`). Both `benefits-mgmt-app` and `wire-transfer-svc` wait for a
-   student merge in GitLab; `approval` only changes what the MR *says*
-   (undrafted + "safe to merge" vs. Draft + "human review required").
-   Was losing auto-merge intended, or a side effect of killing the Approval
-   nodes? Module 3 is meant to contrast *full automation* (low risk) against
-   *human-in-the-loop* (wire transfer), and that contrast is currently flat.
-   Two ways out: (a) `mr-verifier` calls `mr-merge` when
-   `approval == auto_approve` and every check passed — small, the CLI
-   command is already there; or (b) keep it manual and rewrite Module 3
-   around "rubber-stamp vs. read it carefully". **Module 3 sections are
-   marked BLOCKED in the adoc pending this** — the canvas diagram, "The
-   Low-Risk Application Merges Itself", "The Judgement Call" and two Summary
-   bullets all still describe the ADR-033/034 flow.
-   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes)
+00. **~~auto_approve auto-merge~~ → ADR-041.** After Verifier pass, Start
+   conditions on `loop.item.approval`: `auto_approve` → JT Merge GitLab MR;
+   `needs_approval` → SNOW `awaiting_merge` (MR stays open). No Approval
+   gates. Unblock Module 3 “low-risk merges itself” copy against this.
+   → [ADR-041](ADR.md#adr-041--ao-merges-auto_approve-after-verifier)
+
+0z. **~~SNOW comments with MR / pipeline URLs~~ → ADR-042 (lab inject on
+   cng2l).** Iteration + lifecycle headlines + MR URL + PaC `build_url`.
+   Start **v6** / Merged **v4**; playbooks injected into AAP project #7.
+   Still push `lw-sdlc-opencode` for SCM durability.
+   → [ADR-042](ADR.md#adr-042--meaningful-snow-comments-with-mr--pipeline-urls)
+
+0y. **~~OpenCode deep link + agent summary~~ → ADR-043 (lab inject on
+   cng2l).** Impact idle → `/session/{id}/message` summary in AAP stdout +
+   SNOW; UI `…/global/session/{id}`. Start **v7** (`OPENCODE_UI_URL` baked).
+   Still push `lw-sdlc-opencode` for SCM durability.
+   → [ADR-043](ADR.md#adr-043--opencode-session-deep-links--summary-in-aapsnow)
 
 0a. **Remediation MR body — verified end to end on a freshly seeded tenant
    (`54dp7`, 18 Oct).** Seed -> Nexus event -> AO -> MR
@@ -323,17 +322,38 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    republish AO + sync AAP for CI/CD gates (1a).
    → OpenSpec `ao-operator-async-remediation`; [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch)
 
-1a. **Webhook-driven AO + CI/CD producers (ADR-035/036) — live on cng2l.**
-   Canvas: no Approvals / no AO merge; start ends at `awaiting_merge`.
-   Producers: GitLab MR-merged → EDA; **`cicd-eda-bridge`** Deployment
-   watches PipelineRuns + `acme-apps-{guid}` and POSTs
-   `pipelinerun_terminal` / `argo_app_health` (primed without storm;
-   smoke cleared annotations → AAP Lifecycle JTs 342+). AO v8 + EDA
-   activation current. Chart templates under
-   `bootstrap-tenant/templates/cicd-eda-bridge/` (applied live on cng2l;
-   still need Argo sync of tenant app for persistence).
-   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes),
-   [ADR-036](ADR.md#adr-036--cicd--eda-bridge-pipelinerun--argo-producers)
+1a. **Merged+Build poll PaC (ADR-039) — live on cng2l (lab inject).**
+   AO Merged **v3**: SNOW merged → Poll PaC → SNOW build_*; on
+   `build_failed`, lifecycle JT fails after commenting (`fail_on_bad_outcome`)
+   so the AO run is Failed. Build WF retired; bridge quiet. Controller
+   project `scm_update_on_launch=false` + playbook inject (push
+   `lw-sdlc-opencode` for durability). TPA SBOM upload 500 remains.
+   → [ADR-039](ADR.md#adr-039--mergedbuild-one-canvas-poll-pac)
+
+1b. **Prepare Remediation (ADR-040) — live on cng2l (lab inject).**
+   Start **v4**: `eda_trigger` → JT `SDLC Prepare Remediation` (parent
+   SNOW → TPA → classify → comment → children) → `apps_loop`. Playbook
+   `prepare-remediation.yml` + JT #24 injected; push `lw-sdlc-opencode`
+   when you want SCM durability.
+   → [ADR-040](ADR.md#adr-040--start-prep-as-one-aap-jt-prepare-remediation)
+
+1c. **snow-mock list filters `cmdb_ci` + `guid`.** Lifecycle lookup uses
+   `GET /api/v1/incidents?cmdb_ci=…&guid=…&open_only=1` instead of scanning
+   200 opens client-side. Create playbooks stamp `guid` on parent/child.
+   Roll snow-mock + reinject `snow-lifecycle-event.yml` on live tenants.
+
+1e. **benefits missing GitLab MR→EDA webhook (cng2l).** Chart `ensure_mr_webhook`
+   should cover every `remediation_owner=ao` seed; live tenant only had it on
+   wire-transfer. AO auto-merge of benefits MR !1 did not start Merged WF.
+   Hook added by hand on benefits; confirm create-gitlab job covers all AO
+   seeds on next provision / re-run.
+
+1d. **Prepare set_stats concat (cng2l Start v5 fail).** AAP concatenates
+   string/list `set_stats` across plays in one job →
+   `parent_incident=INC…INC…`, duplicated `ao_apps` without
+   `child_incident` on the first item → Impact/loop fail. Fix:
+   `sdlc_suppress_set_stats` in imported plays + one final export in
+   `prepare-remediation.yml`. Reinject before next smoke.
 
 2. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook

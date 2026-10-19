@@ -25,7 +25,7 @@ Also: [HANDOFF.md](../../HANDOFF.md), [ADR.md](../../ADR.md), Showroom under
 | Tenant Argo | `lightwell-tenant-cng2l` → fork `sshaaf/lightwell-workshop` @ `main` (manual sync; local `--local` used for chart iteration) |
 | Bootstrap Jobs | Complete: GitLab, AAP, AO, EDA, sync-gitlab-pat, nexus-reconcile |
 | GitLab | Group `acme-cng2l` + 3 Acme apps; reset via [`reset-demo-repos.sh`](../reset-demo-repos.sh) |
-| AO | Project `lightwell-cng2l`; workflow **Lightwell Remediation** (multi-app + SNOW); start path `lightwell-remediation-start-cng2l` |
+| AO | Project `lightwell-cng2l`; Start / Merged(+build poll) / Deploy (ADR-039); start path `lightwell-remediation-start-cng2l` |
 | EDA | Activation running; rulebook `sdlc-remediation.yml` (AO bridge only — no MR-open → Resume) |
 | Nexus | Hosted `lightwell-remediated` / `lightwell-validated` + `oci`; LW Network proxies/webhooks often **missing** (empty creds) |
 | Path 2 entry | Use [`trigger-nexus-webhook.sh`](../trigger-nexus-webhook.sh) to POST a Nexus-shaped `CREATED` to the EDA route (bypasses Nexus upload) |
@@ -91,9 +91,9 @@ cd ao-trigger-helper
 | **Nexus (OCI)** | Tekton; ArgoCD; Chains | Images + attestations. |
 | **Renovate** | GitLab; Nexus | Path 1 only — MR as `renovate-bot`. |
 | **GitLab (`acme-{guid}`)** | Renovate; OpenCode; Student; PaC | MRs + merge → PaC push webhook. Policy file `.lightwell/policy.json` per app. |
-| **EDA** | Nexus / showcase; GitLab MR merge; PaC/Argo signals; AAP | Sensor: `*.rhlw-*` → **Start Orchestrator**; MR-**merged** / build / deploy → **AO Lifecycle Webhook** (never MR-open → Start). |
-| **AO** | EDA; AAP; SNOW | Webhook-driven (no Approvals, no AO merge): **start** → parent SNOW → TPA → classify → child SNOW → for-each (Impact → Verifier → SNOW awaiting GitLab merge) → parent note; **merged/build/deploy** triggers → short SNOW lifecycle runs. |
-| **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, AO Lifecycle Webhook, SNOW / TPA / classify / Impact / Verifier, … |
+| **EDA** | Nexus / showcase; GitLab MR merge; Argo signals; AAP | Sensor: `*.rhlw-*` → **Start Orchestrator**; MR-**merged** → Merged(+build poll); Argo → Deploy (never MR-open → Start). |
+| **AO** | EDA; AAP; SNOW | Three workflows (no Approval *gates*): **Start** → Prepare → for-each (Impact → Verifier → **auto_approve merge** or leave MR open); **Merged** (PaC poll) / **Deploy**. |
+| **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, AO Lifecycle Webhook, Prepare Remediation, Impact / Verifier, Poll Build, … |
 | **OpenCode** | AAP; TPA; GitLab; LiteLLM | Impact opens draft/ready MR; Verifier defaults to lightweight “MR open” check (`verifier_use_opencode: false` until skill fixed). UI via `opencode-ui-gate`. |
 | **TPA** | Query TPA; Tekton SBOM upload | `affected_repos` drives classify (no hardcoded app list). |
 | **ServiceNow mock** | AO playbooks | Parent INC at start; one child per AO app (`parent_incident`); iteration comments on children; parent rollup/close. Bake `snow_url` / `snow_svc_url` at AO publish. |
@@ -179,12 +179,13 @@ Narrative shorthand:
 
 ```
 Trigger → EDA → Start Orchestrator → AO
-  → parent SNOW create → Query TPA → Classify (+ parent comment)
-  → child SNOW create (per ao_app)
+  → Prepare Remediation (parent SNOW → TPA → classify → comment → children)
   → for-each AO app:
-       Impact → (already_current | Verifier → Approval?/Merge → child SNOW iter)
-  → parent SNOW finalize
-  → (on merge) Tekton → OCI → Argo → TPA
+       Impact → (already_current | Verifier →
+         auto_approve → AO Merge MR → SNOW merged
+         | needs_approval → SNOW awaiting_merge, MR stays open)
+  → parent SNOW note (loop complete)
+  → (AO or student merge) → Merged WF (SNOW + poll PaC) → Deploy WF
 ```
 
 ---
@@ -203,7 +204,8 @@ Trigger → EDA → Start Orchestrator → AO
   check classify stdout.
 - **Trigger GAV must be a declared pom dependency** or Impact fails
   ([ADR-016](../../ADR.md#adr-016--trigger-artifacts-must-be-declared-dependencies-of-a-seeded-app)).
-- **SNOW URLs:** AO node vars bake `snow_url` / `snow_svc_url` at publish;
+- **SNOW / OpenCode secrets:** AO node vars bake `snow_url` / `snow_svc_url`
+  and OpenCode Basic auth at publish;
   EDA rulebook should also pass them on Start Orchestrator
   ([HANDOFF](../../HANDOFF.md) next-up). All SNOW playbooks resolve
   `snow_base = snow_svc_url || snow_url`.

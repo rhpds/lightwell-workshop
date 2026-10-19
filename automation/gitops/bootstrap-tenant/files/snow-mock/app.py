@@ -688,11 +688,12 @@ def _restore():
     except (OSError, ValueError) as exc:
         app.logger.warning("ignoring unreadable state file %s: %s", STATE_FILE, exc)
         return
-    # Saved state wins over the seed data: the seeds are only there to make a
-    # fresh tenant look populated.
-    incidents_db.update(saved.get("incidents") or {})
-    comments_db.update(saved.get("comments") or {})
-    _comment_seq = max(_comment_seq, int(saved.get("comment_seq") or 0))
+    # Saved state fully replaces seed data when a state file exists (seeds are
+    # only for a never-persisted fresh start). Empty {"incidents": {}} clears all.
+    global incidents_db, comments_db
+    incidents_db = dict(saved.get("incidents") or {})
+    comments_db = dict(saved.get("comments") or {})
+    _comment_seq = int(saved.get("comment_seq") or 0)
     app.logger.info("restored %d incidents from %s", len(incidents_db), STATE_FILE)
 
 
@@ -826,6 +827,19 @@ def get_incidents():
             i for i in filtered
             if (i.get('parent_incident') or '').upper() == parent_key
         ]
+    # Exact CMDB CI match (AO lifecycle: gitlab_path stamped on child create).
+    if 'cmdb_ci' in query_params:
+        ci = query_params['cmdb_ci']
+        filtered = [i for i in filtered if (i.get('cmdb_ci') or '') == ci]
+    # Tenant guid — prefer dedicated field; fall back to description text.
+    if 'guid' in query_params:
+        g = query_params['guid']
+        filtered = [
+            i for i in filtered
+            if (i.get('guid') or '') == g
+            or f'guid: {g}' in (i.get('description') or '')
+            or f'guid={g}' in (i.get('description') or '')
+        ]
     if 'opened_today' in query_params:
         now = datetime.datetime.now(datetime.timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -935,6 +949,7 @@ def create_incident():
         "category": request.json.get("category", "Unknown"),
         "subcategory": request.json.get("subcategory", ""),
         "cmdb_ci": request.json.get("cmdb_ci", ""),
+        "guid": str(request.json.get("guid") or "").strip(),
         "caller_id": request.json['caller_id'],
         "opened_at": now_iso,
         "sys_created_on": now_iso,

@@ -34,6 +34,7 @@ data:
   EDA_DECISION_ENV_IMAGE: {{ .Values.sdlc.decisionEnvImage | quote }}
   EDA_ORGANIZATION_NAME: {{ include "bootstrap-tenant.aapOrg" . | quote }}
   OPENCODE_BASE_URL: {{ include "bootstrap-tenant.opencodeBaseUrl" . | quote }}
+  OPENCODE_UI_URL: {{ include "bootstrap-tenant.opencodeUiUrl" . | quote }}
   OPENCODE_SERVER_USERNAME: {{ .Values.sdlc.opencodeServerUsername | quote }}
   NEXUS_URL: {{ include "bootstrap-tenant.nexusRouteUrl" . | quote }}
   SNOW_URL: {{ include "bootstrap-tenant.snowUrl" . | quote }}

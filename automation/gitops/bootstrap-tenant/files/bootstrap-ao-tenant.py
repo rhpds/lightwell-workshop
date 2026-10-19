@@ -10,23 +10,25 @@ not see other tenants' workflow lists. For each lab tenant this script ensures:
      built-in ``users`` group so the shared ``default`` project is hidden
   3. EDA bridge service account + client_credentials in that project
   4. AO credential for AAP Controller (launch job templates)
-  5. Published ``Lightwell Remediation`` workflow — webhook-driven, no AO
-     Approval nodes and no AO merge:
-       start  → SNOW → TPA → classify → for-each (Impact → Verifier →
-                SNOW "awaiting GitLab merge") → parent note
-       merged / build / deploy → short lifecycle runs (EDA → AO webhooks)
+  5. Three published workflows (one eda_trigger each), no Approval *gates*:
+       Start  — Nexus → Prepare → for-each Impact/Verifier; auto_approve → AO merge
+                (ADR-040/041); needs_approval stays open for student merge
+       Merged — GitLab MR merged → SNOW → poll PaC build → SNOW build (ADR-039)
+       Deploy — Argo health → SNOW lifecycle + finalize
   6. Writes client_id / client_secret into a Kubernetes Secret for EDA bootstrap
+  7. Retires legacy monolith + retired Build workflow (unpublish + disable)
 
 Requires env:
   AO_BASE_URL, AO_ADMIN_USERNAME, AO_ADMIN_PASSWORD, GUID, USERNAME, PASSWORD
   AAP_ADMIN_USERNAME, AAP_ADMIN_PASSWORD (Controller API for aap_job_template nodes)
 Optional:
   AO_PROJECT_NAME (default lightwell-{guid})
-  AO_START_WEBHOOK_PATH / AO_MERGED_WEBHOOK_PATH / AO_BUILD_WEBHOOK_PATH /
-  AO_DEPLOY_WEBHOOK_PATH (AO_RESUME_WEBHOOK_PATH aliases merged for compat)
+  AO_START_WEBHOOK_PATH / AO_MERGED_WEBHOOK_PATH / AO_DEPLOY_WEBHOOK_PATH
+  (defaults lightwell-remediation-{start,merged,deploy}-{guid})
   AAP_ORGANIZATION_NAME (default user-{guid})
   AO_SECRET_NAME / AO_SECRET_NAMESPACE (K8s write via oc)
   VALIDATE_CERTS (default false)
+  GITLAB_URL / GITLAB_TOKEN (baked into Merged poll + SNOW lifecycle)
 """
 
 from __future__ import annotations
@@ -299,9 +301,12 @@ JT_SNOW_CREATE = "SDLC Create SNOW Incident"
 JT_CLASSIFY = "SDLC Classify Affected Apps"
 JT_SNOW_COMMENT = "SDLC SNOW Comment"
 JT_SNOW_CHILDREN = "SDLC SNOW Create Children"
+JT_PREPARE = "SDLC Prepare Remediation"
 JT_SNOW_ITER = "SDLC SNOW Iteration Comment"
 JT_SNOW_LIFECYCLE = "SDLC SNOW Lifecycle Event"
 JT_SNOW_FINALIZE = "SDLC SNOW Finalize"
+JT_POLL_BUILD = "SDLC Poll Build Status"
+JT_MERGE = "SDLC Merge GitLab MR"
 AAP_INTEGRATION_NAME = "AAP Lightwell"
 
 
@@ -441,34 +446,44 @@ def _aap_jt_node(
     return node
 
 
-def remediation_workflow_definition(
-    sa_id: str,
-    start_path: str,
-    merged_path: str,
-    build_path: str,
-    deploy_path: str,
-    *,
-    aap_org: str,
-    aap_credential_id: str,
-    remediation_app_git_url: str = "",
-    aap_integration_id: str = "",
-) -> dict:
-    """Webhook-driven multi-app remediation (no AO Approval nodes, no AO merge).
+WF_START = "Lightwell Remediation — Start"
+WF_MERGED = "Lightwell Remediation — Merged"
+WF_BUILD = "Lightwell Remediation — Build"  # retired ADR-039
+WF_DEPLOY = "Lightwell Remediation — Deploy"
+LEGACY_MONOLITH_NAMES = (
+    "Lightwell Remediation",  # pre-split single/multi-trigger canvas
+    WF_BUILD,  # PipelineRun webhook canvas — merged into WF_MERGED (ADR-039)
+)
 
-    Start path ends when MRs are ready — students merge in GitLab. EDA catches
-    merge / PipelineRun / Argo events and POSTs to AO lifecycle eda_triggers
-    (each starts a short execution; Wait cannot resume mid-run).
+
+def _eda_trigger(sa_id: str, webhook_path: str, *, name: str = "EDA webhook") -> dict:
+    return {
+        "id": "eda_trigger",
+        "name": name,
+        "type": "eda_trigger",
+        "parameters": {
+            "webhook_path": webhook_path,
+            "authorized_service_account_ids": [sa_id],
+        },
+    }
+
+
+def _trigger_common() -> dict:
+    """Shared ${trigger.*} extras baked with snow/gitlab/tpa/opencode secrets when present.
+
+    OpenCode Basic auth must be baked (same class of bug as empty snow_url):
+    EDA job_args often omit opencode_server_password; Impact then 401s on
+    POST /session (seen on cng2l AO Start smoke).
     """
-    # Prefer values baked at publish time from tenant-integration. EDA
-    # run_job_template job_args historically omitted snow_*/gitlab_token/
-    # tpa_oauth_client_secret even when the activation had them, so relying
-    # solely on ${trigger.*} left Create SNOW (and later nodes) empty.
     snow_url = env("SNOW_URL", "")
     snow_svc_url = env("SNOW_SVC_URL", "")
     gitlab_token = env("GITLAB_TOKEN", "")
     tpa_oauth_client_secret = env("TPA_OAUTH_CLIENT_SECRET", "")
-
-    trigger_common = {
+    opencode_base_url = env("OPENCODE_BASE_URL", "")
+    opencode_ui_url = env("OPENCODE_UI_URL", "")
+    opencode_user = env("OPENCODE_SERVER_USERNAME", "opencode")
+    opencode_password = env("OPENCODE_SERVER_PASSWORD", "")
+    return {
         "artifact_name": "${trigger.artifact_name}",
         "artifact_group": "${trigger.artifact_group}",
         "artifact_version": "${trigger.artifact_version}",
@@ -489,65 +504,76 @@ def remediation_workflow_definition(
         ),
         "tpa_uploader_password": "${trigger.tpa_uploader_password}",
         "tpa_sbom_label": "${trigger.tpa_sbom_label}",
-
         "gitlab_url": "${trigger.gitlab_url}",
-        "gitlab_token": (
-            gitlab_token if gitlab_token else "${trigger.gitlab_token}"
-        ),
         "remediation_app_gitlab_path": "${trigger.remediation_app_gitlab_path}",
         "eda_webhook_url": "${trigger.eda_webhook_url}",
+        "opencode_base_url": (
+            opencode_base_url
+            if opencode_base_url
+            else "${trigger.opencode_base_url}"
+        ),
+        # Browser Route (ui-gate). Impact builds …/global/session/{id} deep links.
+        "opencode_ui_url": (
+            opencode_ui_url
+            if opencode_ui_url
+            else "${trigger.opencode_ui_url}"
+        ),
+        "opencode_server_username": (
+            opencode_user if opencode_user else "${trigger.opencode_server_username}"
+        ),
+        "opencode_server_password": (
+            opencode_password
+            if opencode_password
+            else "${trigger.opencode_server_password}"
+        ),
         "blast_radius_mode": "${trigger.blast_radius_mode}",
-        "opencode_base_url": "${trigger.opencode_base_url}",
-        "opencode_server_username": "${trigger.opencode_server_username}",
-        "opencode_server_password": "${trigger.opencode_server_password}",
         "aap_organization_name": "${trigger.aap_organization_name}",
-        "guid": "${trigger.guid}",
         "snow_url": snow_url if snow_url else "${trigger.snow_url}",
         "snow_svc_url": snow_svc_url if snow_svc_url else "${trigger.snow_svc_url}",
-    }
-    snow_create_vars = {
-        **trigger_common,
-    }
-    query_vars = {
-        **trigger_common,
-    }
-    classify_vars = {
-        **trigger_common,
-        "affected_repos": "${query_tpa.artifacts.affected_repos}",
-        "package_info": "${query_tpa.artifacts.package_info}",
-        "blast_radius": "${query_tpa.artifacts.blast_radius}",
-        "snow_incident": "${snow_create.artifacts.parent_incident}",
-        "parent_incident": "${snow_create.artifacts.parent_incident}",
-    }
-    # Use baked snow_* (same as trigger_common), not bare ${trigger.snow_*} —
-    # EDA Start Orchestrator often omits snow_url from the AO payload, which
-    # left Create SNOW OK (trigger_common) but classify/iter/finalize comments
-    # failing with empty snow_base (seen on cng2l jobs 38/48).
-    # Parent INC from snow_create; children from snow_children (after classify).
-    parent_inc = "${snow_create.artifacts.parent_incident}"
-    classify_comment_vars = {
-        "snow_url": trigger_common["snow_url"],
-        "snow_svc_url": trigger_common["snow_svc_url"],
-        "snow_incident": parent_inc,
-        "snow_comment_body": "${classify.artifacts.snow_comment_body}",
+        "gitlab_token": gitlab_token if gitlab_token else "${trigger.gitlab_token}",
         "guid": "${trigger.guid}",
     }
-    snow_children_vars = {
-        **trigger_common,
-        "parent_incident": parent_inc,
-        "snow_incident": parent_inc,
-        "ao_apps": "${classify.artifacts.ao_apps}",
-        "renovate_skips": "${classify.artifacts.renovate_skips}",
-        "package_info": "${classify.artifacts.package_info}",
-        "cve_id": "${trigger.cve_id}",
+
+
+def _lifecycle_common() -> dict:
+    snow_url = env("SNOW_URL", "")
+    snow_svc_url = env("SNOW_SVC_URL", "")
+    gitlab_url = env("GITLAB_URL", "")
+    gitlab_token = env("GITLAB_TOKEN", "")
+    return {
+        "snow_url": snow_url if snow_url else "${trigger.snow_url}",
+        "snow_svc_url": snow_svc_url if snow_svc_url else "${trigger.snow_svc_url}",
+        "guid": "${trigger.guid}",
+        "gitlab_path": "${trigger.gitlab_path}",
+        "merge_request_iid": "${trigger.merge_request_iid}",
+        "merge_commit_sha": "${trigger.merge_commit_sha}",
+        "project_id": "${trigger.project_id}",
+        "gitlab_url": gitlab_url if gitlab_url else "${trigger.gitlab_url}",
+        "gitlab_token": gitlab_token if gitlab_token else "${trigger.gitlab_token}",
+        "child_incident": "${trigger.child_incident}",
+        "parent_incident": "${trigger.parent_incident}",
+        "snow_incident": "${trigger.snow_incident}",
+        "build_status": "${trigger.status}",
+        "deploy_health": "${trigger.health}",
+        "signal_source": "${trigger.signal_source}",
     }
-    # Loop body: one AO-owned app from snow_children.ao_apps (includes child_incident).
-    # Inside a for_each body, `loop` is already the current loop context — use
-    # ${loop.item}, not ${loop.<loop_id>.item} (that double-scopes to
-    # loop.apps_loop.apps_loop.item and fails expression resolve).
+
+
+def start_workflow_definition(
+    sa_id: str,
+    start_path: str,
+    *,
+    aap_org: str,
+    aap_credential_id: str,
+    aap_integration_id: str = "",
+) -> dict:
+    """Nexus start → prepare (SNOW/TPA/classify/children) → apps_loop."""
+    trigger_common = _trigger_common()
+    prepare_vars = {**trigger_common}
+    parent_inc = "${prepare.artifacts.parent_incident}"
     impact_vars = {
         **trigger_common,
-        "package_info": "${snow_children.artifacts.package_info}",
+        "package_info": "${prepare.artifacts.package_info}",
         "app_item": "${loop.item}",
         "affected_repos": ["${loop.item}"],
         "blast_radius": {"mode": "tpa_affected_repos", "count": 1},
@@ -568,31 +594,56 @@ def remediation_workflow_definition(
         "child_incident": "${loop.item.child_incident}",
         "parent_incident": parent_inc,
     }
+    # Bake gitlab_url for Merge JT + SNOW comment URL synthesis (EDA often omits it).
+    gitlab_url = env("GITLAB_URL", "")
+    gitlab_url_var = gitlab_url if gitlab_url else "${trigger.gitlab_url}"
     iter_comment_base = {
         "snow_url": trigger_common["snow_url"],
         "snow_svc_url": trigger_common["snow_svc_url"],
         "snow_incident": "${loop.item.child_incident}",
         "child_incident": "${loop.item.child_incident}",
         "parent_incident": parent_inc,
+        "gitlab_url": gitlab_url_var,
         "gitlab_path": "${verifier.artifacts.gitlab_path}",
         "approval": "${verifier.artifacts.approval}",
         "merge_request_iid": "${verifier.artifacts.merge_request_iid}",
+        "merge_request_url": "${impact.artifacts.merge_request_url}",
+        "opencode_session_id": "${impact.artifacts.opencode_session_id}",
+        "opencode_session_ui_url": "${impact.artifacts.opencode_session_ui_url}",
+        "opencode_session_title": "${impact.artifacts.opencode_session_title}",
+        "opencode_session_summary": "${impact.artifacts.opencode_session_summary}",
+        "opencode_ui_url": trigger_common["opencode_ui_url"],
         "verifier_status": "${verifier.artifacts.verifier_status}",
         "guid": "${trigger.guid}",
     }
-    # Impact already_current never reaches Verifier — comment from impact arts.
     iter_comment_already = {
         "snow_url": trigger_common["snow_url"],
         "snow_svc_url": trigger_common["snow_svc_url"],
         "snow_incident": "${loop.item.child_incident}",
         "child_incident": "${loop.item.child_incident}",
         "parent_incident": parent_inc,
+        "gitlab_url": gitlab_url_var,
         "gitlab_path": "${impact.artifacts.gitlab_path}",
         "approval": "${impact.artifacts.approval}",
         "merge_request_iid": "${impact.artifacts.merge_request_iid}",
+        "merge_request_url": "${impact.artifacts.merge_request_url}",
+        "opencode_session_id": "${impact.artifacts.opencode_session_id}",
+        "opencode_session_ui_url": "${impact.artifacts.opencode_session_ui_url}",
+        "opencode_session_title": "${impact.artifacts.opencode_session_title}",
+        "opencode_session_summary": "${impact.artifacts.opencode_session_summary}",
+        "opencode_ui_url": trigger_common["opencode_ui_url"],
         "verifier_status": "n/a",
         "guid": "${trigger.guid}",
         "iteration_outcome": "already_current",
+    }
+    merge_vars = {
+        "gitlab_url": gitlab_url_var,
+        "gitlab_token": trigger_common["gitlab_token"],
+        "gitlab_path": "${verifier.artifacts.gitlab_path}",
+        "merge_request_iid": "${verifier.artifacts.merge_request_iid}",
+        "project_id": "${verifier.artifacts.project_id}",
+        "guid": "${trigger.guid}",
+        "validate_certs": False,
     }
     parent_awaiting_vars = {
         "snow_url": trigger_common["snow_url"],
@@ -600,141 +651,32 @@ def remediation_workflow_definition(
         "snow_incident": parent_inc,
         "guid": "${trigger.guid}",
         "snow_comment_body": (
-            "Remediation MRs are ready for review in GitLab "
-            "(guid=${trigger.guid}). Merge each MR there to continue CI/CD — "
-            "AO does not merge. EDA webhooks will record merge / build / deploy."
+            "Remediation loop finished (guid=${trigger.guid}).\n"
+            "\n"
+            "auto_approve apps: AO merged after Verifier passed.\n"
+            "needs_approval apps: open the MR in GitLab to continue CI/CD.\n"
+            "Merged/Deploy webhooks book build and deploy on the child INC."
         ),
     }
-    # Lifecycle runs (separate AO executions) resolve SNOW child by gitlab_path.
-    lifecycle_common = {
-        "snow_url": snow_url if snow_url else "${trigger.snow_url}",
-        "snow_svc_url": snow_svc_url if snow_svc_url else "${trigger.snow_svc_url}",
-        "guid": "${trigger.guid}",
-        "gitlab_path": "${trigger.gitlab_path}",
-        "merge_request_iid": "${trigger.merge_request_iid}",
-        "approval": "${trigger.approval}",
-        "child_incident": "${trigger.child_incident}",
-        "parent_incident": "${trigger.parent_incident}",
-        "snow_incident": "${trigger.snow_incident}",
-        "build_status": "${trigger.status}",
-        "deploy_health": "${trigger.health}",
-        "signal_source": "${trigger.signal_source}",
-    }
-    finalize_lifecycle_vars = {
-        "snow_url": lifecycle_common["snow_url"],
-        "snow_svc_url": lifecycle_common["snow_svc_url"],
-        "parent_incident": "${lc_deployed.artifacts.parent_incident}",
-        "snow_incident": "${lc_deployed.artifacts.parent_incident}",
-        "guid": "${trigger.guid}",
-        "snow_comment_body": (
-            "Lightwell AO remediation deploy Healthy for "
-            "${trigger.gitlab_path} (guid=${trigger.guid}). "
-            "Parent rollup when all children are terminal."
-        ),
-    }
-    _ = remediation_app_git_url  # call-site compat
-
-    def _lc_node(node_id: str, name: str, outcome: str) -> dict:
-        return _aap_jt_node(
-            node_id,
-            name,
-            JT_SNOW_LIFECYCLE,
-            aap_org,
-            aap_credential_id,
-            {**lifecycle_common, "iteration_outcome": outcome},
-            integration_id=aap_integration_id,
-            continue_on_failure=True,
-        )
-
     return {
-        "name": "Lightwell Remediation",
+        "name": WF_START,
         "description": (
-            "Webhook-driven: Nexus start → MRs ready in GitLab; "
-            "merged/build/deploy AO triggers bookkeep SNOW (no Approvals, no AO merge)"
+            "Nexus/EDA start: Prepare Remediation → for-each (Impact → "
+            "Verifier → auto_approve merge or leave MR open for student). "
+            "No AO Approval gates."
         ),
         "schema_version": "2.0.0",
         "triggers": [
-            {
-                "id": "start_trigger",
-                "name": "Nexus start",
-                "type": "eda_trigger",
-                "parameters": {
-                    "webhook_path": start_path,
-                    "authorized_service_account_ids": [sa_id],
-                },
-            },
-            {
-                "id": "merged_trigger",
-                "name": "GitLab MR merged",
-                "type": "eda_trigger",
-                "parameters": {
-                    "webhook_path": merged_path,
-                    "authorized_service_account_ids": [sa_id],
-                },
-            },
-            {
-                "id": "build_trigger",
-                "name": "CI build terminal",
-                "type": "eda_trigger",
-                "parameters": {
-                    "webhook_path": build_path,
-                    "authorized_service_account_ids": [sa_id],
-                },
-            },
-            {
-                "id": "deploy_trigger",
-                "name": "Deploy health",
-                "type": "eda_trigger",
-                "parameters": {
-                    "webhook_path": deploy_path,
-                    "authorized_service_account_ids": [sa_id],
-                },
-            },
+            _eda_trigger(sa_id, start_path, name="Nexus start"),
         ],
         "nodes": [
             _aap_jt_node(
-                "snow_create",
-                "Create parent SNOW incident",
-                JT_SNOW_CREATE,
+                "prepare",
+                "Prepare remediation",
+                JT_PREPARE,
                 aap_org,
                 aap_credential_id,
-                snow_create_vars,
-                integration_id=aap_integration_id,
-            ),
-            _aap_jt_node(
-                "query_tpa",
-                "Query TPA",
-                JT_QUERY_TPA,
-                aap_org,
-                aap_credential_id,
-                query_vars,
-                integration_id=aap_integration_id,
-            ),
-            _aap_jt_node(
-                "classify",
-                "Classify affected apps",
-                JT_CLASSIFY,
-                aap_org,
-                aap_credential_id,
-                classify_vars,
-                integration_id=aap_integration_id,
-            ),
-            _aap_jt_node(
-                "snow_classify_comment",
-                "SNOW classify comment (parent)",
-                JT_SNOW_COMMENT,
-                aap_org,
-                aap_credential_id,
-                classify_comment_vars,
-                integration_id=aap_integration_id,
-            ),
-            _aap_jt_node(
-                "snow_children",
-                "Create child SNOW incidents",
-                JT_SNOW_CHILDREN,
-                aap_org,
-                aap_credential_id,
-                snow_children_vars,
+                prepare_vars,
                 integration_id=aap_integration_id,
             ),
             {
@@ -743,7 +685,7 @@ def remediation_workflow_definition(
                 "type": "loop",
                 "parameters": {
                     "type": "for_each",
-                    "items": "${snow_children.artifacts.ao_apps}",
+                    "items": "${prepare.artifacts.ao_apps}",
                     "max_iterations": 10,
                 },
                 "settings": {"continue_on_failure": True},
@@ -788,6 +730,37 @@ def remediation_workflow_definition(
                     ),
                 },
             },
+            {
+                "id": "approval_auto",
+                "name": "Auto-approve?",
+                "type": "condition",
+                "parameters": {
+                    # Prefer loop.item (classify); fall back if Impact rewrote it.
+                    "condition": (
+                        '${loop.item.approval} == "auto_approve"'
+                    ),
+                },
+            },
+            _aap_jt_node(
+                "merge_auto",
+                "Merge GitLab MR (auto_approve)",
+                JT_MERGE,
+                aap_org,
+                aap_credential_id,
+                merge_vars,
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            _aap_jt_node(
+                "snow_iter_auto_merged",
+                "SNOW — AO auto-merged",
+                JT_SNOW_ITER,
+                aap_org,
+                aap_credential_id,
+                {**iter_comment_base, "iteration_outcome": "merged"},
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
             _aap_jt_node(
                 "snow_iter_mr_ready",
                 "SNOW — MR ready (merge in GitLab)",
@@ -820,7 +793,7 @@ def remediation_workflow_definition(
             ),
             _aap_jt_node(
                 "snow_parent_awaiting",
-                "SNOW parent — awaiting GitLab merge",
+                "SNOW parent — loop complete",
                 JT_SNOW_COMMENT,
                 aap_org,
                 aap_credential_id,
@@ -828,47 +801,10 @@ def remediation_workflow_definition(
                 integration_id=aap_integration_id,
                 continue_on_failure=True,
             ),
-            # --- Lifecycle entry points (new AO executions per webhook) ---
-            _lc_node("lc_merged", "SNOW — MR merged", "merged"),
-            {
-                "id": "build_ok",
-                "name": "Build succeeded?",
-                "type": "condition",
-                "parameters": {
-                    "condition": '${trigger.status} == "Succeeded"',
-                },
-            },
-            _lc_node("lc_build_ok", "SNOW — build succeeded", "build_succeeded"),
-            _lc_node("lc_build_fail", "SNOW — build failed", "build_failed"),
-            {
-                "id": "deploy_ok",
-                "name": "Deploy Healthy?",
-                "type": "condition",
-                "parameters": {
-                    "condition": '${trigger.health} == "Healthy"',
-                },
-            },
-            _lc_node("lc_deployed", "SNOW — deploy Healthy", "deployed"),
-            _lc_node("lc_deploy_fail", "SNOW — deploy failed", "deploy_failed"),
-            _aap_jt_node(
-                "snow_finalize",
-                "SNOW finalize (parent)",
-                JT_SNOW_FINALIZE,
-                aap_org,
-                aap_credential_id,
-                finalize_lifecycle_vars,
-                integration_id=aap_integration_id,
-                continue_on_failure=True,
-            ),
         ],
         "edges": [
-            # Start path
-            {"from": "start_trigger", "to": "snow_create"},
-            {"from": "snow_create", "to": "query_tpa"},
-            {"from": "query_tpa", "to": "classify"},
-            {"from": "classify", "to": "snow_classify_comment"},
-            {"from": "snow_classify_comment", "to": "snow_children"},
-            {"from": "snow_children", "to": "apps_loop"},
+            {"from": "eda_trigger", "to": "prepare"},
+            {"from": "prepare", "to": "apps_loop"},
             {"from": "apps_loop", "to": "impact", "from_port": "iterate"},
             {"from": "impact", "to": "impact_already"},
             {
@@ -880,21 +816,199 @@ def remediation_workflow_definition(
             {"from": "verifier", "to": "verifier_ok"},
             {
                 "from": "verifier_ok",
-                "to": "snow_iter_mr_ready",
+                "to": "approval_auto",
                 "from_port": "true",
             },
             {"from": "verifier_ok", "to": "snow_iter_fail", "from_port": "false"},
+            {
+                "from": "approval_auto",
+                "to": "merge_auto",
+                "from_port": "true",
+            },
+            {
+                "from": "approval_auto",
+                "to": "snow_iter_mr_ready",
+                "from_port": "false",
+            },
+            {"from": "merge_auto", "to": "snow_iter_auto_merged"},
             {
                 "from": "apps_loop",
                 "to": "snow_parent_awaiting",
                 "from_port": "complete",
             },
-            # Lifecycle paths
-            {"from": "merged_trigger", "to": "lc_merged"},
-            {"from": "build_trigger", "to": "build_ok"},
+        ],
+    }
+
+
+def merged_workflow_definition(
+    sa_id: str,
+    merged_path: str,
+    *,
+    aap_org: str,
+    aap_credential_id: str,
+    aap_integration_id: str = "",
+) -> dict:
+    """MR merged → SNOW merged → poll PaC build → SNOW build (ADR-039)."""
+    lc = _lifecycle_common()
+    poll_vars = {
+        "gitlab_url": lc["gitlab_url"],
+        "gitlab_token": lc["gitlab_token"],
+        "gitlab_path": "${trigger.gitlab_path}",
+        "merge_request_iid": "${trigger.merge_request_iid}",
+        "merge_commit_sha": "${trigger.merge_commit_sha}",
+        "project_id": "${trigger.project_id}",
+        "guid": "${trigger.guid}",
+        "validate_certs": False,
+    }
+    build_lc = {
+        **lc,
+        "build_status": "${poll_build.artifacts.status}",
+        "status": "${poll_build.artifacts.status}",
+        "build_url": "${poll_build.artifacts.build_url}",
+        "signal_source": "ao_poll_gitlab_pac",
+        "merge_commit_sha": "${poll_build.artifacts.merge_commit_sha}",
+    }
+    return {
+        "name": WF_MERGED,
+        "description": (
+            "GitLab MR merged → SNOW lifecycle → poll PaC push build → "
+            "SNOW build succeeded/failed (per gitlab_path)."
+        ),
+        "schema_version": "2.0.0",
+        "triggers": [_eda_trigger(sa_id, merged_path, name="GitLab MR merged")],
+        "nodes": [
+            _aap_jt_node(
+                "lc_merged",
+                "SNOW — MR merged",
+                JT_SNOW_LIFECYCLE,
+                aap_org,
+                aap_credential_id,
+                {**lc, "iteration_outcome": "merged"},
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            _aap_jt_node(
+                "poll_build",
+                "Poll PaC build status",
+                JT_POLL_BUILD,
+                aap_org,
+                aap_credential_id,
+                poll_vars,
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            {
+                "id": "build_ok",
+                "name": "Build succeeded?",
+                "type": "condition",
+                "parameters": {
+                    "condition": '${poll_build.artifacts.status} == "Succeeded"',
+                },
+            },
+            _aap_jt_node(
+                "lc_build_ok",
+                "SNOW — build succeeded",
+                JT_SNOW_LIFECYCLE,
+                aap_org,
+                aap_credential_id,
+                {**build_lc, "iteration_outcome": "build_succeeded"},
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            _aap_jt_node(
+                "lc_build_fail",
+                "SNOW — build failed",
+                JT_SNOW_LIFECYCLE,
+                aap_org,
+                aap_credential_id,
+                {
+                    **build_lc,
+                    "iteration_outcome": "build_failed",
+                    # Comment SNOW, then fail the JT so the AO run is Failed.
+                    "fail_on_bad_outcome": True,
+                },
+                integration_id=aap_integration_id,
+                continue_on_failure=False,
+            ),
+        ],
+        "edges": [
+            {"from": "eda_trigger", "to": "lc_merged"},
+            {"from": "lc_merged", "to": "poll_build"},
+            {"from": "poll_build", "to": "build_ok"},
             {"from": "build_ok", "to": "lc_build_ok", "from_port": "true"},
             {"from": "build_ok", "to": "lc_build_fail", "from_port": "false"},
-            {"from": "deploy_trigger", "to": "deploy_ok"},
+        ],
+    }
+
+
+def deploy_workflow_definition(
+    sa_id: str,
+    deploy_path: str,
+    *,
+    aap_org: str,
+    aap_credential_id: str,
+    aap_integration_id: str = "",
+) -> dict:
+    lc = _lifecycle_common()
+    finalize_vars = {
+        "snow_url": lc["snow_url"],
+        "snow_svc_url": lc["snow_svc_url"],
+        "parent_incident": "${lc_deployed.artifacts.parent_incident}",
+        "snow_incident": "${lc_deployed.artifacts.parent_incident}",
+        "guid": "${trigger.guid}",
+        "snow_comment_body": (
+            "Lightwell AO remediation deploy Healthy for "
+            "${trigger.gitlab_path} (guid=${trigger.guid}). "
+            "Parent rollup when all children are terminal."
+        ),
+    }
+    return {
+        "name": WF_DEPLOY,
+        "description": "Argo health → SNOW deploy + parent finalize when Healthy.",
+        "schema_version": "2.0.0",
+        "triggers": [_eda_trigger(sa_id, deploy_path, name="Deploy health")],
+        "nodes": [
+            {
+                "id": "deploy_ok",
+                "name": "Deploy Healthy?",
+                "type": "condition",
+                "parameters": {
+                    "condition": '${trigger.health} == "Healthy"',
+                },
+            },
+            _aap_jt_node(
+                "lc_deployed",
+                "SNOW — deploy Healthy",
+                JT_SNOW_LIFECYCLE,
+                aap_org,
+                aap_credential_id,
+                {**lc, "iteration_outcome": "deployed"},
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            _aap_jt_node(
+                "lc_deploy_fail",
+                "SNOW — deploy failed",
+                JT_SNOW_LIFECYCLE,
+                aap_org,
+                aap_credential_id,
+                {**lc, "iteration_outcome": "deploy_failed"},
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            _aap_jt_node(
+                "snow_finalize",
+                "SNOW finalize (parent)",
+                JT_SNOW_FINALIZE,
+                aap_org,
+                aap_credential_id,
+                finalize_vars,
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+        ],
+        "edges": [
+            {"from": "eda_trigger", "to": "deploy_ok"},
             {"from": "deploy_ok", "to": "lc_deployed", "from_port": "true"},
             {"from": "deploy_ok", "to": "lc_deploy_fail", "from_port": "false"},
             {"from": "lc_deployed", "to": "snow_finalize"},
@@ -902,21 +1016,32 @@ def remediation_workflow_definition(
     }
 
 
+def retire_legacy_workflows(client: "AoClient", project_id: str) -> None:
+    """Unpublish/disable pre-split monolith so webhook paths can be reused."""
+    workflows = list_all(client, "/api/v1/workflows")
+    for w in workflows:
+        if w.get("project_id") != project_id:
+            continue
+        if w.get("name") not in LEGACY_MONOLITH_NAMES:
+            continue
+        wf_id = w["id"]
+        print(f"Retiring legacy AO workflow {w.get('name')!r} ({wf_id[:8]}…)")
+        code, _ = client.request("POST", f"/api/v1/workflows/{wf_id}/unpublish", {})
+        print(f"  unpublish → {code}")
+        code, _ = client.request(
+            "PATCH", f"/api/v1/workflows/{wf_id}", {"is_enabled": False}
+        )
+        print(f"  disable → {code}")
+
+
 def ensure_workflow(
-    client: AoClient,
+    client: "AoClient",
     project_id: str,
-    sa_id: str,
-    start_path: str,
-    merged_path: str,
-    build_path: str,
-    deploy_path: str,
-    *,
-    aap_org: str,
-    aap_credential_id: str,
-    remediation_app_git_url: str = "",
-    aap_integration_id: str = "",
+    defn: dict,
 ) -> str:
-    name = "Lightwell Remediation"
+    """Create/patch/publish one workflow from a full definition dict."""
+    name = defn["name"]
+    webhook_path = defn["triggers"][0]["parameters"]["webhook_path"]
     workflows = list_all(client, "/api/v1/workflows")
     existing = next(
         (
@@ -926,23 +1051,12 @@ def ensure_workflow(
         ),
         None,
     )
-    defn = remediation_workflow_definition(
-        sa_id,
-        start_path,
-        merged_path,
-        build_path,
-        deploy_path,
-        aap_org=aap_org,
-        aap_credential_id=aap_credential_id,
-        remediation_app_git_url=remediation_app_git_url,
-        aap_integration_id=aap_integration_id,
-    )
     code, validated = client.request(
         "POST", "/api/v1/workflows/validate", {"workflow_definition": defn}
     )
     result = validated if isinstance(validated, dict) else {}
     if code != 200 or result.get("is_valid") is False:
-        print(f"ERROR: workflow definition invalid: {code} {validated}", file=sys.stderr)
+        print(f"ERROR: {name} invalid: {code} {validated}", file=sys.stderr)
         sys.exit(1)
 
     if not existing:
@@ -957,10 +1071,10 @@ def ensure_workflow(
             },
         )
         if code not in (200, 201) or not isinstance(created, dict) or not created.get("id"):
-            print(f"ERROR: create workflow failed: {code} {created}", file=sys.stderr)
+            print(f"ERROR: create {name} failed: {code} {created}", file=sys.stderr)
             sys.exit(1)
         wf_id = created["id"]
-        print(f"AO workflow created: {wf_id}")
+        print(f"AO workflow created: {name} ({wf_id})")
     else:
         wf_id = existing["id"]
         code, patched = client.request(
@@ -973,43 +1087,92 @@ def ensure_workflow(
             },
         )
         if code not in (200, 201):
-            print(f"ERROR: patch workflow failed: {code} {patched}", file=sys.stderr)
+            print(f"ERROR: patch {name} failed: {code} {patched}", file=sys.stderr)
             sys.exit(1)
-        print(f"AO workflow updated: {wf_id}")
+        print(f"AO workflow updated: {name} ({wf_id})")
 
     code, detail = client.request("GET", f"/api/v1/workflows/{wf_id}")
     if code != 200 or not isinstance(detail, dict):
-        print(f"ERROR: get workflow failed: {code} {detail}", file=sys.stderr)
+        print(f"ERROR: get {name} failed: {code} {detail}", file=sys.stderr)
         sys.exit(1)
     if detail.get("has_validation_issues"):
         print(
-            f"ERROR: workflow has validation issues: {detail.get('validation_result')}",
+            f"ERROR: {name} validation issues: {detail.get('validation_result')}",
             file=sys.stderr,
         )
         sys.exit(1)
 
     ver = detail.get("current_version") or 1
     published_ver = detail.get("published_version_number")
-    # Always publish after PATCH so a new draft version becomes live.
-    # Skip only when this exact version is already the published enabled one
-    # and we did not just create/patch (caller always patches when existing).
     code, published = client.request(
         "POST",
         f"/api/v1/workflows/{wf_id}/versions/{ver}/publish",
         {
-            "publish_name": f"tenant-{start_path}",
-            "change_description": "Per-tenant Lightwell remediation (AAP JT canvas)",
+            "publish_name": f"tenant-{webhook_path}",
+            "change_description": f"Per-tenant {name}",
         },
     )
     if code in (200, 201):
-        print(f"AO workflow published (version {ver})")
+        print(f"AO workflow published: {name} (version {ver})")
         return wf_id
-    # Idempotent: already published at this version
     if published_ver == ver and detail.get("is_enabled"):
-        print(f"AO workflow already published (version {ver}): {published}")
+        print(f"AO workflow already published: {name} (version {ver})")
         return wf_id
-    print(f"ERROR: publish workflow failed: {code} {published}", file=sys.stderr)
+    # Path still held by a previously_published version — unpublish then retry.
+    detail_s = str(published)
+    if "WEBHOOK_TRIGGER_PATH_CONFLICT" in detail_s or code == 409:
+        print(f"Path conflict publishing {name} — unpublish + retry")
+        client.request("POST", f"/api/v1/workflows/{wf_id}/unpublish", {})
+        code, published = client.request(
+            "POST",
+            f"/api/v1/workflows/{wf_id}/versions/{ver}/publish",
+            {
+                "publish_name": f"tenant-{webhook_path}",
+                "change_description": f"Per-tenant {name} (retry)",
+            },
+        )
+        if code in (200, 201):
+            print(f"AO workflow published after unpublish: {name} (version {ver})")
+            return wf_id
+    print(f"ERROR: publish {name} failed: {code} {published}", file=sys.stderr)
     sys.exit(1)
+
+
+def ensure_remediation_workflows(
+    client: "AoClient",
+    project_id: str,
+    sa_id: str,
+    *,
+    start_path: str,
+    merged_path: str,
+    build_path: str,  # unused; kept for call-site compat / chart env
+    deploy_path: str,
+    aap_org: str,
+    aap_credential_id: str,
+    aap_integration_id: str = "",
+) -> None:
+    del build_path  # ADR-039 — Build canvas retired into Merged
+    retire_legacy_workflows(client, project_id)
+    common = dict(
+        aap_org=aap_org,
+        aap_credential_id=aap_credential_id,
+        aap_integration_id=aap_integration_id,
+    )
+    ensure_workflow(
+        client,
+        project_id,
+        start_workflow_definition(sa_id, start_path, **common),
+    )
+    ensure_workflow(
+        client,
+        project_id,
+        merged_workflow_definition(sa_id, merged_path, **common),
+    )
+    ensure_workflow(
+        client,
+        project_id,
+        deploy_workflow_definition(sa_id, deploy_path, **common),
+    )
 
 
 def write_k8s_secret(
@@ -1104,7 +1267,6 @@ def main() -> None:
     aap_org = env("AAP_ORGANIZATION_NAME", f"user-{guid}")
     aap_admin_user = env("AAP_ADMIN_USERNAME", "admin")
     aap_admin_pass = env("AAP_ADMIN_PASSWORD", required=True)
-    remediation_app_git_url = env("REMEDIATION_APP_GIT_URL", "")
     aap_base_url = env("AAP_BASE_URL", "")
     validate = env("VALIDATE_CERTS", "false").lower() in ("1", "true", "yes")
 
@@ -1149,24 +1311,23 @@ def main() -> None:
             "aap_job_template nodes will fail until an integration exists.",
             file=sys.stderr,
         )
-    ensure_workflow(
+    ensure_remediation_workflows(
         client,
         project_id,
         sa_id,
-        start_path,
-        merged_path,
-        build_path,
-        deploy_path,
+        start_path=start_path,
+        merged_path=merged_path,
+        build_path=build_path,
+        deploy_path=deploy_path,
         aap_org=aap_org,
         aap_credential_id=aap_cred_id,
-        remediation_app_git_url=remediation_app_git_url,
         aap_integration_id=aap_integration_id,
     )
     write_k8s_secret(secret_ns, secret_name, client_id, client_secret, project_name)
 
     print(
         f"AO tenant ready: project={project_name} user={username} "
-        f"start={start_path} merged={merged_path} build={build_path} "
+        f"start={start_path} merged={merged_path} (incl. build poll) "
         f"deploy={deploy_path} aap_org={aap_org}"
     )
 
