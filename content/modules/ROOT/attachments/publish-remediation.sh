@@ -194,12 +194,14 @@ APPS_DOMAIN=$(echo "${NEXUS_HOST}" | sed "s/^nexus-lightwell-nexus-${GUID}\.//")
 # serves the UI redirect but not /api, so every API call against it returns
 # nothing and the script dies on pipefail with no message.
 TPA_HOST=$(oc get route -n "tpa-${GUID}" -l app.kubernetes.io/name=server \
-  -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+  -o jsonpath='{.items[0].spec.host}' 2>/dev/null || true)
 if [ -z "${TPA_HOST}" ]; then
   TPA_HOST=$(oc get route -n "tpa-${GUID}" -o jsonpath='{range .items[*]}{.spec.host}{"\n"}{end}' 2>/dev/null \
-    | grep -E "^server-" | head -1)
+    | grep -E "^server-" | head -1 || true)
 fi
-TPA_HOST="${TPA_HOST:-tpa-${GUID}.${APPS_DOMAIN}}"
+if [ -z "${TPA_HOST}" ]; then
+  TPA_HOST="server-tpa-${GUID}.${APPS_DOMAIN}"
+fi
 KC_HOST="sso.${APPS_DOMAIN}"
 
 echo "  TPA host: ${TPA_HOST}"
