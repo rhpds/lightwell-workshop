@@ -529,15 +529,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) Bridge reads the promote commit title via GitLab (`promote <app> to <sha>`) and POSTs Deploy only for matching `AO_APP_PATHS`; fall back to full fan-out if token/parse unavailable. (2) `snow-finalize.yml` soft-skips (success + `finalize_skipped=true`) when parent cannot be resolved after `cmdb_ci` lookup — never fail the JT for orphan paths. |
 | **Consequences** | One Deploy execution per real promote in the common case; orphan fan-out (if any) no longer reds the AO canvas. Requires bridge ConfigMap + env (GITLAB_URL/TOKEN) + playbook inject; push `lw-sdlc-opencode` for finalize durability. |
 
-## ADR-050 — Upstream PR-check gate for auto_approve (not adopted)
+## ADR-050 — Gate `auto_approve` on the pull-request check, inside the merge
 
 | Field | Content |
 |-------|---------|
 | **Date** | 2026-10-19 |
-| **Title** | Record upstream proposal to poll `build-pull-request` before AO merge — deferred |
-| **Context** | Upstream `rhpds/lightwell-workshop` ADR-049 (same number as our Deploy ADR) and tenant `8djv7` showed AO can merge `auto_approve` ~33 s after MR open while `build-pull-request` (fills the validation table) has not finished — table stays Pending. Their fix: `Poll PR checks` node before `merge_auto`. |
-| **Decision** | **Not adopted on this fork.** AO canvas SSOT stays our Start path: Verifier → auto_approve → **Wait 2m + merge** (`merge_delay_seconds=120`, ADR-041). That covers demo pacing; a hard PR-status gate can be revisited later if Pending-table merges become a problem. |
-| **Consequences** | Merging `upstream/main` must not reintroduce `poll_pr_checks` into `bootstrap-ao-tenant.py`. Upstream `lw-sdlc-opencode` PR #7 (`watch_mr_head` / `build_status_context`) remains optional for Merged-compatible poll helpers. |
+| **Title** | `merge-gitlab-mr.yml` waits for `build-pull-request` before merging; fixed pause dropped |
+| **Context** | Measured on tenant `8djv7`: AO merged the `auto_approve` MR 33 s after it opened, while `build-pull-request` — the pipeline that writes the Automated Validation table — did not start until 43 s **after** the merge. The merged MR carried all seven rows `⏳ Pending`, `updated_at` equal to the merge time, and no verifier note; SNOW still said "auto-merged after the verifier passed". `verifier_ok` only asserts the Verifier *job template* returned successful, and the OpenCode JTs report success the moment they launch the async agent, so the gate could not fail. The h2 → `wire-transfer-svc` run cleared the table logic itself (6/7 ✅ Passed, 🔴 HIGH, correctly left unmerged), so this was only ever a race on the auto path. ADR-041 added `merge_delay_seconds=120` for demo pacing, which incidentally usually hid the symptom; an earlier revision of this ADR recorded the gate as *not adopted* on those grounds. A fixed sleep cannot tell a slow pipeline from a failed one, so a **failed** build still auto-merged. Reversed by Natale. |
+| **Decision** | Poll inside `merge-gitlab-mr.yml`, not as a separate AO node (Shaaf's call, and the better one): the canvas keeps a single `Merge GitLab MR (auto_approve)` node, check and merge are **atomic** with no window between them where the MR could change, and the Start canvas stays as flat as ADR-040 intended. The playbook reuses the MR it already fetches, polls the `build-pull-request` commit status on `_mr.json.sha`, and asserts green before merging. Vars: `wait_for_status_context` (`""` disables), `wait_for_status_retries` 60, `wait_for_status_delay` 10 — a 10-minute budget, because a cold cluster pulls Tekton images first (76 s measured from MR open to pipeline start) and a tight timeout would fail a healthy run mid-demo. `merge_delay_seconds` is removed: waiting for the real check already leaves the MR open ~110 s, which is the window the pause existed for, and keeping both pushed the merge out to ~4 minutes. |
+| **Consequences** | The auto path can now fail, and the validation table is guaranteed populated before the merge, because the pipeline being waited on is the one that writes it. A non-green check fails the JT with "the MR is left open for human review" — fail-closed, but with no SNOW comment explaining it. Accepted deliberately: the lab only demonstrates the happy path. A "merge withheld" SNOW comment is the upgrade if that path ever needs showing. Requires `lw-sdlc-opencode` [PR #7](https://github.com/rhpds/lw-sdlc-opencode/pull/7) merged **before** an AO republish, or the merge JT runs the old playbook and merges unvalidated as now. |
+| **Amends** | [ADR-041](#adr-041--ao-merges-auto_approve-after-verifier) — the merge is gated, and its `merge_delay_seconds` pacing clause is superseded. |
 
 ---
 
@@ -596,4 +597,4 @@ Copy and fill for each new decision:
 | Parent INC = top-level status + child links only | ADR-047 |
 | Deploy finalize parent from lifecycle artifacts | ADR-048 |
 | Deploy promote-scoped signal + finalize soft-skip | ADR-049 |
-| Upstream PR-check gate for auto_approve (deferred) | ADR-050 |
+| Gate auto_approve on the PR check, inside the merge | ADR-050 |
