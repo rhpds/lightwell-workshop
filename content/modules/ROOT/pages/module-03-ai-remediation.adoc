@@ -212,7 +212,8 @@ image::ao-workspace.png[The Lightwell Remediation workflows published in the ten
 The candidate list comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the Orchestrator will not invent an application to remediate.
 
 // TODO verify (live run): confirm a flyway-core event lands on
-// benefits-mgmt-app alone. The old misrouting onto wire-transfer-svc was a
+// benefits-mgmt-app alone. The old behaviour, routing every event onto
+// wire-transfer-svc, was a
 // query-tpa bug, fixed upstream — see the note above "Two Applications, Two
 // Policies". If the wrong app still appears in the loop, read the classify
 // job output rather than assuming it is an SBOM labelling problem.
@@ -323,7 +324,7 @@ IMPORTANT: Six of those eight rows are measured. *Regression scan is not impleme
 
 Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge request is healthy and every check reported, then the *Auto-approve?* condition reads the approval value that travelled with the application's own policy.
 
-For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the green branch to *Merge MR (auto-approved)*. The Orchestrator undrafts the merge request and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
+For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the green branch to *Merge MR (auto-approved)*. The Orchestrator marks the merge request ready and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
 
 Go back to GitLab and open the merge request. It is already merged, and the merge was performed by the automation account — you never touched it.
 
@@ -406,7 +407,7 @@ Go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you
 
 Read that last point again, because it is the whole argument. Every automated check passed. The platform still refused to merge it. The policy says that on a system that moves customer money a person signs off even on a change that looks perfect, and the platform is not allowed to talk itself out of that — not even with a full table of green ticks to point at.
 
-Note also what the merge request is still marked as: *Draft*. The same verifier that undrafted the `benefits-mgmt-app` request left this one drafted on purpose, because its risk class demands a reviewer. The state of the merge request is itself part of the policy.
+Note also what the merge request is still marked as: *Draft*. The same verifier that marked the `benefits-mgmt-app` request ready left this one in Draft on purpose, because its risk class demands a reviewer. The state of the merge request is itself part of the policy.
 
 When you are satisfied, merge it yourself in GitLab.
 
@@ -476,7 +477,7 @@ The difference from Path 1 is not "AI wrote the merge request". It is three thin
 
 * *Scope* — the system knows which applications contain the component, because it asked TPA rather than scanning a single repository.
 * *Evidence* — by the time a human looks at the change, the tests have run and the results are in the merge request. The reviewer reads measurements, not promises.
-* *Proportionality* — attention is spent where it changes the outcome. An internal HR application merges itself. A PCI-scoped payment service does not, and no amount of green checkmarks changes that.
+* *Proportionality* — attention is spent where it changes the outcome. An internal HR application merges itself. A PCI-scoped payment service does not, and no amount of green ticks changes that.
 
 Scale is what makes this necessary. One remediation a week is a Renovate problem. Forty a week across sixty repositories, each needing a risk judgement and an audit trail, is an orchestration problem — and the only way a human stays in the loop at that volume is if the loop stops bothering them about `benefits-mgmt-app`.
 
