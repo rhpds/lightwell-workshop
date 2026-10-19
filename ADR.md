@@ -540,6 +540,16 @@ Copy and fill for each new decision:
 | **Consequences** | The auto path can now fail, and the validation table is guaranteed populated before the merge, because the pipeline being waited on is the one that writes it. A non-green check fails the JT with "the MR is left open for human review" — fail-closed, but with no SNOW comment explaining it. Accepted deliberately: the lab only demonstrates the happy path. A "merge withheld" SNOW comment is the upgrade if that path ever needs showing. Requires `lw-sdlc-opencode` [PR #7](https://github.com/rhpds/lw-sdlc-opencode/pull/7) merged **before** an AO republish, or the merge JT runs the old playbook and merges unvalidated as now. |
 | **Amends** | [ADR-041](#adr-041--ao-merges-auto_approve-after-verifier) — the merge is gated, and its `merge_delay_seconds` pacing clause is superseded. |
 
+## ADR-051 — Script ConfigMaps must change name to reach a live tenant
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Work around `ignoreDifferences` on ConfigMap `/data` |
+| **Context** | The tenant Argo Application carries `ignoreDifferences: [{jsonPointers: ["/data"], kind: ConfigMap}]`, listed twice. The rule lives in neither this repo nor agnosticv — the RHDP side that creates the Application sets it. Every file-backed script ConfigMap is therefore frozen at tenant-creation content, while Argo reports `Synced`. Found when Shaaf's ADR-049 promote-scoping did not reach `8djv7`: the live `bridge.py` was 401 lines against 493 in the repo, so Deploy kept fanning out to all AO paths and `wire-transfer-svc` — never merged, never built — was marked deployed three times with its parent INC resolved. Every previous "fixed it, rolled the ConfigMap, still broken" episode on a live tenant is probably the same cause. |
+| **Decision** | Name file-backed script ConfigMaps with a content hash — `cicd-eda-bridge-{{ sha256sum of the file | trunc 8 }}` — and reference that name from the Deployment/Job. A content change produces a *new* object; `ignoreDifferences` suppresses diffs on existing ones but does not block creation, and the referencing pod spec changes so it rolls by itself. Keep `Prune=true` behaviour in mind so superseded ConfigMaps are collected. Until that lands, patching a live tenant means `oc create configmap --dry-run=client -o yaml \| oc apply -f -` plus a `rollout restart` — a plain Argo sync will not do it, with or without a hard refresh. |
+| **Consequences** | Script changes reach existing tenants instead of silently not applying, and pods restart on content change without the checksum-annotation dance. Costs a ConfigMap rename on every edit, so diffs get noisier. The real repair is for the Application template to stop ignoring `/data` — raise with whoever owns it; this ADR is the workaround we control. Also explains why the existing "Argo needs a hard refresh when chart *files* change" gotcha never fully worked: a hard refresh does not defeat `ignoreDifferences`. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -598,3 +608,4 @@ Copy and fill for each new decision:
 | Deploy finalize parent from lifecycle artifacts | ADR-048 |
 | Deploy promote-scoped signal + finalize soft-skip | ADR-049 |
 | Gate auto_approve on the PR check, inside the merge | ADR-050 |
+| Script ConfigMaps need a content-hash name | ADR-051 |
