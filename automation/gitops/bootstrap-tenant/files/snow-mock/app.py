@@ -820,6 +820,12 @@ def get_incidents():
         filtered = [i for i in filtered if i.get('caller_id', '').lower() == query_params['caller_id'].lower()]
     if 'category' in query_params:
         filtered = [i for i in filtered if i.get('category', '').lower() == query_params['category'].lower()]
+    if 'parent_incident' in query_params:
+        parent_key = query_params['parent_incident'].upper()
+        filtered = [
+            i for i in filtered
+            if (i.get('parent_incident') or '').upper() == parent_key
+        ]
     if 'opened_today' in query_params:
         now = datetime.datetime.now(datetime.timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -855,6 +861,15 @@ def get_incident(incident_number):
         return jsonify({"error": "Incident not found"}), 404
     result = dict(incident)
     result["comments"] = list(comments_db.get(key, []))
+    # Always expose parent/child linkage for AO parent+child remediations.
+    parent = (result.get("parent_incident") or "").upper()
+    result["parent_incident"] = parent or None
+    children = [
+        i["number"]
+        for i in incidents_db.values()
+        if (i.get("parent_incident") or "").upper() == key
+    ]
+    result["child_incidents"] = sorted(children)
     return jsonify({"result": result})
 
 
@@ -904,6 +919,11 @@ def create_incident():
     new_number = get_next_number("INC", incidents_db.keys())
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    parent_raw = request.json.get("parent_incident") or request.json.get("parent") or ""
+    parent_incident = str(parent_raw).strip().upper() if parent_raw else ""
+    if parent_incident and parent_incident not in incidents_db:
+        return jsonify({"error": f"Parent incident not found: {parent_incident}"}), 400
+
     new_incident = {
         "number": new_number,
         "state": request.json.get("state", "New"),
@@ -924,6 +944,7 @@ def create_incident():
         "escalation": request.json.get("escalation", "-- None --"),
         "updated_on": now_iso,
         "updated_by": "api_user",
+        "parent_incident": parent_incident or None,
     }
 
     if request.json.get("state", "").lower() in ["resolved", "closed"] and 'resolution_notes' in request.json:

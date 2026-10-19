@@ -69,6 +69,14 @@ spec:
               USER_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" "${GITLAB_HOST}/api/v4/users?username=${USERNAME}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
               GROUP_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" "${GITLAB_HOST}/api/v4/groups/${GROUP}" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
 
+              # Re-syncs hit "group already exists" and leave a private group
+              # from early tenants — public acme-deployment then fails with
+              # "public is not allowed in a private group" and ArgoCD cannot
+              # clone anonymously. Always enforce public on the group.
+              curl -sk -o /dev/null -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                -X PUT "${GITLAB_HOST}/api/v4/groups/${GROUP_ID}" \
+                -d '{"visibility":"public"}' || true
+
               CODE=$(curl -sk -o /tmp/member.json -w '%{http_code}' \
                 -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
                 -X POST "${GITLAB_HOST}/api/v4/groups/${GROUP_ID}/members" \
@@ -146,6 +154,14 @@ spec:
                   echo "ERROR: could not resolve project id for ${PROJECT_PATH}"; return 1
                 fi
 
+                # Create is a no-op when the project already exists (HTTP 400
+                # "already been taken" on re-sync). Always enforce visibility
+                # so a prior private acme-deployment does not leave ArgoCD
+                # stuck on anonymous clone (ComparisonError / Access denied).
+                curl -sk -o /dev/null -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                  -X PUT "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" \
+                  -d "{\"visibility\":\"${VISIBILITY}\"}" || true
+
                 echo "Seeding ${PROJECT_PATH} from ${SEED_REPO} (ref ${SEED_REF})..."
                 if ! command -v git >/dev/null 2>&1; then
                   echo "ERROR: git not available in job image"; return 1
@@ -190,29 +206,42 @@ spec:
               seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" '' "public"
               {{- end }}
 
-              # Set up MR webhook on the AI remediation target (wire-transfer-svc)
-              if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
-                DEMO_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${DEMO_PROJECT_PATH}")
-                DEMO_PROJECT_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
-                  "${GITLAB_HOST}/api/v4/projects/${DEMO_ENC}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
-                if [ -n "${DEMO_PROJECT_ID}" ]; then
-                  echo "Ensuring GitLab MR webhook on ${DEMO_PROJECT_PATH} → ${GITLAB_WEBHOOK_URL}..."
-                  HOOK_ID=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
-                    "${GITLAB_HOST}/api/v4/projects/${DEMO_PROJECT_ID}/hooks" | python3 -c 'import json,sys; t=sys.argv[1].rstrip("/"); h=next((x for x in json.load(sys.stdin) if (x.get("url") or "").rstrip("/")==t and x.get("merge_requests_events")), None); print(h["id"] if h else "")' "${GITLAB_WEBHOOK_URL}" || true)
-                  if [ -n "${HOOK_ID}" ]; then
-                    echo "GitLab MR webhook already present (id=${HOOK_ID})"
-                  else
-                    CODE=$(curl -sk -o /tmp/hook.json -w '%{http_code}' \
-                      -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
-                      -X POST "${GITLAB_HOST}/api/v4/projects/${DEMO_PROJECT_ID}/hooks" \
-                      -d "{\"url\":\"${GITLAB_WEBHOOK_URL}\",\"push_events\":false,\"merge_requests_events\":true,\"enable_ssl_verification\":false}")
-                    if [ "${CODE}" = "201" ]; then
-                      echo "GitLab MR webhook created"
-                    else
-                      echo "ERROR: GitLab webhook create failed (HTTP ${CODE})"; cat /tmp/hook.json; exit 1
-                    fi
-                  fi
+              # MR webhooks → EDA for needs_approval path: student merges in
+              # GitLab; EDA signals AO await_gitlab_merge (not MR-open Resume).
+              ensure_mr_webhook() {
+                local path="$1"
+                local enc id hook_id code
+                enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "${path}")
+                id=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                  "${GITLAB_HOST}/api/v4/projects/${enc}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" || true)
+                if [ -z "${id}" ]; then
+                  echo "WARNING: project ${path} not found — skip MR webhook"
+                  return 0
                 fi
+                echo "Ensuring GitLab MR webhook on ${path} → ${GITLAB_WEBHOOK_URL}..."
+                hook_id=$(curl -sk -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" \
+                  "${GITLAB_HOST}/api/v4/projects/${id}/hooks" | python3 -c 'import json,sys; t=sys.argv[1].rstrip("/"); h=next((x for x in json.load(sys.stdin) if (x.get("url") or "").rstrip("/")==t and x.get("merge_requests_events")), None); print(h["id"] if h else "")' "${GITLAB_WEBHOOK_URL}" || true)
+                if [ -n "${hook_id}" ]; then
+                  echo "GitLab MR webhook already present (id=${hook_id})"
+                  return 0
+                fi
+                code=$(curl -sk -o /tmp/hook.json -w '%{http_code}' \
+                  -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
+                  -X POST "${GITLAB_HOST}/api/v4/projects/${id}/hooks" \
+                  -d "{\"url\":\"${GITLAB_WEBHOOK_URL}\",\"push_events\":false,\"merge_requests_events\":true,\"enable_ssl_verification\":false}")
+                if [ "${code}" = "201" ]; then
+                  echo "GitLab MR webhook created on ${path}"
+                else
+                  echo "ERROR: GitLab webhook create failed for ${path} (HTTP ${code})"; cat /tmp/hook.json; exit 1
+                fi
+              }
+              if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
+                {{- range .Values.gitlab.appSeeds }}
+                {{- /* needs_approval only — auto_approve is merged by AO; avoid spurious EDA signals */}}
+                {{- if and .policy (eq (index .policy "remediation_owner") "ao") (eq (index .policy "approval") "needs_approval") }}
+                ensure_mr_webhook "{{ include "bootstrap-tenant.gitlabGroup" $ }}/{{ .name }}"
+                {{- end }}
+                {{- end }}
               fi
 
               echo "GitLab tenant provisioning complete"

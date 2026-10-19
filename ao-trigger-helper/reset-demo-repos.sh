@@ -195,7 +195,8 @@ reset_app() {
 
   work="$(mktemp -d)"
   echo "  cloning ${source_repo} (${source_ref})…"
-  git -c http.sslVerify=false clone --depth 1 --branch "${source_ref}" "${source_repo}" "${work}/src"
+  # Full clone — GitLab rejects force-push of a shallow history ("shallow update not allowed").
+  git -c http.sslVerify=false clone --branch "${source_ref}" "${source_repo}" "${work}/src"
   (
     cd "${work}/src"
     git checkout -B "${DEFAULT_BRANCH}"
@@ -206,7 +207,8 @@ reset_app() {
     printf '%s\n' "${policy_json}" > .lightwell/policy.json
     git add .lightwell/policy.json
     if ! git diff --cached --quiet; then
-      git commit -m "Add .lightwell/policy.json for Lightwell remediation routing"
+      # Demo helper: never block on local GPG pinentry.
+      git -c commit.gpgsign=false commit -m "Add .lightwell/policy.json for Lightwell remediation routing"
     fi
 
     push_url="${GITLAB_HOST}/${project_path}.git"

@@ -57,6 +57,22 @@ Useful flags: `--dry-run`, `--watch`, `--version <full.rhlw-…>`.
 Overrides: `EDA_WEBHOOK_ROUTE_URL`, `NEEDS_APPROVAL_GAV`, `AUTO_APPROVE_GAV`
 (`group:artifact:baseVersion`).
 
+## Signal CI/CD gates (after merge)
+
+When the AO run is Waiting on **Await CI build** or **Await deploy Healthy**,
+POST a lifecycle event to EDA (does **not** Start a second remediation):
+
+```bash
+./trigger-cicd-signal.sh <guid> build  succeeded acme-<guid>/wire-transfer-svc
+./trigger-cicd-signal.sh <guid> deploy healthy   acme-<guid>/wire-transfer-svc
+# failures:
+./trigger-cicd-signal.sh <guid> build  failed    acme-<guid>/wire-transfer-svc
+./trigger-cicd-signal.sh <guid> deploy degraded  acme-<guid>/wire-transfer-svc
+```
+
+Requires AAP project sync with `signal-ao-cicd-gate.yml` + rulebook rules, and
+the AO canvas published with `await_build` / `await_deploy` nodes (ADR-033).
+
 ## Reset apps (after a demo)
 
 Re-seeds `acme-<guid>/{wire-transfer-svc,benefits-mgmt-app,report-generator-app}`

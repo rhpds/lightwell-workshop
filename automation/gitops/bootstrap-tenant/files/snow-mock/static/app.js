@@ -366,6 +366,22 @@ async function loadDetail(number) {
             </div>
             <div class="sn-form-row-wide">
                 <div class="sn-form-row">
+                    <span class="sn-form-label">Parent incident</span>
+                    <div class="sn-form-value">
+                        <input type="text" class="sn-form-input" value="${escapeHtml(inc.parent_incident || '')}" readonly placeholder="—">
+                    </div>
+                </div>
+            </div>
+            <div class="sn-form-row-wide">
+                <div class="sn-form-row">
+                    <span class="sn-form-label">Child incidents</span>
+                    <div class="sn-form-value">
+                        <input type="text" class="sn-form-input" value="${escapeHtml((inc.child_incidents || []).join(', '))}" readonly placeholder="—">
+                    </div>
+                </div>
+            </div>
+            <div class="sn-form-row-wide">
+                <div class="sn-form-row">
                     <span class="sn-form-label">Description</span>
                     <div class="sn-form-value">
                         <textarea class="sn-form-textarea" readonly>${escapeHtml(inc.description)}</textarea>

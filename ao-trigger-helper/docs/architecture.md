@@ -173,41 +173,49 @@ sequenceDiagram
     Bridge->>AO: OAuth + POST /api/v1/webhooks/eda/{startPath}
     Note over AO: single canvas run owns Path 2
 
-    AO->>AAP: JT Create SNOW Incident
-    AAP->>SNOW: open INC
+    AO->>AAP: JT Create SNOW Incident (parent)
+    AAP->>SNOW: open parent INC
     AO->>AAP: JT Query TPA
     AAP->>TPA: query SBOMs for GAV
     TPA-->>AAP: affected_repos + package_info
     AO->>AAP: JT Classify Affected Apps
     Note over AAP: policy.json → ao_apps vs renovate_skips<br/>candidates = TPA list only (ADR-023)
-    AAP->>SNOW: classify comment
+    AAP->>SNOW: classify comment on parent
+    AO->>AAP: JT SNOW Create Children
+    AAP->>SNOW: one child INC per ao_app (parent_incident)
 
-    loop for-each ao_apps
+    loop for-each ao_apps with child_incident
         AO->>AAP: JT Trigger Impact Analyzer
         AAP->>OC: session + prompt_async (impact-analyzer)
         alt already_current on main
             OC-->>AAP: iteration_outcome=already_current
-            AAP->>SNOW: iteration comment — skip Verifier
+            AAP->>SNOW: comment on child — skip Verifier
         else MR opened
             OC->>GL: bump pom, branch update-artifact-*, MR
             AO->>AAP: JT Trigger MR Verifier
             Note right of AAP: default verifier_use_opencode=false<br/>(GitLab MR-open check)
             alt auto_approve
                 AO->>AAP: JT Merge GitLab MR
+                AAP->>GL: merge MR
             else needs_approval
-                Note over AO: AO Approval node (human)
-                AO->>AAP: JT Merge GitLab MR
+                Note over AO: await_gitlab_merge (student merges in GitLab UI)
+                GL-->>EDA: MR merged webhook
+                EDA->>AAP: JT Signal (await_gitlab_merge)
+                AAP->>AO: PATCH /approvals approved
             end
-            AAP->>SNOW: iteration comment
+            Note over AO: await_build then await_deploy
+            GL->>PaC: push main after merge
+            PaC-->>EDA: pipelinerun_terminal (or trigger-cicd-signal.sh)
+            EDA->>AAP: JT Signal AO CI/CD Gate (await_build)
+            AAP->>AO: PATCH /approvals status=approved|rejected
+            PaC->>PaC: promote → Argo → Healthy
+            Note over EDA: argo_app_health → Signal await_deploy
+            AAP->>SNOW: comment on child (deployed / build_failed / deploy_failed)
         end
     end
 
-    AO->>AAP: JT SNOW Finalize
-    AAP->>SNOW: final comment + close
-    Note over AO: AO run complete — CI/CD is outside the canvas
-
-    GL->>PaC: push main after merge
-    PaC->>PaC: build, SBOM, sign → Nexus OCI → Argo → TPA
+    AO->>AAP: JT SNOW Finalize (parent)
+    AAP->>SNOW: parent rollup + close
 ```
 
 Steps worth understanding rather than just watching:
@@ -216,9 +224,18 @@ Steps worth understanding rather than just watching:
   Orchestrator** only. MR Verifier runs **in-loop** on the AO canvas after
   Impact (ADR-025 removed the dual-Verifier Resume path).
 - **Classify does not invent apps.** `ao_apps` is derived from TPA
-  `affected_repos` + each repo’s `.lightwell/policy.json`. If TPA SBOMs share
-  labels or coordinates loosely, flyway can mis-hit wire-transfer — check
-  classify artifacts before trusting the auto-approve story.
+  `affected_repos` + each repo’s `.lightwell/policy.json` (ADR-023).
+- **Query TPA blast radius (contract).** For each Acme app name
+  (`wire-transfer-svc`, `benefits-mgmt-app`, `report-generator-app`), load the
+  newest SBOM (`sort=ingested:desc`) whose `name` matches, then match packages
+  whose PURL contains `pkg:maven/{group}/{artifact}` (any version — Nexus
+  events carry the *new* `.rhlw-*` version). Emit
+  `gitlab_path = {gitlab_group}/{sbom.name}` (default `acme-{guid}/…`).
+  Empty list → JT fails (no Impact). **Do not** substitute
+  `REMEDIATION_APP_GITLAB_PATH` as the sole affected app. Helper:
+  `lw-sdlc-opencode` `playbooks/files/tpa_blast_radius.py`. Live check on
+  `cng2l`: h2 → wire (+ report if present); flyway-core → benefits only.
+  Renovate-owned hits stay in `affected_repos` and are skipped by classify.
 - **Worker AAP jobs are launchers for Impact.** Green JT ≠ agent done; watch
   the OpenCode UI. Verifier currently defaults to a lightweight GitLab “MR open”
   check until the ephemeral OpenCode skill is fixed.
@@ -231,6 +248,13 @@ Steps worth understanding rather than just watching:
 - **`already_current` short-circuit.** If `main` already has the fix GAV, Impact
   skips Verifier/merge and writes a SNOW iteration note (ADR-027). Reset repos
   between demos or you will only see that path.
+- **Post-merge CI/CD is parked Approvals, not Wait.** AO `Wait` is duration-only.
+  After merge the canvas parks on `await_build` then `await_deploy`. EDA must
+  **not** Start Orchestrator for those events — it runs
+  `SDLC Signal AO CI/CD Gate`, which `PATCH`es `/api/v1/approvals/{id}` with
+  `status=approved|rejected` (activity `/signal` returns Temporal 500 on current
+  AO). The EDA bridge SA needs **project-user** on `lightwell-{guid}`. Smoke
+  helper: [`trigger-cicd-signal.sh`](../trigger-cicd-signal.sh). See ADR-033.
 
 ---
 

@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-18 (publish-remediation JAR fix, TPA route fix, scale callout)
+Last updated: 2026-10-19 (ADR-034 student GitLab merge; async CI/CD gates)
 
 ## Where the pieces live
 
@@ -285,19 +285,28 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    decision** — "behavioural diff" means running the suite against the
    target-branch baseline too, which doubles build time. Nothing is ever
    reported green without having been measured.
-1. **The auto-approve path cannot happen: every event routes to one app.**
-   `query-tpa.yml` builds `affected_repos` as a single hardcoded entry from
-   `REMEDIATION_APP_GITLAB_PATH`, which the chart pins to
-   `wire-transfer-svc`; `match_reason: sbom_label_and_dependency_coordinate`
-   is a label, not a lookup. Verified on `54dp7`: a `flyway-core` event (the
-   dependency `benefits-mgmt-app` declares) produced
-   `classify candidates=1 -> wire-transfer-svc`, then Impact reused that
-   app's existing h2 merge request. So `benefits-mgmt-app`'s `auto_approve`
-   / `riskClass: LOW` policy is never exercised and module 3's "two
-   applications, two policies" centrepiece does not occur. Fixing it means
-   resolving the affected app from the artifact coordinate — TPA holds
-   per-app SBOMs, so the data exists. Owner question for James/shaaf, since
-   it is their AO/classify design.
+1. **~~The auto-approve path cannot happen~~ → fixed (real TPA blast radius).**
+   `query-tpa.yml` matches GAV → SBOM `name` → `acme-{guid}/{app}`
+   (`tpa_blast_radius.py`). Live on `cng2l`: flyway → benefits; h2 → wire.
+   Parent/child SNOW + canvas in workshop + `lw-sdlc-opencode` (`ece73c4`).
+   **Still push** local `fetch-app-policy.yml` (`auto_approve` allowlist) and
+   republish AO + sync AAP for CI/CD gates (1a).
+   → OpenSpec `ao-operator-async-remediation`; [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch)
+
+1a. **Async CI/CD + student GitLab merge (ADR-033/034) — AO v6 live on cng2l.**
+   `auto_approve`: AO merges → `await_build` → `await_deploy`.
+   `needs_approval`: park `await_gitlab_merge` (student merges in GitLab;
+   EDA MR-**merged** webhook signals; no AO Approve/Merge node) → build →
+   deploy.    **Smoke 2026-10-19** (`f4d247ee…`): reset → webhook →
+   `PATCH /approvals` approved on `await_gitlab_merge` → EDA
+   `trigger-cicd-signal` build/deploy → execution **completed**.
+   **GitLab MR webhook live on cng2l:** `acme-cng2l/wire-transfer-svc`
+   hook id=1 → EDA route (`merge_requests_events`); AAP/EDA synced to
+   `8273e02` (MR-merged → Signal `await_gitlab_merge` probed OK, JT 260).
+   Chart `create-gitlab-tenant` also ensures this hook for
+   `needs_approval` AO seeds.
+   → [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch),
+   [ADR-034](ADR.md#adr-034--student-merges-needs_approval-mrs-in-gitlab)
 
 1. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook

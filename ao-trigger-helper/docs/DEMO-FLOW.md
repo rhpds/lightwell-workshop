@@ -92,11 +92,11 @@ cd ao-trigger-helper
 | **Renovate** | GitLab; Nexus | Path 1 only — MR as `renovate-bot`. |
 | **GitLab (`acme-{guid}`)** | Renovate; OpenCode; Student; PaC | MRs + merge → PaC push webhook. Policy file `.lightwell/policy.json` per app. |
 | **EDA** | Nexus / showcase; AAP | Sensor only: `*.rhlw-*` CREATED → JT **SDLC Start Orchestrator**. **No** GitLab MR-open → Resume (dual-Verifier removed). |
-| **AO** | EDA; AAP; SNOW | Owns the canvas: SNOW → TPA → classify → for-each (Impact → Verifier → approval → merge) → finalize. |
-| **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, Create/Comment/Finalize SNOW, Query TPA, Classify, Impact, Verifier, Merge, … |
+| **AO** | EDA; AAP; SNOW | Owns the canvas: **parent** SNOW → TPA → classify → **child** SNOW → for-each (Impact → Verifier → **auto: AO merge** / **needs_approval: await student GitLab merge** → **await_build** → **await_deploy** → child comments) → **parent** finalize. |
+| **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, Create parent / Create children / Comment / Finalize SNOW, Query TPA, Classify, Impact, Verifier, Merge, … |
 | **OpenCode** | AAP; TPA; GitLab; LiteLLM | Impact opens draft/ready MR; Verifier defaults to lightweight “MR open” check (`verifier_use_opencode: false` until skill fixed). UI via `opencode-ui-gate`. |
 | **TPA** | Query TPA; Tekton SBOM upload | `affected_repos` drives classify (no hardcoded app list). |
-| **ServiceNow mock** | AO playbooks | Create → classify comment → per-iteration → finalize/close. Needs `snow_url` / `snow_svc_url` on every SNOW JT (baked at AO publish). |
+| **ServiceNow mock** | AO playbooks | Parent INC at start; one child per AO app (`parent_incident`); iteration comments on children; parent rollup/close. Bake `snow_url` / `snow_svc_url` at AO publish. |
 | **PaC / Tekton / Chains / Argo** | GitLab; Nexus; TPA; prod NS | Shared post-merge spine. |
 | **Student** | GitLab; AO UI; SNOW; RenovateJob | Path 1 merge; Path 2 human gate on wire-transfer. |
 
@@ -137,21 +137,23 @@ sequenceDiagram
   EDA->>AAP: JT Start Orchestrator
   AAP->>AO: POST start webhook path
 
-  AO->>AAP: JT Create SNOW Incident
-  AAP->>SNOW: open INC
+  AO->>AAP: JT Create SNOW Incident (parent)
+  AAP->>SNOW: open parent INC
   AO->>AAP: JT Query TPA
   AAP->>TPA: query SBOMs for GAV
   TPA-->>AAP: affected_repos
   AO->>AAP: JT Classify Affected Apps
   Note over AAP: policy.json → ao_apps vs Renovate skip
-  AAP->>SNOW: classify comment
+  AAP->>SNOW: classify comment on parent
+  AO->>AAP: JT SNOW Create Children
+  AAP->>SNOW: one child INC per ao_app
 
-  loop for-each ao_apps
+  loop for-each ao_apps (with child_incident)
     AO->>AAP: JT Impact Analyzer
     AAP->>Impact: prompt_async
     Impact->>GL: draft/ready MR (pom .rhlw bump)
     alt already_current on main
-      AO->>SNOW: iteration comment (skip Verifier)
+      AO->>SNOW: comment on child (skip Verifier)
     else MR opened
       AO->>AAP: JT MR Verifier
       AAP->>Verify: MR open check (or OpenCode when enabled)
@@ -161,12 +163,12 @@ sequenceDiagram
         Note over AO: AO Approval node (human)
         AO->>AAP: JT Merge GitLab MR
       end
-      AO->>SNOW: iteration comment
+      AO->>SNOW: comment on child
     end
   end
 
-  AO->>AAP: JT SNOW Finalize
-  AAP->>SNOW: final comment + close
+  AO->>AAP: JT SNOW Finalize (parent)
+  AAP->>SNOW: parent rollup + close
 
   GL->>PaC: push main (after merge)
   PaC->>OCI: image + SBOM → TPA
@@ -177,10 +179,11 @@ Narrative shorthand:
 
 ```
 Trigger → EDA → Start Orchestrator → AO
-  → SNOW create → Query TPA → Classify (+ SNOW comment)
+  → parent SNOW create → Query TPA → Classify (+ parent comment)
+  → child SNOW create (per ao_app)
   → for-each AO app:
-       Impact → (already_current | Verifier → Approval?/Merge → SNOW iter)
-  → SNOW finalize
+       Impact → (already_current | Verifier → Approval?/Merge → child SNOW iter)
+  → parent SNOW finalize
   → (on merge) Tekton → OCI → Argo → TPA
 ```
 

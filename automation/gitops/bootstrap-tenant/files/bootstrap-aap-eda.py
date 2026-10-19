@@ -79,6 +79,7 @@ SDLC_WORKER_JOB_TEMPLATES = [
     ("SDLC Create SNOW Incident", "playbooks/snow-create-incident.yml"),
     ("SDLC Classify Affected Apps", "playbooks/classify-affected-apps.yml"),
     ("SDLC SNOW Comment", "playbooks/snow-comment.yml"),
+    ("SDLC SNOW Create Children", "playbooks/snow-create-children.yml"),
     ("SDLC SNOW Iteration Comment", "playbooks/snow-iteration-comment.yml"),
     ("SDLC SNOW Finalize", "playbooks/snow-finalize.yml"),
     ("SDLC Merge GitLab MR", "playbooks/merge-gitlab-mr.yml"),
@@ -89,6 +90,8 @@ SDLC_WORKER_JOB_TEMPLATES = [
 SDLC_AO_BRIDGE_JOB_TEMPLATES = [
     ("SDLC Start Orchestrator", "playbooks/start-orchestrator.yml"),
     ("SDLC Resume Orchestrator", "playbooks/resume-orchestrator.yml"),
+    # Lifecycle resume for parked await_build / await_deploy Approval gates.
+    ("SDLC Signal AO CI/CD Gate", "playbooks/signal-ao-cicd-gate.yml"),
 ]
 
 
@@ -349,6 +352,8 @@ def build_extra_var_yaml() -> str:
         # guid reaches the AO payload and the per-tenant sandbox naming; without
         # it the orchestrator cannot tell which tenant an event came from.
         f"guid: {env('GUID', '')}",
+        # GitLab group holding Acme apps — query-tpa maps SBOM name → {gitlab_group}/{app}.
+        f"gitlab_group: {env('GITLAB_GROUP') or (('acme-' + env('GUID')) if env('GUID') else '')}",
         f"snow_url: {env('SNOW_URL', '')}",
         f"snow_svc_url: {env('SNOW_SVC_URL', '')}",
         # Informative only — classify uses query_tpa.affected_repos, not this flag

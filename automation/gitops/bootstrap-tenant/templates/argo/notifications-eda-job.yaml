@@ -1,0 +1,82 @@
+{{- if and .Values.apps.enabled .Values.sdlc.orchestrator.enabled }}
+# Stamp the tenant EDA webhook onto Acme Applications so operators (and a
+# future NotificationsConfiguration) can correlate deploy events to
+# await_deploy. Lifecycle smoke uses ao-trigger-helper/trigger-cicd-signal.sh
+# until cluster-wide Argo Notifications services are configured (ADR-033).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-app-annotate-{{ .Values.guid }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-app-annotate-{{ .Values.guid }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-app-annotate-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-tenant-jobs
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argo-notifications-eda-{{ .Values.guid }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+  labels:
+    app.kubernetes.io/instance: lightwell-tenant-{{ .Values.guid }}
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: lightwell-tenant-jobs
+      containers:
+        - name: annotate
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              GUID="{{ .Values.guid }}"
+              EDA_URL="{{ .Values.sdlc.edaWebhookRouteUrl | default "" }}"
+              if [ -z "${EDA_URL}" ]; then
+                HOST=$(oc get route "sdlc-remediation-${GUID}" -n aap -o jsonpath='{.spec.host}' 2>/dev/null || true)
+                if [ -n "${HOST}" ]; then
+                  EDA_URL="https://${HOST}/"
+                fi
+              fi
+              if [ -z "${EDA_URL}" ]; then
+                echo "WARNING: no EDA route — skip annotations"
+                exit 0
+              fi
+              EDA_URL="${EDA_URL%/}/"
+              echo "Annotating apps lightwell.guid=${GUID} → ${EDA_URL}"
+              for app in $(oc get applications -n openshift-gitops -l "lightwell.guid=${GUID}" \
+                  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true); do
+                [ -z "${app}" ] && continue
+                echo "  ${app}"
+                oc annotate application "${app}" -n openshift-gitops --overwrite \
+                  "lightwell.eda-webhook=${EDA_URL}" \
+                  "lightwell.cicd-gate=await_deploy" || true
+              done
+              echo "Done. POST argo_app_health to EDA for await_deploy (see trigger-cicd-signal.sh)."
+{{- end }}
