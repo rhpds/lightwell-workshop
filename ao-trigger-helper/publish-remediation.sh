@@ -345,6 +345,12 @@ for i in $(seq 0 $((CVE_COUNT - 1))); do
   CVE_ID="${CVE_ARRAY[$i]}"
   ADV_ID="RHLW-${YEAR}-$((NUM_BASE + i))"
   OSV_FILE=$(mktemp)
+  # The summary carries the Maven coordinate as well as the product name:
+  # TPA free-text search matches the human name, not the artifactId, so
+  # without it query-tpa.yml cannot find the advisory we just published
+  # and the MR renders "CVE: not referenced".
+  # NB: comments must stay out here — anything inside the heredoc below is
+  # emitted verbatim into the JSON and TPA rejects it with JsonParse.
 
   cat > "${OSV_FILE}" <<OSVEOF
 {
@@ -364,11 +370,6 @@ for i in $(seq 0 $((CVE_COUNT - 1))); do
       "type": "WEB"
     }
   ],
-  # Include the Maven coordinate so query-tpa.yml can find this advisory
-  # from group:artifact alone. TPA free-text search matches the human
-  # product name, not the artifactId, so without the coordinate here the
-  # MR Summary renders "CVE: not referenced" even though we just
-  # published the advisory that names it.
   "summary": "${DESCRIPTION} (${GROUP_ID}:${ARTIFACT_ID}): Lightwell remediation for ${CVE_ID}",
   "details": "${GROUP_ID}:${ARTIFACT_ID} ${BASE_VERSION} is affected by ${CVE_ID}. The Lightwell-remediated build ${RHLW_VERSION} resolves this vulnerability while preserving API compatibility.",
   "aliases": ["${CVE_ID}"],
