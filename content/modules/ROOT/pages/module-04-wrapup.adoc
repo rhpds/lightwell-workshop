@@ -10,39 +10,90 @@ You have now used both approaches to automating CVE remediation with Red Hat Lig
 [cols="2,3,3",options="header"]
 |===
 | | Path 1: Quick Win | Path 2: Full Automation
-| *What drives it* | Renovate (deterministic) | Ansible Orchestrator + AI agents
-| *How it finds affected apps* | Scans `pom.xml` against Lightwell registry | Queries TPA with SBOM data
-| *How it decides what to fix* | Bumps every dependency with an `.rhlw` version available | AI assesses risk per application; auto-approves low risk, flags high risk
-| *Human involvement* | Review and merge every MR | Review only the high-risk MRs
-| *ITSM integration* | None | ServiceNow ticket opened, updated throughout, auto-closed
-| *Best for* | Getting started; small portfolios; teams without Ansible | Enterprises at scale; compliance-heavy environments; mixed risk portfolios
-| *What you need* | Renovate operator + CI/CD | Ansible Orchestrator + TPA + AI model endpoint + ServiceNow + CI/CD
+
+| *What drives it*
+| Renovate (deterministic)
+| Automation Orchestrator + AI agents
+
+| *How it finds affected apps*
+| Scans one repository's `pom.xml` against the Lightwell registry
+| Queries TPA for every SBOM containing the component
+
+| *How it decides what to fix*
+| Bumps every dependency with an `.rhlw` version available
+| The agent bumps the coordinate TPA flagged, in the applications TPA named
+
+| *Who decides whether it may ship*
+| Always you
+| `.lightwell/policy.json` in each repository — `auto_approve` merges itself, `needs_approval` waits for a person
+
+| *What a reviewer sees*
+| A one-line version bump
+| CVE, CVSS, risk class and a validation table measured on that exact change
+
+| *ITSM integration*
+| None
+| ServiceNow parent incident per event holding milestones, a child per affected application holding the detail and the deep links
+
+| *Best for*
+| Getting started; small portfolios; teams without Ansible
+| Enterprises at scale; compliance-heavy environments; mixed-risk portfolios
+
+| *What you need*
+| Renovate operator + CI/CD
+| Automation Orchestrator + TPA + AI model endpoint + ServiceNow + CI/CD
 |===
 
-Neither path is "better" — they solve different problems. Many organizations will start with Path 1 and graduate to Path 2 as their vulnerability management practice matures.
+Neither path is "better" — they solve different problems, and they coexist. `report-generator-app` is owned by Renovate and `wire-transfer-svc` by the Orchestrator, in the same portfolio, with no collision between them: each repository's policy file says which tool is responsible for it. Many organisations will start with Path 1 and move applications across as their practice matures.
+
+=== The Half You Did Not Have to Think About
+
+Look back at what the two paths actually have in common. Once a merge lands on `main` — whether Renovate proposed it, you merged it, or the Orchestrator merged it on policy — the rest is identical:
+
+`build-push-to-main` compiles, generates a CycloneDX SBOM and uploads it to TPA, signs the image with Tekton Chains via Trusted Artifact Signer, pushes to the Nexus OCI registry, and promotes the new `imageTag` into the deployment repository. ArgoCD notices the commit and rolls the application out.
+
+That matters more than it looks. The signing, the SBOM and the deployment story do not change because you picked a different remediation strategy, which means adopting Path 2 later is not a re-platforming exercise. You are replacing *who decides what to change*, not how software gets built and shipped.
+
+== What Actually Made the Human Optional
+
+It is tempting to summarise Path 2 as "the AI decided". It did not, and the distinction is the most important thing in this lab.
+
+The AI agent wrote the change: it read the `pom.xml`, bumped the coordinate, pushed a branch and drafted the merge request. It was never asked whether the change should ship. That decision came from three places, none of them a model:
+
+* *TPA* answered which applications genuinely contain the component — from SBOM data, not from guessing or grepping.
+* *The pipeline* measured whether the change is safe: unit tests, integration tests, SBOM integrity, licence comparison, dependency compatibility. Anything it did not measure stayed `Pending` rather than turning green.
+* *`.lightwell/policy.json`* — a four-line file in each application's own repository, written by humans, reviewed like any other code — said whether a person must sign off.
+
+That last one is policy-as-code, and it is why `wire-transfer-svc` stopped with every check green. No heuristic weighed the evidence and concluded it was probably fine. The policy said a PCI-scoped payment system needs a human, and the platform had no mechanism to argue.
+
+NOTE: It also fails closed. If that policy file is missing, unreadable or malformed, the application is treated as `needs_approval`. The default is to ask.
 
 == What We Did Not Cover
 
-This lab focused on a single CVE flowing through the pipeline end to end. In production, several additional concerns apply:
+This lab followed a single remediation through the pipeline end to end. Several production concerns are out of scope:
 
-* *Multi-stage deployment* — this lab deployed straight to production. Real environments typically have test, staging, and production stages, each with its own approval gate and validation suite. ArgoCD supports this natively via ApplicationSets and sync policies.
+* *Multi-stage deployment* — this lab promotes straight to one environment. Real pipelines have test, staging and production, each with its own gate and validation suite. ArgoCD supports this natively via ApplicationSets and sync policies.
 
-* *Custom VEX generation* — Red Hat publishes VEX documents for its products. Customers can generate VEX for their own applications to inform scanners about which component matches are genuinely exploitable and which are not.
+* *Custom VEX generation* — Red Hat publishes VEX documents for its products. Generating VEX for your own applications tells scanners which component matches are genuinely exploitable, which is how you stop drowning reviewers in findings that do not apply.
 
-* *Policy-as-code* — auto-approval decisions can be driven by formal policy engines (e.g. Kyverno, OPA/Gatekeeper) rather than AI heuristics, providing deterministic, auditable approval logic.
+* *Richer policy* — the policy file here is deliberately minimal: an owner, an approval mode and a risk class. Real policy might key on blast radius, data classification, change freeze windows or who is on call, and can be evaluated by a formal engine such as OPA/Gatekeeper or Kyverno rather than read as a flat file.
 
-* *Fleet-scale remediation* — when a CVE affects dozens of applications across multiple clusters, Red Hat Advanced Cluster Management can coordinate the rollout.
+* *Fleet-scale remediation* — when a CVE affects dozens of applications across multiple clusters, Red Hat Advanced Cluster Management coordinates the rollout.
 
-* *Continuous compliance* — the SBOMs, signatures, and attestations generated by the pipeline feed into compliance frameworks (FedRAMP, SOC 2, PCI-DSS) as machine-readable evidence.
+* *Continuous compliance* — the SBOMs, signatures and attestations this pipeline already produces feed compliance frameworks (FedRAMP, SOC 2, PCI-DSS) as machine-readable evidence.
+
+* *Closing the loop on the ticket* — the parent incident resolves when the deployment is healthy; closing each child on its own application's deploy is not wired up in this lab.
 
 == Key Takeaways
 
-* *Lightwell eliminates the sourcing problem.* Remediated, signed builds of open source components arrive automatically — no manual version hunting.
+* *Lightwell removes the sourcing problem.* Remediated, signed builds of open source components arrive on their own. Nobody hunts for a patched version, and nobody backports one by hand.
 
-* *SBOMs turn "are we affected?" from an investigation into a query.* TPA answers in seconds what used to take days of manual searching.
+* *SBOMs turn "are we affected?" from an investigation into a query.* TPA answers in seconds what used to be a week of grepping repositories and asking around — and it answers for applications nobody thought to check.
 
-* *Automation removes the waiting.* Whether it is Renovate creating a mechanical version bump or an AI agent assessing risk and proposing a change, the time between "CVE published" and "patch deployed" drops from weeks to minutes.
+* *Evidence arrives before the reviewer does.* By the time a human opens the merge request, the tests have run and the results are written into it. A reviewer who is reading measurements makes a different quality of decision than one reading a diff and a hope.
 
-* *The human stays in the loop where it matters.* Both paths preserve human judgment for high-risk decisions. The automation removes the searching and the waiting, not the accountability.
+* *Attention is spent where it changes the outcome.* An internal HR application merges itself. A payment service does not, and no number of green ticks changes that. Scale is what forces the distinction: one remediation a week is a Renovate problem, forty a week across sixty repositories is an orchestration problem, and the only way a human stays meaningfully in the loop at that volume is if the loop stops interrupting them about the easy ones.
+
+* *The audit trail is a by-product, not a project.* The incident was open before the change existed, collected every decision and measurement as they happened, and resolved when the fix was running. Nobody assembled it afterwards, which is the only version of compliance evidence that stays true.
 
 Thank you for completing the lab.
