@@ -60,6 +60,21 @@ The back half of both paths is the same. Path 2 only replaces *who decides what 
 
 Event-Driven Ansible is deliberately thin here. It is a sensor: it recognises the `.rhlw` artifact event and launches one job template, `SDLC Start Orchestrator`, which posts to the Automation Orchestrator webhook. Everything after that is a node on the Orchestrator canvas, which means the whole flow is visible in one place and every step is recorded as it runs.
 
+// BLOCKED (19 Oct): this diagram shows the ADR-033/034 canvas, which no
+// longer exists. ADR-035 removed every `type: approval` node and the AO merge
+// job template, so there is no "Auto-approve?" condition, no "Merge MR (auto)"
+// and no "Approve remediation MR" gate. What the canvas does now:
+//   start   : SNOW parent -> TPA -> classify -> SNOW comment -> SNOW children
+//             -> for-each(Impact -> Already current? -> Verifier -> Verifier
+//             passed? -> SNOW iteration comment) -> SNOW parent "awaiting
+//             GitLab merge" -> execution ENDS
+//   merged  : separate execution, EDA webhook -> SNOW "MR merged"
+//   build   : separate execution -> SNOW build succeeded / failed
+//   deploy  : separate execution -> SNOW deployed -> SNOW finalize (parent)
+// Redrawing this is held pending the auto-merge decision (see HANDOFF): if
+// mr-verifier gains an auto-merge for approval==auto_approve the low-risk
+// branch changes shape, and the diagram should be drawn once, not twice.
+
 .Path 2: the Automation Orchestrator canvas
 [mermaid]
 ----
@@ -94,16 +109,14 @@ Merging is where Path 2 rejoins Path 1: the push to `main` starts the Tekton pip
 
 NOTE: The `report-generator-app` you remediated in Module 2 never enters this loop. Its policy marks Renovate as the remediation owner, so the classify step records it and skips it. Two tools, one portfolio, no collisions.
 
-// BLOCKED (verified on tenant 54dp7, 19 Oct): this section describes the
-// intended behaviour, not what the platform currently does. query-tpa.yml
-// builds affected_repos as a single hardcoded entry from
-// REMEDIATION_APP_GITLAB_PATH, which the chart pins to wire-transfer-svc.
-// match_reason "sbom_label_and_dependency_coordinate" is a label, not a
-// lookup. A flyway-core event -- benefits-mgmt-app's dependency -- was
-// classified onto wire-transfer-svc and reused its open h2 merge request.
-// So the auto_approve branch is never taken and the low-risk app never
-// appears. Do not publish this section until query-tpa resolves the
-// affected app from the artifact. See HANDOFF "Next up".
+// UNBLOCKED (19 Oct): this section was blocked because query-tpa.yml built
+// affected_repos from REMEDIATION_APP_GITLAB_PATH, so every event classified
+// onto wire-transfer-svc and the auto_approve branch was never taken. Fixed
+// upstream in lw-sdlc-opencode: query-tpa.yml now computes the blast radius
+// from real Acme SBOM package matches via files/tpa_blast_radius.py and says
+// so explicitly ("Does NOT invent apps via REMEDIATION_APP_GITLAB_PATH").
+// Still worth one live run to confirm a flyway-core event lands on
+// benefits-mgmt-app and nothing else.
 
 == Two Applications, Two Policies
 
@@ -152,13 +165,12 @@ This is the same script you used in Module 2. It publishes the remediated JAR to
 
 IMPORTANT: The webhook fires on *component created*. Re-publishing the same group, artifact and version does nothing at all — Nexus has already seen it. If you need to run this module twice, increment the suffix (`rhlw-00002`) so a genuinely new component is created.
 
-// TODO verify: on the default tenant the EDA webhook is registered against the
-// Lightwell Network *proxy* repos (`redhat-packages-remediated-{guid}`), not the
-// hosted `lightwell-remediated` repo this script writes to — see
-// `NEXUS_WEBHOOK_REPOSITORIES` in `nexus-reconcile.py`. Confirm which repo
-// carries the webhook on the tenant this lab ships on; if it is the proxy repo,
-// this step publishes an artifact that Renovate can see but EDA never hears
-// about, and the module needs a different trigger instruction here.
+// RESOLVED (19 Oct): the EDA webhook used to be registered only against the
+// Lightwell Network proxy repos, so an artifact published to the hosted
+// `lightwell-remediated` repo never reached EDA. The nexusWebhookRepos helper
+// now covers both. Confirmed live on m8gzl:
+//   lightwell-validated,lightwell-remediated,
+//   redhat-packages-validated-m8gzl,redhat-packages-remediated-m8gzl
 
 == Watching the Orchestrator Canvas
 
@@ -179,25 +191,33 @@ image::ao-workspace.png[The Lightwell Remediation workflow published in the tena
 
 The candidate list comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the Orchestrator will not invent an application to remediate.
 
-// TODO verify: TPA has previously matched `org.flywaydb:flyway-core` to
-// `wire-transfer-svc` instead of `benefits-mgmt-app` (SBOM label matching),
-// which routes the low-risk trigger into the human-gated app and breaks the
-// narrative of this module. The repository notes record this as fixed, but
-// confirm it on a fresh tenant before the final version, and read the classify
-// job output if the wrong app appears in the loop.
+// TODO verify (live run): confirm a flyway-core event lands on
+// benefits-mgmt-app alone. The old misrouting onto wire-transfer-svc was a
+// query-tpa bug, fixed upstream — see the note above "Two Applications, Two
+// Policies". If the wrong app still appears in the loop, read the classify
+// job output rather than assuming it is an SBOM labelling problem.
 
 == The Incident Opens Before the Change Does
 
+Look at the order of the nodes again. *Create parent SNOW incident* is the first thing on the canvas — before TPA is queried, before anything is classified, before a single line of anyone's `pom.xml` is read. The platform raises the ticket and then does the work, which is the opposite of how most automation behaves.
+
 Switch to the https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow mock^] (no login required). Your incident is at the top of the list, with the most recent state.
 
-The Orchestrator comments on it at each stage rather than writing one summary at the end: the incident is created, the classify result is added, each application's outcome is added as it completes, and a final comment closes the ticket. If the run fails halfway, the ticket says where.
+What you are looking at is a small hierarchy, not one ticket:
+
+* A *parent* incident for the remediation event itself — one artifact, one Lightwell publication, one thread to follow.
+* A *child* incident per affected application, created straight after classify, once the Orchestrator knows which applications are genuinely in scope.
+
+The children are where the detail goes. Each application's loop iteration comments on its own child as it completes — merge request opened, verifier passed, awaiting merge — so two applications remediated from one event do not interleave their history into a single unreadable timeline. The parent carries the event-level story: what was published, what TPA found, who owns each fix.
 
 // TODO screenshot: the ServiceNow mock incident detail view for the
-// `benefits-mgmt-app` run, scrolled so the opening comment and at least one
+// `benefits-mgmt-app` child, scrolled so the opening comment and at least one
 // iteration comment are both visible in the timeline.
 image::snow-incident-list.png[ServiceNow mock showing the remediation incidents raised by the Orchestrator]
 
-This is the part that tends to matter most to the people who sign off on automation. The audit trail is not reconstructed from git history afterwards — it is written as the work happens, by the thing doing the work.
+This is the part that tends to matter most to the people who sign off on automation. The audit trail is not reconstructed from git history afterwards — it is written as the work happens, by the thing doing the work. Nothing in this flow is retrofitted to look compliant.
+
+Leave the tab open. You will come back to it at the end, and the shape of what has accumulated there is the point.
 
 == The Merge Request the Agent Wrote
 
@@ -277,6 +297,14 @@ image::gitlab-ai-mr-validation-table.png[Automated Validation table in the merge
 
 IMPORTANT: Six of those eight rows are measured. *Regression scan is not implemented* and renders as `Pending` — a behavioural diff would mean running the whole suite against the target-branch baseline as well, roughly doubling build time, and that call has not been made yet. Nothing here is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all.
 
+// BLOCKED (19 Oct): nothing auto-merges. ADR-035 removed the AO merge job
+// template; `gitlab_api.py mr-merge` exists but no playbook or rulebook calls
+// it (checked at lw-sdlc-opencode 9d7affa). Today the student merges BOTH
+// apps in GitLab; `auto_approve` only changes what the MR says — undrafted,
+// "safe to merge" — versus `needs_approval`, which stays Draft and says human
+// review is required. Held pending a decision on whether to re-add auto-merge
+// for approval==auto_approve or rewrite this section around that contrast.
+
 == The Low-Risk Application Merges Itself
 
 Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge request is open and healthy, then the *Auto-approve?* condition reads the approval value that travelled with the application's policy.
@@ -334,6 +362,16 @@ Everything you just watched happens again, identically: incident opened, TPA que
 
 Then the run stops.
 
+// BLOCKED (19 Oct): there is no AO approval node and no approve/reject
+// control in the AO UI any more (ADR-035). The pause is real but it lives in
+// GitLab, not on the canvas: the start execution ends at the SNOW parent
+// comment "awaiting GitLab merge", and merging the MR fires an EDA webhook
+// that starts a separate short AO execution. So the prompt text, the 24-hour
+// decision window and the "return to the Orchestrator and approve" step below
+// are all stale. The *argument* of this section still holds and should
+// survive the rewrite: every check passed and the platform still would not
+// merge it. Held with the section above.
+
 == The Judgement Call
 
 On the canvas, the *Auto-approve?* condition does not see `auto_approve`, so it routes to an approval node named *Approve remediation MR*. The Orchestrator is now waiting on a person. The prompt names the repository and the merge request number:
@@ -345,13 +383,10 @@ Approve merging the verified remediation MR for acme-{guid}/wire-transfer-svc (!
 
 The gate has a 24-hour decision window and, if nobody answers in that time, it falls back to *reject*. An unanswered approval does not quietly become a yes.
 
-// TODO screenshot: the pending approval in the AO UI, showing the prompt text
-// and the approve/reject controls, with the canvas visible behind it if possible.
-// TODO verify: the exact navigation path to a pending approval in the AO web UI
-// (tasks list, canvas node, or both) — the node name and prompt text are
-// confirmed from the tenant bootstrap, the UI route to them is not.
-// (no capture yet — and AO approvals were removed on 19 Oct, so verify this
-// section still reflects the flow before capturing anything)
+// No screenshot to take here: the AO approval UI this described no longer
+// exists. Once the section is rewritten, the capture worth having is the
+// child SNOW incident sitting at "awaiting GitLab merge" next to the open
+// Draft MR — that pair is the actual pause.
 
 Before you answer it, go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you need is in one page:
 
@@ -365,10 +400,9 @@ Read that last point again, because it is the whole argument. Every automated ch
 
 Make your decision, then return to the Orchestrator and approve the task. The canvas resumes, the *Merge MR (after approval)* node merges the request for you, and the incident records who approved it and when.
 
-// TODO verify: whether the student should approve in AO and let the
-// `SDLC Merge GitLab MR` job template merge (which is what the published canvas
-// does), or merge directly in GitLab. If a student merges in GitLab first,
-// confirm what the still-pending AO approval node then does.
+// ANSWERED (19 Oct): the student merges directly in GitLab. There is no
+// `SDLC Merge GitLab MR` node on the canvas and no pending AO approval to
+// race with — ADR-035.
 
 From here it is the same spine as before: `build-push-to-main`, SBOM to TPA, Tekton Chains signature, image to the Nexus OCI registry, `imageTag` promoted into `acme-deployment`, ArgoCD syncs, the new pod rolls out in `{user}-app`. Return to the ServiceNow mock and confirm the incident has been finalised and closed with the full timeline.
 
@@ -387,6 +421,30 @@ Each has a new SBOM uploaded by the pipeline. Compare it against the previous bu
 
 The verification is not a separate exercise bolted on at the end. The pipeline uploaded the SBOM as part of the build, which means the evidence for the *next* remediation is already in place. That is what makes the loop a loop.
 
+== The Incident Closes Last
+
+Go back to the https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow mock^] tab you left open.
+
+The parent incident is now *Resolved*, and the comment that resolved it is a rollup: what was published, which child incidents were raised, and where the per-application detail lives. Read the whole thread from the top. It is the complete history of the remediation, written as it happened:
+
+. The incident was raised the moment Nexus announced the artifact — before anything was known about who was affected
+. TPA's answer was recorded: which applications actually contain the component
+. A child incident was opened for each one, and the classify result named who owns each fix
+. Each child collected its own iteration comments as the agent worked
+. Merge, build and deploy were each written in as they completed
+. The parent resolved only once ArgoCD reported the application Healthy
+
+Notice what resolved it. Not the merge, and not a green pipeline — the *deploy*. On the canvas, `SNOW finalize` hangs off the deploy branch, so the ticket stays open until the remediated code is actually running. A build that passes and never ships does not close anything.
+
+That is also why the Orchestrator shows you several executions rather than one long-running job. The start execution ends when the merge requests are ready; merge, build and deploy each arrive later as webhooks and start their own short execution. The incident is what stitches them back into a single story — which is precisely the job a ticket is supposed to do.
+
+NOTE: The child incidents stay open. Only the parent is resolved today; per-application close on deploy success has not been wired up yet. If you are demonstrating this to an auditor, show them the parent.
+
+[TIP]
+====
+This is the slide that usually lands in front of a risk or compliance team. Nobody had to be asked for the evidence, and nobody had to assemble it afterwards. The incident was open before the change existed, it accumulated every decision and measurement along the way, and it closed when the fix was live — produced entirely as a side effect of doing the work.
+====
+
 == Summary
 
 You have just run the *Full Automation* path end to end:
@@ -398,10 +456,12 @@ You have just run the *Full Automation* path end to end:
 . Each application was classified against its own `.lightwell/policy.json`
 . The `impact-analyzer` agent opened a merge request carrying CVE data, risk class and a validation table
 . The `build-pull-request` pipeline tested the change and wrote the real results back into that table
+// BLOCKED: the next two bullets describe the removed auto-merge / AO approval
+// flow — rewrite them with the two scenario sections.
 . `benefits-mgmt-app` was auto-approved and merged without you
 . `wire-transfer-svc` passed every check and still waited for your approval
 . Both were built, signed, promoted and deployed by the same pipeline and ArgoCD
-. The incident was closed with a complete, timestamped trail
+. The parent incident resolved once ArgoCD reported the deployment Healthy, carrying a complete, timestamped trail
 
 === What This Actually Buys You
 
