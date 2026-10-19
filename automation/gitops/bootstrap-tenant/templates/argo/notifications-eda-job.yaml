@@ -27,13 +27,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: lightwell-tenant-jobs
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: argo-notifications-eda-{{ .Values.guid }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
