@@ -1,0 +1,71 @@
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
+{{- $aoPaths := list -}}
+{{- range .Values.gitlab.appSeeds }}
+{{- if and .policy (eq (index .policy "remediation_owner") "ao") }}
+{{- $aoPaths = append $aoPaths (printf "%s/%s" (include "bootstrap-tenant.gitlabGroup" $) .name) -}}
+{{- end }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-eda-bridge
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+  labels:
+    app.kubernetes.io/name: cicd-eda-bridge
+    app.kubernetes.io/instance: lightwell-tenant-{{ .Values.guid }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cicd-eda-bridge
+      app.kubernetes.io/instance: lightwell-tenant-{{ .Values.guid }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cicd-eda-bridge
+        app.kubernetes.io/instance: lightwell-tenant-{{ .Values.guid }}
+    spec:
+      serviceAccountName: cicd-eda-bridge
+      containers:
+        - name: bridge
+          image: {{ .Values.cicdEdaBridge.image | default "registry.access.redhat.com/ubi9/python-311:latest" }}
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/app/bridge.py"]
+          env:
+            - name: GUID
+              value: {{ .Values.guid | quote }}
+            - name: EDA_URL
+              value: {{ include "bootstrap-tenant.edaWebhookRouteUrl" . | quote }}
+            - name: BUILD_NAMESPACE
+              value: build-{{ .Values.guid }}
+            - name: ARGO_NAMESPACE
+              value: {{ .Values.argocd.namespace | default "openshift-gitops" | quote }}
+            - name: ACME_APP_NAME
+              value: acme-apps-{{ .Values.guid }}
+            - name: AO_APP_PATHS
+              value: {{ join "," $aoPaths | quote }}
+            - name: POLL_SECONDS
+              value: {{ .Values.cicdEdaBridge.pollSeconds | default "15" | quote }}
+            - name: PRIME_WITHOUT_POST
+              value: {{ .Values.cicdEdaBridge.primeWithoutPost | default true | quote }}
+            - name: VERIFY_TLS
+              value: "false"
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: script
+          configMap:
+            name: cicd-eda-bridge
+            defaultMode: 0555
+{{- end }}

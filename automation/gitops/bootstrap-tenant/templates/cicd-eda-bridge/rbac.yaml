@@ -1,0 +1,73 @@
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
+# SA + RBAC for the CI/CD → EDA bridge (PipelineRun + Argo Application watches).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cicd-eda-bridge
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app.kubernetes.io/name: cicd-eda-bridge
+    app.kubernetes.io/instance: lightwell-tenant-{{ .Values.guid }}
+---
+{{- if .Values.build.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cicd-eda-bridge-pipelineruns-{{ .Values.guid }}
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cicd-eda-bridge-pipelineruns-{{ .Values.guid }}
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cicd-eda-bridge-pipelineruns-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: cicd-eda-bridge
+    namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+{{- end }}
+---
+{{- if .Values.apps.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cicd-eda-bridge-argo-{{ .Values.guid }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cicd-eda-bridge-argo-{{ .Values.guid }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cicd-eda-bridge-argo-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: cicd-eda-bridge
+    namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+{{- end }}
+{{- end }}

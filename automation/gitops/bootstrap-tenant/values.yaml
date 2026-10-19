@@ -11,6 +11,14 @@ deployer:
 
 jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
 
+# Watches PipelineRuns (build-{guid}) + acme-apps Argo Application and POSTs
+# pipelinerun_terminal / argo_app_health to the tenant EDA route (ADR-036).
+cicdEdaBridge:
+  image: registry.access.redhat.com/ubi9/python-311:latest
+  pollSeconds: 15
+  # On start, annotate already-terminal objects without POSTing (avoid storms).
+  primeWithoutPost: true
+
 aap:
   namespace: aap
   org: "" # default user-{guid} via template helper

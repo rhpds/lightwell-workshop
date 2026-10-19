@@ -1,0 +1,15 @@
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cicd-eda-bridge
+  namespace: {{ include "bootstrap-tenant.jobNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app.kubernetes.io/name: cicd-eda-bridge
+    app.kubernetes.io/instance: lightwell-tenant-{{ .Values.guid }}
+data:
+  bridge.py: |
+{{ .Files.Get "files/cicd-eda-bridge/bridge.py" | indent 4 }}
+{{- end }}

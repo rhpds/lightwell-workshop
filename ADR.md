@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-19 (ADR-035 webhook-driven AO, no Approvals)
+Last synced with HANDOFF: 2026-10-19 (ADR-036 CI/CD→EDA bridge producers)
 
 ---
 
@@ -385,6 +385,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) **No** `type: approval` nodes and **no** AO Merge JT on the canvas. (2) Start path: Nexus → SNOW → TPA → classify → for-each (Impact → Verifier → SNOW `awaiting_merge`) → parent note; execution completes. (3) Students merge **only** in GitLab (policy labels remain informational). (4) Additional AO `eda_trigger` paths — `merged` / `build` / `deploy` — each start a short execution that books SNOW (resolve child by `gitlab_path`). (5) EDA rules POST those paths via JT `SDLC AO Lifecycle Webhook` (never Start remediation; never MR-open). (6) MR webhooks on **all** AO-owned apps. |
 | **Consequences** | One Nexus start run no longer spans deploy; lifecycle is a series of webhook-driven AO executions (honest for AO’s trigger model). Supersedes Approval parking in ADR-033/034. Requires republish AO + push `lw-sdlc-opencode` rulebook/playbooks + AAP/EDA sync. Old parked Approval executions on tenants should be cancelled. |
 
+## ADR-036 — CI/CD → EDA bridge (PipelineRun + Argo producers)
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Per-tenant watcher POSTs build/deploy events to EDA |
+| **Context** | ADR-035 added AO `build`/`deploy` eda_triggers and EDA rules for `pipelinerun_terminal` / `argo_app_health`, but only GitLab MR-merged was wired as a producer. PaC push webhooks go to the PaC controller (not EDA). OpenShift GitOps on this cluster has the Notifications CRD but no notifications controller pod; owning cluster-wide `argocd-notifications-cm` is multi-tenant fraught (ADR-033 deferred). |
+| **Decision** | Deploy `cicd-eda-bridge` per tenant (`bootstrap-tenant/templates/cicd-eda-bridge/`): a small Python poller (SA in `lightwell-tenant-{guid}`) that (1) lists PipelineRuns in `build-{guid}` with PaC `push` event-type, and on terminal Succeeded/Failed POSTs `pipelinerun_terminal` with `gitlab_path` from PaC labels; (2) watches Application `acme-apps-{guid}`, and on Synced+Healthy or Degraded/Missing POSTs `argo_app_health` for each AO-owned `gitlab.appSeeds` path. Idempotency via annotations `lightwell.io/eda-build-signaled` / `lightwell.io/eda-deploy-signaled`. Startup primes existing terminal objects without POSTing. Keep `trigger-cicd-signal.sh` as a manual fallback. |
+| **Consequences** | Build/deploy AO lifecycle runs fire without changing Acme `.tekton/` pipelines or enabling cluster Notifications. Deploy fan-out may comment SNOW for every AO app when the shared Acme Application goes Healthy (acceptable for demo; tighten with per-app Argo apps later). Bridge must stay Running; hibernation delays signals until the next poll after wake. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -428,3 +438,4 @@ Copy and fill for each new decision:
 | Async CI/CD Approval gates + parent/child ITSM | ADR-033 (superseded park model → ADR-035) |
 | Student merges needs_approval in GitLab | ADR-034 (superseded → ADR-035 all merges in GitLab) |
 | Webhook-driven AO, no Approval nodes | ADR-035 |
+| CI/CD → EDA bridge (PipelineRun + Argo) | ADR-036 |

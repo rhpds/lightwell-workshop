@@ -248,13 +248,14 @@ Steps worth understanding rather than just watching:
 - **`already_current` short-circuit.** If `main` already has the fix GAV, Impact
   skips Verifier/merge and writes a SNOW iteration note (ADR-027). Reset repos
   between demos or you will only see that path.
-- **Post-merge CI/CD is parked Approvals, not Wait.** AO `Wait` is duration-only.
-  After merge the canvas parks on `await_build` then `await_deploy`. EDA must
-  **not** Start Orchestrator for those events — it runs
-  `SDLC Signal AO CI/CD Gate`, which `PATCH`es `/api/v1/approvals/{id}` with
-  `status=approved|rejected` (activity `/signal` returns Temporal 500 on current
-  AO). The EDA bridge SA needs **project-user** on `lightwell-{guid}`. Smoke
-  helper: [`trigger-cicd-signal.sh`](../trigger-cicd-signal.sh). See ADR-033.
+- **Post-merge is webhook-driven (no AO Approvals).** AO `Wait` is duration-only
+  and cannot resume on events; Approval+PATCH was retired (ADR-035). The start
+  run ends when MRs are ready. Students merge in GitLab. EDA then fires JT
+  `SDLC AO Lifecycle Webhook` → AO `merged` / `build` / `deploy` eda_triggers
+  (short executions that bookkeep SNOW). Never Start a second Nexus remediation.
+  **Producers:** GitLab MR hook → EDA; per-tenant Deployment `cicd-eda-bridge`
+  POSTs `pipelinerun_terminal` / `argo_app_health` (ADR-036). Manual fallback:
+  [`trigger-cicd-signal.sh`](../trigger-cicd-signal.sh).
 
 ---
 

@@ -72,7 +72,10 @@ runs the short **build** / **deploy** webhook paths (SNOW bookkeeping). Does
 ```
 
 Requires AAP sync with `ao-lifecycle-webhook.yml` + rulebook rules, and the
-webhook-driven AO canvas (ADR-035). Merge itself is only via GitLab UI.
+webhook-driven AO canvas (ADR-035). On a provisioned tenant,
+`cicd-eda-bridge` (ADR-036) posts these events automatically when PaC
+PipelineRuns finish and `acme-apps-{guid}` becomes Healthy — this script
+is the manual fallback.
 
 ## Reset apps (after a demo)
 

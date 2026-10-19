@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (ADR-035 webhook-driven AO; no Approval nodes)
+Last updated: 2026-10-19 (ADR-036 CI/CD→EDA bridge live on cng2l)
 
 ## Where the pieces live
 
@@ -293,16 +293,17 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    republish AO + sync AAP for CI/CD gates (1a).
    → OpenSpec `ao-operator-async-remediation`; [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch)
 
-1a. **Webhook-driven AO (ADR-035) — replace Approval parking.** Canvas has
-   **no** Approval nodes and **no** AO merge. Start path ends at
-   SNOW `awaiting_merge` (student merges in GitLab). EDA MR-merged /
-   PipelineRun / Argo → JT `SDLC AO Lifecycle Webhook` → AO
-   `merged`/`build`/`deploy` eda_triggers (short SNOW bookkeeping runs).
-   Chart + `bootstrap-ao-tenant.py` updated; rulebook/playbooks in
-   `lw-sdlc-opencode` (local). **Still need:** push/sync `lw-sdlc-opencode`,
-   republish AO + EDA on `cng2l`, cancel any parked Approval executions,
-   MR hooks on all AO apps (benefits too), smoke merge→build→deploy.
-   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes)
+1a. **Webhook-driven AO + CI/CD producers (ADR-035/036) — live on cng2l.**
+   Canvas: no Approvals / no AO merge; start ends at `awaiting_merge`.
+   Producers: GitLab MR-merged → EDA; **`cicd-eda-bridge`** Deployment
+   watches PipelineRuns + `acme-apps-{guid}` and POSTs
+   `pipelinerun_terminal` / `argo_app_health` (primed without storm;
+   smoke cleared annotations → AAP Lifecycle JTs 342+). AO v8 + EDA
+   activation current. Chart templates under
+   `bootstrap-tenant/templates/cicd-eda-bridge/` (applied live on cng2l;
+   still need Argo sync of tenant app for persistence).
+   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes),
+   [ADR-036](ADR.md#adr-036--cicd--eda-bridge-pipelinerun--argo-producers)
 
 2. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook

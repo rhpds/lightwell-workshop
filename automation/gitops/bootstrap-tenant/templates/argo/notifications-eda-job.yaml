@@ -1,8 +1,6 @@
 {{- if and .Values.apps.enabled .Values.sdlc.orchestrator.enabled }}
-# Stamp the tenant EDA webhook onto Acme Applications so operators (and a
-# future NotificationsConfiguration) can correlate deploy events to
-# await_deploy. Lifecycle smoke uses ao-trigger-helper/trigger-cicd-signal.sh
-# until cluster-wide Argo Notifications services are configured (ADR-033).
+# Stamp the tenant EDA webhook onto Acme Applications for operator visibility.
+# Live deploy signals are posted by Deployment cicd-eda-bridge (ADR-036).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -57,7 +55,7 @@ spec:
             - |
               set -euo pipefail
               GUID="{{ .Values.guid }}"
-              EDA_URL="{{ .Values.sdlc.edaWebhookRouteUrl | default "" }}"
+              EDA_URL="{{ include "bootstrap-tenant.edaWebhookRouteUrl" . }}"
               if [ -z "${EDA_URL}" ]; then
                 HOST=$(oc get route "sdlc-remediation-${GUID}" -n aap -o jsonpath='{.spec.host}' 2>/dev/null || true)
                 if [ -n "${HOST}" ]; then
@@ -78,5 +76,5 @@ spec:
                   "lightwell.eda-webhook=${EDA_URL}" \
                   "lightwell.cicd-gate=await_deploy" || true
               done
-              echo "Done. POST argo_app_health to EDA for await_deploy (see trigger-cicd-signal.sh)."
+              echo "Done. cicd-eda-bridge posts argo_app_health on health transitions."
 {{- end }}
