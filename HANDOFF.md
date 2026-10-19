@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (snow-mock Markdown comments)
+Last updated: 2026-10-19 (snow-mock drop Work notes list)
 
 ## Where the pieces live
 
@@ -266,6 +266,33 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
+00z. **Parked: OpenCode as ITSM journal writer.** Evaluate later — rewrite
+   every AO SNOW comment via a tool-light agent. Prefer hybrid (templates
+   for status ticks; LLM only when Impact/Verifier narrative exists) once
+   Start/Merged/Deploy are solid end-to-end. Do not implement yet.
+
+00y. **~~Deploy missed after promote~~ → ADR-045 (live on cng2l).** Bridge
+   deploy key is now `{sync}/{health}@{rev}`. Restart catch-up POSTed
+   `argo_app_health` → AO Deploy / SNOW lifecycle for benefits (+ wire
+   fan-out). Next promote should fire without a restart.
+   → [ADR-045](ADR.md#adr-045--deploy-bridge-signal-keyed-by-argo-revision)
+
+00x. **~~Deploy SNOW deep links~~ → ADR-046 (lab on cng2l).** Child deploy
+   comments → Argo; finalize → Route + console project (+ Argo). Deploy
+   **v3**; playbooks injected. Next Deploy run shows the links.
+   → [ADR-046](ADR.md#adr-046--deploy-snow-comments-link-argo--route--console)
+
+00w. **~~Rich SNOW INC descriptions~~ (lab on cng2l).** Parent/child create
+   playbooks emit Markdown; Description panel uses the comment MD renderer.
+   Sample on INC0000003 — hard-refresh snow-mock. Next Start shows full shape.
+
+00v. **~~Parent INC = top-level status only~~ → ADR-047 (lab on cng2l).**
+   Parent comments = brief workflow finish + **[open child]** links; detail
+   on children. JT `SDLC SNOW Parent Status` (#25); Start **v8** / Merged
+   **v5** / Deploy **v3**; playbooks re-injected; project #7 `scm_clean=false`
+   so injects stick. Smoke OK on INC0000002. Still push `lw-sdlc-opencode`.
+   → [ADR-047](ADR.md#adr-047--parent-inc-holds-top-level-status-only)
+
 00. **~~auto_approve auto-merge~~ → ADR-041.** After Verifier pass, Start
    conditions on `loop.item.approval`: `auto_approve` → JT Merge GitLab MR;
    `needs_approval` → SNOW `awaiting_merge` (MR stays open). No Approval
@@ -285,7 +312,8 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    → [ADR-043](ADR.md#adr-043--opencode-session-deep-links--summary-in-aapsnow)
 
 0x. **~~snow-mock Markdown + autolink~~ → ADR-044 (live on cng2l).**
-   Activity/Work notes render headings, lists, bold/italic/code, links.
+   Activity renders headings, lists, bold/italic/code, links. Duplicate
+   “Work notes list” panel removed (comments only under Activities).
    Iteration/lifecycle playbooks emit Markdown. Sample comment posted if
    an INC exists after wipe — refresh the snow-mock UI.
    → [ADR-044](ADR.md#adr-044--snow-mock-comment-markdown--autolink)

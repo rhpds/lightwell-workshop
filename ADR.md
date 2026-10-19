@@ -393,7 +393,7 @@ Copy and fill for each new decision:
 | **Date** | 2026-10-19 |
 | **Title** | Per-tenant watcher POSTs build/deploy events to EDA |
 | **Context** | ADR-035 added AO `build`/`deploy` eda_triggers and EDA rules for `pipelinerun_terminal` / `argo_app_health`, but only GitLab MR-merged was wired as a producer. PaC push webhooks go to the PaC controller (not EDA). OpenShift GitOps on this cluster has the Notifications CRD but no notifications controller pod; owning cluster-wide `argocd-notifications-cm` is multi-tenant fraught (ADR-033 deferred). |
-| **Decision** | Deploy `cicd-eda-bridge` per tenant (`bootstrap-tenant/templates/cicd-eda-bridge/`): a small Python poller (SA in `lightwell-tenant-{guid}`) that (1) lists PipelineRuns in `build-{guid}` with PaC `push` event-type, and on terminal Succeeded/Failed POSTs `pipelinerun_terminal` with `gitlab_path` from PaC labels; (2) watches Application `acme-apps-{guid}`, and on Synced+Healthy or Degraded/Missing POSTs `argo_app_health` for each AO-owned `gitlab.appSeeds` path. Idempotency via annotations `lightwell.io/eda-build-signaled` / `lightwell.io/eda-deploy-signaled`. Startup primes existing terminal objects without POSTing. Keep `trigger-cicd-signal.sh` as a manual fallback. |
+| **Decision** | Deploy `cicd-eda-bridge` per tenant (`bootstrap-tenant/templates/cicd-eda-bridge/`): a small Python poller (SA in `lightwell-tenant-{guid}`) that (1) lists PipelineRuns in `build-{guid}` with PaC `push` event-type, and on terminal Succeeded/Failed POSTs `pipelinerun_terminal` with `gitlab_path` from PaC labels; (2) watches Application `acme-apps-{guid}`, and on Synced+Healthy or Degraded/Missing POSTs `argo_app_health` for each AO-owned `gitlab.appSeeds` path. Idempotency via annotations `lightwell.io/eda-build-signaled` / `lightwell.io/eda-deploy-signaled` (**revision-keyed** for deploy — see ADR-045). Startup primes existing terminal objects without POSTing. Keep `trigger-cicd-signal.sh` as a manual fallback. |
 | **Consequences** | Build/deploy AO lifecycle runs fire without changing Acme `.tekton/` pipelines or enabling cluster Notifications. Deploy fan-out may comment SNOW for every AO app when the shared Acme Application goes Healthy (acceptable for demo; tighten with per-app Argo apps later). Bridge must stay Running; hibernation delays signals until the next poll after wake. The companion `argo-notifications-eda-{guid}` Sync hook annotates the Applications; it runs in `lightwell-tenant-{guid}` because that is where its `lightwell-tenant-jobs` SA lives, while its Role/RoleBinding stay in `openshift-gitops` where the Applications are. Templating that Job into `openshift-gitops` instead broke every tenant order on 19 Oct — see the Handoff gotcha. |
 
 ## ADR-037 — Single AO eda_trigger + switch on trigger.type
@@ -476,7 +476,37 @@ Copy and fill for each new decision:
 | **Title** | Render journal comments with a safe Markdown subset in the mock UI |
 | **Context** | ADR-042/043 put URLs and agent summaries into comments, but the SPA escaped everything as plain `pre-wrap` text. |
 | **Decision** | Client-side escape-first renderer: headings, lists, `hr`, bold/italic/code, `[label](https://…)`, bare `http(s)` autolinks (`target=_blank`). No raw HTML. AO comment playbooks emit that Markdown. |
-| **Consequences** | Activity feed is readable in demos; XSS surface stays closed. Roll `snow-mock-static` ConfigMap on existing tenants. |
+| **Consequences** | Activity feed is readable in demos; XSS surface stays closed. Duplicate “Work notes list” panel removed — comments appear only under Activities. Roll `snow-mock-static` ConfigMap on existing tenants. |
+
+## ADR-045 — Deploy bridge signal keyed by Argo revision
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | `eda-deploy-signaled` includes git revision so each promote can fire Deploy |
+| **Context** | After flyway auto_approve, PaC promoted and Argo reached Synced/Healthy, but AO Deploy never started. Annotation was sticky `Synced/Healthy` (set at prime or first success); later returns to the same status were no-ops. |
+| **Decision** | Key `lightwell.io/eda-deploy-signaled` as `{sync}/{health}@{revision}` (`status.sync.revision`, else operation/history/reconciledAt). Also keep a process-local set (Argo self-heal can strip CR annotations). Payload includes `revision`. Legacy annotations without `@` are not re-primed — first scan POSTs once (catch-up). |
+| **Consequences** | Each `acme-deployment` bump that reconciles Healthy fires `argo_app_health` again. Restart primes when annotation absent; in-memory set stops re-storm if the annotation is wiped. Roll `cicd-eda-bridge` ConfigMap + restart. |
+
+## ADR-046 — Deploy SNOW comments link Argo / Route / console
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Deploy lifecycle + finalize comments include operational deep links |
+| **Context** | Deploy SNOW notes said Healthy but gave operators nowhere to click. |
+| **Decision** | Bake `ARGO_CD_URL`, `OPENSHIFT_CONSOLE_URL`, `APPS_NAMESPACE`, `APPS_DOMAIN` into AO Deploy nodes. Shared task builds (1) Argo Application URL, (2) `https://{app}-{guid}.{domain}` Route, (3) console `/k8s/cluster/projects/{ns}`. Child `deployed`/`deploy_failed` comments include Argo (+ Route/console when Healthy). Parent deep-link dump removed — see ADR-047. |
+| **Consequences** | Demo ITSM trail opens Argo, the app URL, and the OpenShift project from the **child**. Republish Deploy + reinject playbooks. |
+
+## ADR-047 — Parent INC holds top-level status only
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Parent SNOW comments are workflow finish rollups with child links |
+| **Context** | Parent tickets accumulated the same MR/build/deploy/agent detail as children, making the parent unreadably long. |
+| **Decision** | (1) JT `SDLC SNOW Parent Status` + shared task posts a short headline/plain body + **[open child]** links. (2) Start canvas ends with that JT after `apps_loop` complete. (3) Lifecycle (`merged`/`build_*`/`deploy*`) posts the same brief parent rollup after the child comment. (4) Finalize only PATCHes parent to Resolved — no detail comment. (5) Create-children posts one “Child tickets opened” status with all new child links. |
+| **Consequences** | Parent thread = event milestones; child thread = operator detail. Lab: inject playbooks, create JT, republish Start/Merged/Deploy. Push `lw-sdlc-opencode` for SCM durability. |
 
 ---
 
@@ -530,3 +560,6 @@ Copy and fill for each new decision:
 | SNOW comments with MR / pipeline URLs | ADR-042 |
 | OpenCode session deep links + summary | ADR-043 |
 | snow-mock comment Markdown + autolink | ADR-044 |
+| Deploy bridge signal keyed by Argo revision | ADR-045 |
+| Deploy SNOW comments link Argo / Route / console | ADR-046 |
+| Parent INC = top-level status + child links only | ADR-047 |

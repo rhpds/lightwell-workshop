@@ -45,4 +45,6 @@ Bodies are stored as plain text. The SPA renders a **small Markdown subset**
 - `**bold**`, `*italic*`, `` `code` ``
 - `[label](https://…)` and bare `http(s)://…` autolinks (new tab)
 
-Use this for AO remediation comments so Activity / Work notes look readable.
+Use this for AO remediation comments **and** the incident `description`
+field (rendered in the detail form the same way) so Activity and the
+Description panel look readable.

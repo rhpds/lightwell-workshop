@@ -214,8 +214,8 @@ sequenceDiagram
         end
     end
 
-    AO->>AAP: JT SNOW Finalize (parent)
-    AAP->>SNOW: parent rollup + close
+    AO->>AAP: JT SNOW Lifecycle + Finalize (parent)
+    AAP->>SNOW: brief parent status + child link; Resolve parent
 ```
 
 Steps worth understanding rather than just watching:

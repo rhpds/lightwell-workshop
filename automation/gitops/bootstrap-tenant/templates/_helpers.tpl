@@ -118,6 +118,29 @@ remediation fired nothing and the whole agentic path had no entry point.
 {{- end -}}
 {{- end -}}
 
+{{- /* OpenShift GitOps server Route (Argo CD UI). App deep link: {url}/applications/openshift-gitops/acme-apps-{guid} */ -}}
+{{- define "bootstrap-tenant.argoCdUrl" -}}
+{{- if ((.Values.apps | default dict).argoCdUrl) -}}
+{{- .Values.apps.argoCdUrl | trimSuffix "/" -}}
+{{- else -}}
+{{- printf "https://openshift-gitops-server-openshift-gitops.%s" .Values.deployer.domain -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* OpenShift web console. Project deep link: {url}/k8s/cluster/projects/{ns} */ -}}
+{{- define "bootstrap-tenant.consoleUrl" -}}
+{{- if .Values.deployer.consoleUrl -}}
+{{- .Values.deployer.consoleUrl | trimSuffix "/" -}}
+{{- else -}}
+{{- printf "https://console-openshift-console.%s" .Values.deployer.domain -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Namespace where Acme apps (Routes) land — Application destination. */ -}}
+{{- define "bootstrap-tenant.appsNamespace" -}}
+{{- printf "%s-app" .Values.username -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.opencodeServerPassword" -}}
 {{- .Values.sdlc.opencodeServerPassword | default .Values.password -}}
 {{- end -}}

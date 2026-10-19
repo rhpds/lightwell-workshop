@@ -40,6 +40,10 @@ POST_BUILD_EVENTS = os.environ.get("POST_BUILD_EVENTS", "false").lower() in (
 ANN_BUILD = "lightwell.io/eda-build-signaled"
 ANN_DEPLOY = "lightwell.io/eda-deploy-signaled"
 
+# Process-local deploy idempotency. Argo may strip CR annotations on
+# self-heal of acme-apps-* from git; without this, every poll re-POSTs.
+_deploy_signaled: set[str] = set()
+
 SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 APISERVER = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -239,6 +243,34 @@ def app_health_sync(app: dict) -> tuple[str, str]:
     return health, sync
 
 
+def app_deploy_revision(app: dict) -> str:
+    """Git revision (or reconcile stamp) that changes on each promote/sync.
+
+    Idempotency used to key only on Synced/Healthy, so after prime or the first
+    deploy every later promote was ignored (annotation never changed). Include
+    the synced revision so each acme-deployment bump can fire Deploy again.
+    """
+    st = app.get("status") or {}
+    rev = (st.get("sync") or {}).get("revision") or ""
+    if rev:
+        return str(rev)
+    op = st.get("operationState") or {}
+    rev = ((op.get("syncResult") or {}).get("revision")) or ""
+    if rev:
+        return str(rev)
+    hist = st.get("history") or []
+    if hist:
+        rev = (hist[-1] or {}).get("revision") or ""
+        if rev:
+            return str(rev)
+    # Last resort — still changes when Argo reconciles.
+    return str(st.get("reconciledAt") or "unknown")
+
+
+def deploy_signal_key(sync: str, health: str, revision: str) -> str:
+    return f"{sync or 'Unknown'}/{health}@{revision}"
+
+
 def scan_argo_app() -> None:
     code, app = k8s_request(
         "GET",
@@ -250,19 +282,25 @@ def scan_argo_app() -> None:
     health, sync = app_health_sync(app)
     if not health:
         return
+    revision = app_deploy_revision(app)
     # Only signal terminal-ish deploy outcomes (match EDA rules).
     if health == "Healthy" and sync == "Synced":
-        signal_key = f"{sync}/{health}"
+        signal_key = deploy_signal_key(sync, health, revision)
     elif health in ("Degraded", "Missing"):
-        signal_key = f"{sync or 'Unknown'}/{health}"
+        signal_key = deploy_signal_key(sync or "Unknown", health, revision)
     else:
         return  # Progressing / Suspended etc. — wait
 
     anns = (app.get("metadata") or {}).get("annotations") or {}
-    if anns.get(ANN_DEPLOY) == signal_key:
+    if signal_key in _deploy_signaled or anns.get(ANN_DEPLOY) == signal_key:
+        _deploy_signaled.add(signal_key)
         return
 
     paths = AO_APP_PATHS or [f"acme-{GUID}/wire-transfer-svc"]
+    print(
+        f"argo {ACME_APP}: {sync}/{health} rev={revision[:12]}… → "
+        f"EDA argo_app_health for {len(paths)} path(s)"
+    )
     all_ok = True
     for path in paths:
         ok = post_eda(
@@ -273,10 +311,12 @@ def scan_argo_app() -> None:
                 "sync": sync or "Unknown",
                 "health": health,
                 "argo_app": ACME_APP,
+                "revision": revision,
             }
         )
         all_ok = all_ok and ok
     if all_ok:
+        _deploy_signaled.add(signal_key)
         patch_annotation(
             f"/apis/argoproj.io/v1alpha1/namespaces/{ARGO_NS}/applications/{ACME_APP}",
             ANN_DEPLOY,
@@ -322,13 +362,30 @@ def main() -> None:
         if code == 200:
             health, sync = app_health_sync(app)
             if health == "Healthy" and sync == "Synced":
+                key = deploy_signal_key(sync, health, app_deploy_revision(app))
                 anns = (app.get("metadata") or {}).get("annotations") or {}
-                if not anns.get(ANN_DEPLOY):
+                ann = anns.get(ANN_DEPLOY) or ""
+                if not ann:
+                    # Never signaled — prime without POSTing (cold start).
+                    _deploy_signaled.add(key)
                     patch_annotation(
                         f"/apis/argoproj.io/v1alpha1/namespaces/{ARGO_NS}/applications/{ACME_APP}",
                         ANN_DEPLOY,
-                        f"{sync}/{health}",
+                        key,
                     )
+                elif "@" not in ann:
+                    # Legacy sticky Synced/Healthy — leave annotation so the
+                    # first scan POSTs once for the current revision (catch-up).
+                    print(
+                        f"legacy {ANN_DEPLOY}={ann!r} — next scan will POST "
+                        f"for rev={key.split('@')[-1][:12]}…"
+                    )
+                else:
+                    # Already revision-keyed — remember so annotation wipe
+                    # cannot re-storm EDA until the next promote.
+                    _deploy_signaled.add(ann)
+                    if ann != key:
+                        _deploy_signaled.add(key)
         print("prime complete — watching for new transitions")
 
     while True:

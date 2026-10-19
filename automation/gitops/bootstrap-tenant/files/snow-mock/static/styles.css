@@ -127,6 +127,20 @@ html, body { height: 100%; font-family: 'Source Sans Pro', 'Segoe UI', 'Helvetic
 .sn-form-icons { display: flex; gap: 4px; }
 .sn-form-icon-btn { background: #f5f5f5; border: 1px solid #d6d6d6; padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 13px; }
 .sn-form-row-wide { grid-column: 1 / -1; }
+.sn-form-row-top { align-items: flex-start; }
+.sn-description-panel {
+    border: 1px solid #d6d6d6;
+    border-radius: 2px;
+    background: #fafafa;
+    padding: 10px 12px;
+    min-height: 72px;
+    max-height: 420px;
+    overflow: auto;
+}
+.sn-description-panel .sn-comment-body { font-size: 13px; }
+.sn-description-panel .sn-md-h { margin-top: 0.35em; }
+.sn-description-panel .sn-md-h:first-child { margin-top: 0; }
+/* Simple pipe-table support is not in the MD subset — list/heading styles suffice */
 
 /* Watch list icons */
 .sn-watch-icons { display: flex; gap: 4px; }
@@ -167,10 +181,6 @@ html, body { height: 100%; font-family: 'Source Sans Pro', 'Segoe UI', 'Helvetic
 .sn-bottom-actions { margin-top: 24px; padding: 16px 0; border-top: 1px solid #e8e8e8; display: flex; gap: 8px; margin-left: 152px; }
 .sn-bottom-actions .sn-btn { padding: 6px 16px; font-size: 13px; }
 
-/* Work notes */
-.sn-worknotes { margin-top: 16px; margin-left: 152px; }
-.sn-worknotes-title { font-size: 14px; font-weight: 600; color: #333; }
-
 /* Comment Markdown / autolink (escape-first renderer in app.js) */
 .sn-activity-comment { display: block; }
 .sn-comment-body { font-size: 13px; color: #333; line-height: 1.45; }
@@ -193,8 +203,6 @@ html, body { height: 100%; font-family: 'Source Sans Pro', 'Segoe UI', 'Helvetic
     border-radius: 2px;
     padding: 0 4px;
 }
-.sn-worknote-body { font-size: 13px; }
-
 /* ===== UTILITY ===== */
 .sn-view { min-height: calc(100vh - 46px); }
 .sn-hidden { display: none !important; }

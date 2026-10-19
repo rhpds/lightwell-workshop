@@ -300,6 +300,7 @@ JT_MR_VERIFIER = "SDLC Trigger MR Verifier"
 JT_SNOW_CREATE = "SDLC Create SNOW Incident"
 JT_CLASSIFY = "SDLC Classify Affected Apps"
 JT_SNOW_COMMENT = "SDLC SNOW Comment"
+JT_SNOW_PARENT_STATUS = "SDLC SNOW Parent Status"
 JT_SNOW_CHILDREN = "SDLC SNOW Create Children"
 JT_PREPARE = "SDLC Prepare Remediation"
 JT_SNOW_ITER = "SDLC SNOW Iteration Comment"
@@ -540,6 +541,12 @@ def _lifecycle_common() -> dict:
     snow_svc_url = env("SNOW_SVC_URL", "")
     gitlab_url = env("GITLAB_URL", "")
     gitlab_token = env("GITLAB_TOKEN", "")
+    argo_cd_url = env("ARGO_CD_URL", "")
+    argo_app_name = env("ARGO_APP_NAME", "")
+    argo_app_ns = env("ARGO_APP_NAMESPACE", "openshift-gitops")
+    console_url = env("OPENSHIFT_CONSOLE_URL", "")
+    apps_namespace = env("APPS_NAMESPACE", "")
+    apps_domain = env("APPS_DOMAIN", "")
     return {
         "snow_url": snow_url if snow_url else "${trigger.snow_url}",
         "snow_svc_url": snow_svc_url if snow_svc_url else "${trigger.snow_svc_url}",
@@ -556,6 +563,17 @@ def _lifecycle_common() -> dict:
         "build_status": "${trigger.status}",
         "deploy_health": "${trigger.health}",
         "signal_source": "${trigger.signal_source}",
+        # Baked Acme Application name; bridge may also send trigger.argo_app.
+        "argo_app": argo_app_name if argo_app_name else "${trigger.argo_app}",
+        "argo_cd_url": argo_cd_url if argo_cd_url else "${trigger.argo_cd_url}",
+        "argo_app_namespace": argo_app_ns,
+        "openshift_console_url": (
+            console_url if console_url else "${trigger.openshift_console_url}"
+        ),
+        "apps_namespace": (
+            apps_namespace if apps_namespace else "${trigger.apps_namespace}"
+        ),
+        "apps_domain": apps_domain if apps_domain else "${trigger.apps_domain}",
     }
 
 
@@ -648,14 +666,15 @@ def start_workflow_definition(
     parent_awaiting_vars = {
         "snow_url": trigger_common["snow_url"],
         "snow_svc_url": trigger_common["snow_svc_url"],
+        "snow_ui_base": trigger_common["snow_url"],
+        "parent_incident": parent_inc,
         "snow_incident": parent_inc,
         "guid": "${trigger.guid}",
-        "snow_comment_body": (
-            "Remediation loop finished (guid=${trigger.guid}).\n"
-            "\n"
-            "auto_approve apps: AO merged after Verifier passed.\n"
-            "needs_approval apps: open the MR in GitLab to continue CI/CD.\n"
-            "Merged/Deploy webhooks book build and deploy on the child INC."
+        "parent_status_headline": "Start workflow finished",
+        "parent_status_plain": (
+            "The remediation **Start** workflow finished. "
+            "Open each **child** ticket for MR, verifier, merge, build, and deploy detail. "
+            "auto_approve apps may already be merged; needs_approval apps wait for a GitLab merge."
         ),
     }
     return {
@@ -793,8 +812,8 @@ def start_workflow_definition(
             ),
             _aap_jt_node(
                 "snow_parent_awaiting",
-                "SNOW parent — loop complete",
-                JT_SNOW_COMMENT,
+                "SNOW parent — Start finished",
+                JT_SNOW_PARENT_STATUS,
                 aap_org,
                 aap_credential_id,
                 parent_awaiting_vars,
@@ -956,11 +975,14 @@ def deploy_workflow_definition(
         "parent_incident": "${lc_deployed.artifacts.parent_incident}",
         "snow_incident": "${lc_deployed.artifacts.parent_incident}",
         "guid": "${trigger.guid}",
-        "snow_comment_body": (
-            "Lightwell AO remediation deploy Healthy for "
-            "${trigger.gitlab_path} (guid=${trigger.guid}). "
-            "Parent rollup when all children are terminal."
-        ),
+        "gitlab_path": "${trigger.gitlab_path}",
+        "argo_app": lc["argo_app"],
+        "argo_cd_url": lc["argo_cd_url"],
+        "argo_app_namespace": lc["argo_app_namespace"],
+        "openshift_console_url": lc["openshift_console_url"],
+        "apps_namespace": lc["apps_namespace"],
+        "apps_domain": lc["apps_domain"],
+        # Body built in snow-finalize.yml (Markdown + Route/console/Argo links).
     }
     return {
         "name": WF_DEPLOY,

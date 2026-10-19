@@ -79,6 +79,7 @@ SDLC_WORKER_JOB_TEMPLATES = [
     ("SDLC Create SNOW Incident", "playbooks/snow-create-incident.yml"),
     ("SDLC Classify Affected Apps", "playbooks/classify-affected-apps.yml"),
     ("SDLC SNOW Comment", "playbooks/snow-comment.yml"),
+    ("SDLC SNOW Parent Status", "playbooks/snow-parent-status.yml"),
     ("SDLC SNOW Create Children", "playbooks/snow-create-children.yml"),
     # Start prep: parent SNOW + TPA + classify + comment + children (ADR-040).
     ("SDLC Prepare Remediation", "playbooks/prepare-remediation.yml"),

@@ -96,7 +96,7 @@ cd ao-trigger-helper
 | **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, AO Lifecycle Webhook, Prepare Remediation, Impact / Verifier, Poll Build, … |
 | **OpenCode** | AAP; TPA; GitLab; LiteLLM | Impact opens draft/ready MR; Verifier defaults to lightweight “MR open” check (`verifier_use_opencode: false` until skill fixed). UI via `opencode-ui-gate`. |
 | **TPA** | Query TPA; Tekton SBOM upload | `affected_repos` drives classify (no hardcoded app list). |
-| **ServiceNow mock** | AO playbooks | Parent INC at start; one child per AO app (`parent_incident`); iteration comments on children; parent rollup/close. Bake `snow_url` / `snow_svc_url` at AO publish. |
+| **ServiceNow mock** | AO playbooks | Parent INC at start; one child per AO app (`parent_incident`); iteration/lifecycle detail on children; parent gets brief workflow-finish status + child links only (ADR-047); finalize Resolves parent. Bake `snow_url` / `snow_svc_url` at AO publish. |
 | **PaC / Tekton / Chains / Argo** | GitLab; Nexus; TPA; prod NS | Shared post-merge spine. |
 | **Student** | GitLab; AO UI; SNOW; RenovateJob | Path 1 merge; Path 2 human gate on wire-transfer. |
 
@@ -167,8 +167,8 @@ sequenceDiagram
     end
   end
 
-  AO->>AAP: JT SNOW Finalize (parent)
-  AAP->>SNOW: parent rollup + close
+  AO->>AAP: JT SNOW Lifecycle (deployed) then Finalize
+  AAP->>SNOW: brief parent status + child link; Resolve parent
 
   GL->>PaC: push main (after merge)
   PaC->>OCI: image + SBOM → TPA

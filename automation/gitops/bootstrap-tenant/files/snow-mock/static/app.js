@@ -514,11 +514,11 @@ async function loadDetail(number) {
                     </div>
                 </div>
             </div>
-            <div class="sn-form-row-wide">
-                <div class="sn-form-row">
+            <div class="sn-form-row-wide sn-form-row-description">
+                <div class="sn-form-row sn-form-row-top">
                     <span class="sn-form-label">Description</span>
                     <div class="sn-form-value">
-                        <textarea class="sn-form-textarea" readonly>${escapeHtml(inc.description)}</textarea>
+                        <div class="sn-description-panel">${formatCommentHtml(inc.description || '')}</div>
                     </div>
                 </div>
             </div>
@@ -599,22 +599,6 @@ async function loadDetail(number) {
                     <option selected>Incident</option>
                 </select>
             </div>
-        </div>
-
-        <!-- Work notes list -->
-        <div class="sn-worknotes">
-            <div class="sn-worknotes-title">Work notes list</div>
-            ${(inc.comments || []).length === 0
-                ? '<div style="padding:8px 0;color:#666;font-size:13px;">No comments yet.</div>'
-                : (inc.comments || []).map(c => `
-            <div class="sn-worknote-entry" style="padding:10px 0;border-bottom:1px solid #e5e5e5;">
-                <div style="font-size:12px;color:#666;margin-bottom:4px;">
-                    <strong>${escapeHtml(c.created_by || 'api_user')}</strong>
-                    &bull; ${formatDatetime(c.created_on)}
-                    &bull; ${escapeHtml(c.type === 'work_notes' ? 'Work notes' : 'Additional comments')}
-                </div>
-                <div class="sn-worknote-body">${formatCommentHtml(c.body || '')}</div>
-            </div>`).join('')}
         </div>
 
         <!-- Bottom actions -->

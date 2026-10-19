@@ -99,6 +99,13 @@ spec:
               if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
                 export OPENCODE_SERVER_PASSWORD="{{ include "bootstrap-tenant.opencodeServerPassword" . }}"
               fi
+              # Deploy SNOW comments: Argo UI + app Route + console project links.
+              export ARGO_CD_URL="{{ include "bootstrap-tenant.argoCdUrl" . }}"
+              export ARGO_APP_NAME="acme-apps-{{ .Values.guid }}"
+              export ARGO_APP_NAMESPACE="openshift-gitops"
+              export OPENSHIFT_CONSOLE_URL="{{ include "bootstrap-tenant.consoleUrl" . }}"
+              export APPS_NAMESPACE="{{ include "bootstrap-tenant.appsNamespace" . }}"
+              export APPS_DOMAIN="{{ .Values.deployer.domain }}"
               export VALIDATE_CERTS=false
               echo "Bootstrapping AO project=${AO_PROJECT_NAME} base=${AO_BASE_URL} aap_org=${AAP_ORGANIZATION_NAME}"
               exec python3 /work/bootstrap-ao-tenant.py
