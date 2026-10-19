@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (merge upstream; AO canvas SSOT)
+Last updated: 2026-10-19 (ADR-050 gates auto_approve on the PR check inside merge-gitlab-mr.yml; needs PR #7 + AO republish)
 
 ## Where the pieces live
 
@@ -288,13 +288,33 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
 
-000. **Parked (upstream): auto_approve vs Pending validation table.**
-   Upstream saw on `8djv7` that AO can merge before `build-pull-request`
-   fills the MR table. Their canvas fix (`Poll PR checks`) is **not
-   adopted** here — AO SSOT keeps the 2m merge delay (00ad / ADR-041).
-   Recorded as [ADR-050](ADR.md#adr-050--upstream-pr-check-gate-for-auto_approve-not-adopted).
-   Optional later: adopt `lw-sdlc-opencode` PR #7 helpers without changing
-   our Start edges.
+000. **FIXED (pending PR merge + AO republish): `auto_approve` merged with
+   the validation table still `Pending`.** On `8djv7`, AO merged the MR ~33 s
+   after it opened while `build-pull-request` — the pipeline that fills the
+   table — did not start until 43 s *after* the merge. All seven rows stayed
+   `Pending` and SNOW still recorded "auto-merged after the verifier passed".
+   `verifier_ok` only checks that the Verifier JT returned successful, and
+   those JTs report success as soon as they launch the async agent, so the
+   gate could not fail. The h2 → `wire-transfer-svc` run cleared the table
+   logic itself (6/7 ✅ Passed, 🔴 HIGH, correctly left open) — it was only
+   ever a race on the auto path.
+
+   **Fix:** `merge-gitlab-mr.yml` polls the `build-pull-request` commit
+   status on the MR head and asserts green before merging. Inside the merge
+   playbook rather than as a separate AO node (Shaaf's call, and the better
+   one): check and merge stay atomic, and the Start canvas keeps a single
+   node. The fixed `merge_delay_seconds=120` pause is dropped — the real
+   wait already leaves the MR open ~110 s, which is the window it existed
+   for, and a sleep cannot tell a slow pipeline from a failed one.
+
+   This reverses the earlier "not adopted" position (previous ADR-050),
+   decided by Natale.
+
+   **To land:** [PR #7](https://github.com/rhpds/lw-sdlc-opencode/pull/7)
+   must merge, **then** AO republish. Until both, tenants auto-merge
+   unvalidated exactly as before. Then re-run both scenarios and confirm the
+   auto-merged MR comes out with a filled table.
+   → [ADR-050](ADR.md#adr-050--gate-auto_approve-on-the-pull-request-check-inside-the-merge)
 
 000a. **Idea (Natale): pre-pull Tekton images with a DaemonSet.** Cold
    cluster image pulls delay first PaC runs; a prepuller would make Module
