@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (Module 3 SNOW bookends; auto-merge decision pending — see Next up 00)
+Last updated: 2026-10-19 (ADR-037 auto_approve merges on the canvas; Module 3 scenarios rewritten)
 
 ## Where the pieces live
 
@@ -266,24 +266,25 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
 
 ## Next up
 
-00. **DECISION NEEDED (Shaaf): does `auto_approve` still auto-merge?**
-   ADR-035 removed every AO Approval node *and* the AO merge job template,
-   so today **nothing merges on its own** — `gitlab_api.py mr-merge` exists
-   but no playbook or rulebook calls it (checked at `lw-sdlc-opencode`
-   `9d7affa`). Both `benefits-mgmt-app` and `wire-transfer-svc` wait for a
-   student merge in GitLab; `approval` only changes what the MR *says*
-   (undrafted + "safe to merge" vs. Draft + "human review required").
-   Was losing auto-merge intended, or a side effect of killing the Approval
-   nodes? Module 3 is meant to contrast *full automation* (low risk) against
-   *human-in-the-loop* (wire transfer), and that contrast is currently flat.
-   Two ways out: (a) `mr-verifier` calls `mr-merge` when
-   `approval == auto_approve` and every check passed — small, the CLI
-   command is already there; or (b) keep it manual and rewrite Module 3
-   around "rubber-stamp vs. read it carefully". **Module 3 sections are
-   marked BLOCKED in the adoc pending this** — the canvas diagram, "The
-   Low-Risk Application Merges Itself", "The Judgement Call" and two Summary
-   bullets all still describe the ADR-033/034 flow.
-   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes)
+00. **`auto_approve` merges on the canvas again — NEEDS AN AO REPUBLISH.**
+   ADR-035 removed the AO merge JT along with the Approval nodes, which left
+   *nothing* merging on its own: both apps waited for a student, so Module 3's
+   full-automation vs. human-in-the-loop contrast was flat. Restored as one
+   `condition` node + the surviving `SDLC Merge GitLab MR` JT (which was never
+   deleted — only its canvas node was), so no playbook change and no
+   `lw-sdlc-opencode` PR was needed. **No Approval node came back.**
+   `needs_approval` still merges only in GitLab. Fail-closed:
+   `trigger-mr-verifier.yml` defaults `approval` to `needs_approval`, so a
+   missing policy asks a human.
+   **To do:** existing tenants keep the old canvas until the `ao-bootstrap`
+   Job re-runs — verify on a fresh order, and check the `Auto-approve?` node
+   actually routes `benefits-mgmt-app` green and `wire-transfer-svc` to
+   `awaiting_merge`. Module 3 prose is rewritten to match.
+   → [ADR-037](ADR.md#adr-037--ao-merges-auto_approve-apps-humans-merge-the-rest)
+
+00a. *(stale note, cleared)* Item 1 below says "Still push local
+   `fetch-app-policy.yml` (`auto_approve` allowlist)" — that landed in
+   `fe956cd` (19 Oct 12:31) and is on `main`. Nothing outstanding there.
 
 0a. **Remediation MR body — verified end to end on a freshly seeded tenant
    (`54dp7`, 18 Oct).** Seed -> Nexus event -> AO -> MR

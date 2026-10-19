@@ -11,9 +11,11 @@ not see other tenants' workflow lists. For each lab tenant this script ensures:
   3. EDA bridge service account + client_credentials in that project
   4. AO credential for AAP Controller (launch job templates)
   5. Published ``Lightwell Remediation`` workflow — webhook-driven, no AO
-     Approval nodes and no AO merge:
+     Approval nodes; AO merges auto_approve apps only (ADR-037):
        start  → SNOW → TPA → classify → for-each (Impact → Verifier →
-                SNOW "awaiting GitLab merge") → parent note
+                Auto-approve? → auto_approve: Merge MR → SNOW "auto-merged"
+                              → needs_approval: SNOW "awaiting GitLab merge")
+                → parent note
        merged / build / deploy → short lifecycle runs (EDA → AO webhooks)
   6. Writes client_id / client_secret into a Kubernetes Secret for EDA bootstrap
 
@@ -302,6 +304,7 @@ JT_SNOW_CHILDREN = "SDLC SNOW Create Children"
 JT_SNOW_ITER = "SDLC SNOW Iteration Comment"
 JT_SNOW_LIFECYCLE = "SDLC SNOW Lifecycle Event"
 JT_SNOW_FINALIZE = "SDLC SNOW Finalize"
+JT_MERGE_MR = "SDLC Merge GitLab MR"
 AAP_INTEGRATION_NAME = "AAP Lightwell"
 
 
@@ -580,6 +583,19 @@ def remediation_workflow_definition(
         "verifier_status": "${verifier.artifacts.verifier_status}",
         "guid": "${trigger.guid}",
     }
+    # ADR-037: auto_approve merges on the canvas; needs_approval never does.
+    # Reuses the surviving "SDLC Merge GitLab MR" job template — the playbook
+    # undrafts first and is idempotent on an already-merged MR, so a student
+    # who beats the canvas to the merge button does not break the run.
+    merge_mr_vars = {
+        **trigger_common,
+        "gitlab_path": "${verifier.artifacts.gitlab_path}",
+        "project_id": "${verifier.artifacts.project_id}",
+        "merge_request_iid": "${verifier.artifacts.merge_request_iid}",
+        "snow_incident": "${loop.item.child_incident}",
+        "child_incident": "${loop.item.child_incident}",
+        "parent_incident": parent_inc,
+    }
     # Impact already_current never reaches Verifier — comment from impact arts.
     iter_comment_already = {
         "snow_url": trigger_common["snow_url"],
@@ -600,9 +616,10 @@ def remediation_workflow_definition(
         "snow_incident": parent_inc,
         "guid": "${trigger.guid}",
         "snow_comment_body": (
-            "Remediation MRs are ready for review in GitLab "
-            "(guid=${trigger.guid}). Merge each MR there to continue CI/CD — "
-            "AO does not merge. EDA webhooks will record merge / build / deploy."
+            "Remediation run complete (guid=${trigger.guid}). auto_approve "
+            "apps have been merged by AO; needs_approval apps are waiting for "
+            "a human to merge the MR in GitLab. EDA webhooks will record "
+            "merge / build / deploy on each child incident."
         ),
     }
     # Lifecycle runs (separate AO executions) resolve SNOW child by gitlab_path.
@@ -788,6 +805,36 @@ def remediation_workflow_definition(
                     ),
                 },
             },
+            {
+                "id": "auto_approve",
+                "name": "Auto-approve?",
+                "type": "condition",
+                "parameters": {
+                    "condition": (
+                        '${verifier.artifacts.approval} == "auto_approve"'
+                    ),
+                },
+            },
+            _aap_jt_node(
+                "merge_mr",
+                "Merge MR (auto-approved)",
+                JT_MERGE_MR,
+                aap_org,
+                aap_credential_id,
+                merge_mr_vars,
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
+            _aap_jt_node(
+                "snow_iter_merged_auto",
+                "SNOW — MR auto-merged",
+                JT_SNOW_ITER,
+                aap_org,
+                aap_credential_id,
+                {**iter_comment_base, "iteration_outcome": "auto_merged"},
+                integration_id=aap_integration_id,
+                continue_on_failure=True,
+            ),
             _aap_jt_node(
                 "snow_iter_mr_ready",
                 "SNOW — MR ready (merge in GitLab)",
@@ -878,12 +925,18 @@ def remediation_workflow_definition(
             },
             {"from": "impact_already", "to": "verifier", "from_port": "false"},
             {"from": "verifier", "to": "verifier_ok"},
-            {
-                "from": "verifier_ok",
-                "to": "snow_iter_mr_ready",
-                "from_port": "true",
-            },
+            # Verifier passed → split on the app's own policy (ADR-037).
+            {"from": "verifier_ok", "to": "auto_approve", "from_port": "true"},
             {"from": "verifier_ok", "to": "snow_iter_fail", "from_port": "false"},
+            # auto_approve: AO merges, then records it on the child incident.
+            {"from": "auto_approve", "to": "merge_mr", "from_port": "true"},
+            {"from": "merge_mr", "to": "snow_iter_merged_auto"},
+            # needs_approval: the MR stays open for a human to merge in GitLab.
+            {
+                "from": "auto_approve",
+                "to": "snow_iter_mr_ready",
+                "from_port": "false",
+            },
             {
                 "from": "apps_loop",
                 "to": "snow_parent_awaiting",
