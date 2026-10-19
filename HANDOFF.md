@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-18 (validation checks implemented; 6 PRs open upstream)
+Last updated: 2026-10-18 (publish-remediation JAR fix, TPA route fix, scale callout)
 
 ## Where the pieces live
 
@@ -18,10 +18,33 @@ Last updated: 2026-10-18 (validation checks implemented; 6 PRs open upstream)
 | Catalog item `lb1815-lightwell-tenant` | `rhpds/agnosticv`, `rh1-2027/` — via PR |
 | OpenCode agent prompts, EDA rulebooks, AAP playbooks | `rhpds/lw-sdlc-opencode` — via PR |
 | Acme sample apps (3) | `redhat-ads-tech/{wire-transfer-svc,benefits-mgmt-app,report-generator-app}` |
+| Acme deployment manifests | `redhat-ads-tech/acme-deployment` — Helm chart for ArgoCD app-of-apps |
 | AO Path 2 operator helper + docs | this repo — [`ao-trigger-helper/`](ao-trigger-helper/) (scripts + [`docs/`](ao-trigger-helper/docs/)) |
 
 ## Recently done
 
+- **`publish-remediation.sh` JAR fix (18 Oct).** Natale's change to
+  republish the real upstream JAR meant Syft read `version=2.13.5` from
+  the embedded `pom.properties`, so the SBOM showed no version change.
+  Fixed: the script now patches `pom.properties` and the embedded
+  `pom.xml` inside the JAR to reflect the `.rhlw` version before upload.
+- **`publish-remediation.sh` TPA route fix (18 Oct).** The SME's TPA
+  route discovery used `oc get route` in the TPA namespace, which the
+  tenant user can't access. Added `|| true` and a fallback to
+  `server-tpa-{guid}.{domain}` (the API-serving route).
+- **ArgoCD app-of-apps for sample apps (16 Oct).** Per-tenant AppProject
+  (`acme-{guid}`), ArgoCD Application pointing at GitLab
+  `acme-{guid}/acme-deployment`, role-based RBAC so tenant users see
+  only their apps. Deployment repo cloned into GitLab during
+  provisioning. `seed-app-tags` Job reads commit SHAs after initial
+  builds and updates `values.yaml`. Promotion is a separate git commit
+  (not pipeline-driven) — ready for AO integration.
+  Upstream deployment chart: `redhat-ads-tech/acme-deployment`.
+- **Sample apps now runnable (16 Oct).** `report-generator-app` switched
+  to H2 in-memory + landing page at `/`. `benefits-mgmt-app` runs on
+  Tomcat with mock API servlet (benefits plan data). `wire-transfer-svc`
+  rebranded to "Acme Inc. Bank". All three have unit tests (`mvn verify`)
+  and PaC `run-tests` pipeline step.
 - **AO Path 2 operator helper** in [`ao-trigger-helper/`](ao-trigger-helper/) —
   scripts POST Nexus-shaped `CREATED` to EDA (`needs-approval` / `auto-approve`)
   and reset Acme repos. AO-context docs:
@@ -287,12 +310,13 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    `com.h2database:h2` qualifies (upstream has no `org/apache/struts/`), so
    `benefits-mgmt-app` and `report-generator-app` cannot yet be targets.
    → [ADR-016](ADR.md#adr-016--trigger-artifacts-must-be-declared-dependencies-of-a-seeded-app)
-5. **Renovate module content (Module 2) written and tested.** Student creates
-   RenovateJob from Showroom terminal, injects fake remediation via
-   `publish-remediation.sh` (attachment), triggers from Renovate web UI, reviews
-   MR in GitLab, watches pipeline. Remaining: screenshots for MR-created log,
-   PR activity, GitLab MR, pipeline run, TPA SBOM before/after. ArgoCD
-   deployment step is a placeholder pending CD wiring for sample apps.
+5. **Renovate module content (Module 2) tested end-to-end (18 Oct).**
+   `publish-remediation.sh` publishes a remediated JAR (real upstream binary
+   with patched `pom.properties` so Syft reports the `.rhlw` version) and
+   OSV advisories to TPA. Renovate detects the bump, student merges, Tekton
+   builds, TPA shows reduced vuln count. Screenshots added.
+   **Remaining:** AgnosticV needs Showroom UI tabs for TPA and Nexus
+   (currently patched manually on test clusters via `SHOWROOM_UI_CONFIG`).
 6. **Older tenants on `zlvnr` are missing EDA job templates** (provisioned
    before the org-scoping fix). Re-run the bootstrap job or re-order them.
 7. **`publishing-house/spec/modules/*.md` and `spec/design.md` still say
