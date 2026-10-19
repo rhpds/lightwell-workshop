@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# POST a CI/CD lifecycle event to the tenant EDA route so the parked AO
-# await_build / await_deploy Approval gates advance (no second Start).
+# POST a CI/CD lifecycle event to the tenant EDA route. EDA starts a short AO
+# lifecycle execution (build/deploy eda_trigger) — not Approval PATCH, not Nexus Start.
 #
 # Usage:
 #   ./trigger-cicd-signal.sh <guid> build  {succeeded|failed} <gitlab_path>

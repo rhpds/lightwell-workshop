@@ -50,6 +50,9 @@ data:
   AO_BASE_URL: {{ include "bootstrap-tenant.aoBaseUrl" . | quote }}
   AO_PROJECT_NAME: {{ include "bootstrap-tenant.aoProjectName" . | quote }}
   AO_START_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoStartWebhookPath" . | quote }}
+  AO_MERGED_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoMergedWebhookPath" . | quote }}
+  AO_BUILD_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoBuildWebhookPath" . | quote }}
+  AO_DEPLOY_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoDeployWebhookPath" . | quote }}
   AO_RESUME_WEBHOOK_PATH: {{ include "bootstrap-tenant.aoResumeWebhookPath" . | quote }}
   {{- /* Prefer existingSecret on the eda-bootstrap Job; these are fallbacks for lab/dev only. */}}
   AO_CLIENT_ID: {{ (.Values.sdlc.orchestrator).clientId | default "" | quote }}

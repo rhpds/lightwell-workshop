@@ -206,8 +206,8 @@ spec:
               seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" '' "public"
               {{- end }}
 
-              # MR webhooks → EDA for needs_approval path: student merges in
-              # GitLab; EDA signals AO await_gitlab_merge (not MR-open Resume).
+              # MR webhooks → EDA for every AO-owned app. Students always merge
+              # in GitLab; EDA starts the AO "merged" lifecycle trigger (no AO merge).
               ensure_mr_webhook() {
                 local path="$1"
                 local enc id hook_id code
@@ -237,8 +237,7 @@ spec:
               }
               if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
                 {{- range .Values.gitlab.appSeeds }}
-                {{- /* needs_approval only — auto_approve is merged by AO; avoid spurious EDA signals */}}
-                {{- if and .policy (eq (index .policy "remediation_owner") "ao") (eq (index .policy "approval") "needs_approval") }}
+                {{- if and .policy (eq (index .policy "remediation_owner") "ao") }}
                 ensure_mr_webhook "{{ include "bootstrap-tenant.gitlabGroup" $ }}/{{ .name }}"
                 {{- end }}
                 {{- end }}

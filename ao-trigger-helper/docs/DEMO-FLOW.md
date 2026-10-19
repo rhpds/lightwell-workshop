@@ -91,9 +91,9 @@ cd ao-trigger-helper
 | **Nexus (OCI)** | Tekton; ArgoCD; Chains | Images + attestations. |
 | **Renovate** | GitLab; Nexus | Path 1 only — MR as `renovate-bot`. |
 | **GitLab (`acme-{guid}`)** | Renovate; OpenCode; Student; PaC | MRs + merge → PaC push webhook. Policy file `.lightwell/policy.json` per app. |
-| **EDA** | Nexus / showcase; AAP | Sensor only: `*.rhlw-*` CREATED → JT **SDLC Start Orchestrator**. **No** GitLab MR-open → Resume (dual-Verifier removed). |
-| **AO** | EDA; AAP; SNOW | Owns the canvas: **parent** SNOW → TPA → classify → **child** SNOW → for-each (Impact → Verifier → **auto: AO merge** / **needs_approval: await student GitLab merge** → **await_build** → **await_deploy** → child comments) → **parent** finalize. |
-| **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, Create parent / Create children / Comment / Finalize SNOW, Query TPA, Classify, Impact, Verifier, Merge, … |
+| **EDA** | Nexus / showcase; GitLab MR merge; PaC/Argo signals; AAP | Sensor: `*.rhlw-*` → **Start Orchestrator**; MR-**merged** / build / deploy → **AO Lifecycle Webhook** (never MR-open → Start). |
+| **AO** | EDA; AAP; SNOW | Webhook-driven (no Approvals, no AO merge): **start** → parent SNOW → TPA → classify → child SNOW → for-each (Impact → Verifier → SNOW awaiting GitLab merge) → parent note; **merged/build/deploy** triggers → short SNOW lifecycle runs. |
+| **AAP JTs** | AO; OpenCode; TPA; GitLab; SNOW | Start Orchestrator, AO Lifecycle Webhook, SNOW / TPA / classify / Impact / Verifier, … |
 | **OpenCode** | AAP; TPA; GitLab; LiteLLM | Impact opens draft/ready MR; Verifier defaults to lightweight “MR open” check (`verifier_use_opencode: false` until skill fixed). UI via `opencode-ui-gate`. |
 | **TPA** | Query TPA; Tekton SBOM upload | `affected_repos` drives classify (no hardcoded app list). |
 | **ServiceNow mock** | AO playbooks | Parent INC at start; one child per AO app (`parent_incident`); iteration comments on children; parent rollup/close. Bake `snow_url` / `snow_svc_url` at AO publish. |

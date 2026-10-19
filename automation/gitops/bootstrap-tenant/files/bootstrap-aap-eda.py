@@ -83,14 +83,16 @@ SDLC_WORKER_JOB_TEMPLATES = [
     ("SDLC SNOW Iteration Comment", "playbooks/snow-iteration-comment.yml"),
     ("SDLC SNOW Finalize", "playbooks/snow-finalize.yml"),
     ("SDLC Merge GitLab MR", "playbooks/merge-gitlab-mr.yml"),
+    ("SDLC SNOW Lifecycle Event", "playbooks/snow-lifecycle-event.yml"),
 ]
 
 # Automation Orchestrator entry points. sdlc-remediation.yml launches these
-# from EDA; AO then owns the run.
+# from EDA; AO owns start + lifecycle webhook triggers (no Approval PATCH).
 SDLC_AO_BRIDGE_JOB_TEMPLATES = [
     ("SDLC Start Orchestrator", "playbooks/start-orchestrator.yml"),
     ("SDLC Resume Orchestrator", "playbooks/resume-orchestrator.yml"),
-    # Lifecycle resume for parked await_build / await_deploy Approval gates.
+    ("SDLC AO Lifecycle Webhook", "playbooks/ao-lifecycle-webhook.yml"),
+    # Legacy Approval-gate helper (unused by webhook-driven canvas).
     ("SDLC Signal AO CI/CD Gate", "playbooks/signal-ao-cicd-gate.yml"),
 ]
 
@@ -379,6 +381,9 @@ def build_extra_var_yaml() -> str:
             ("ao_client_id", env("AO_CLIENT_ID")),
             ("ao_client_secret", env("AO_CLIENT_SECRET")),
             ("ao_start_webhook_path", env("AO_START_WEBHOOK_PATH")),
+            ("ao_merged_webhook_path", env("AO_MERGED_WEBHOOK_PATH")),
+            ("ao_build_webhook_path", env("AO_BUILD_WEBHOOK_PATH")),
+            ("ao_deploy_webhook_path", env("AO_DEPLOY_WEBHOOK_PATH")),
             ("ao_resume_webhook_path", env("AO_RESUME_WEBHOOK_PATH")),
         ):
             # json.dumps gives a quoted scalar that is valid YAML, so a secret

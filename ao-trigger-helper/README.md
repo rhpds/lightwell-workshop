@@ -57,10 +57,11 @@ Useful flags: `--dry-run`, `--watch`, `--version <full.rhlw-…>`.
 Overrides: `EDA_WEBHOOK_ROUTE_URL`, `NEEDS_APPROVAL_GAV`, `AUTO_APPROVE_GAV`
 (`group:artifact:baseVersion`).
 
-## Signal CI/CD gates (after merge)
+## Signal CI/CD lifecycle (after merge)
 
-When the AO run is Waiting on **Await CI build** or **Await deploy Healthy**,
-POST a lifecycle event to EDA (does **not** Start a second remediation):
+After the student merges in GitLab, POST build/deploy events to EDA so AO
+runs the short **build** / **deploy** webhook paths (SNOW bookkeeping). Does
+**not** Start a second Nexus remediation:
 
 ```bash
 ./trigger-cicd-signal.sh <guid> build  succeeded acme-<guid>/wire-transfer-svc
@@ -70,8 +71,8 @@ POST a lifecycle event to EDA (does **not** Start a second remediation):
 ./trigger-cicd-signal.sh <guid> deploy degraded  acme-<guid>/wire-transfer-svc
 ```
 
-Requires AAP project sync with `signal-ao-cicd-gate.yml` + rulebook rules, and
-the AO canvas published with `await_build` / `await_deploy` nodes (ADR-033).
+Requires AAP sync with `ao-lifecycle-webhook.yml` + rulebook rules, and the
+webhook-driven AO canvas (ADR-035). Merge itself is only via GitLab UI.
 
 ## Reset apps (after a demo)
 

@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-19 (ADR-034 student GitLab merge)
+Last synced with HANDOFF: 2026-10-19 (ADR-035 webhook-driven AO, no Approvals)
 
 ---
 
@@ -373,6 +373,17 @@ Copy and fill for each new decision:
 | **Context** | Parking on AO “Approve remediation MR” taught the wrong demo story: the human review artifact is the GitLab MR. AO should not be the merge button for high-risk apps. ADR-025 already forbids MR-**open** → Resume (dual Verifier). We still need a lifecycle signal when the student **merges** so the same AO run can await build/deploy. |
 | **Decision** | (1) `auto_approve` → JT Merge MR → `await_build` → `await_deploy`. (2) `needs_approval` → Approval gate `await_gitlab_merge` (prompt: merge in GitLab; AO will not merge) → on EDA signal → `await_build` → `await_deploy`. (3) Remove `human_approval` + `merge_approved`. (4) EDA rule: GitLab `object_kind=merge_request` + `object_attributes.action=merge` → Signal `await_gitlab_merge` (never Start; never act on MR open). (5) MR webhooks to EDA only on `needs_approval` AO apps. |
 | **Consequences** | Module 3 review happens in GitLab. Merge starts PaC (`build-push-to-main`) via push webhook; AO tracks CI/CD via existing Approval gates. Republish AO + sync rulebook/playbook + ensure GitLab MR hook. Soft-skip Signal JT if no pending `await_gitlab_merge` (benign races). |
+| **Superseded by** | [ADR-035](#adr-035--webhook-driven-ao-no-approval-nodes) (all merges in GitLab; no AO Approvals). |
+
+## ADR-035 — Webhook-driven AO (no Approval nodes)
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Remove AO Approvals; GitLab merge + EDA→AO lifecycle webhooks |
+| **Context** | Approval gates (`await_gitlab_merge` / `await_build` / `await_deploy`) and AO merge for `auto_approve` made the UX look like AO is the human gate. Product Wait cannot resume on events; Approval+PATCH was a workaround (ADR-033). Operators want a simple story: student merges in GitLab → webhook → pipelines continue; AO listens via `eda_trigger` webhooks. |
+| **Decision** | (1) **No** `type: approval` nodes and **no** AO Merge JT on the canvas. (2) Start path: Nexus → SNOW → TPA → classify → for-each (Impact → Verifier → SNOW `awaiting_merge`) → parent note; execution completes. (3) Students merge **only** in GitLab (policy labels remain informational). (4) Additional AO `eda_trigger` paths — `merged` / `build` / `deploy` — each start a short execution that books SNOW (resolve child by `gitlab_path`). (5) EDA rules POST those paths via JT `SDLC AO Lifecycle Webhook` (never Start remediation; never MR-open). (6) MR webhooks on **all** AO-owned apps. |
+| **Consequences** | One Nexus start run no longer spans deploy; lifecycle is a series of webhook-driven AO executions (honest for AO’s trigger model). Supersedes Approval parking in ADR-033/034. Requires republish AO + push `lw-sdlc-opencode` rulebook/playbooks + AAP/EDA sync. Old parked Approval executions on tenants should be cancelled. |
 
 ---
 
@@ -414,5 +425,6 @@ Copy and fill for each new decision:
 | OpenCode UI gate (web sessions visible) | ADR-029 |
 | Renovate OIDC via Keycloak | ADR-030 |
 | Showcase Nexus webhook trigger script | ADR-031 |
-| Async CI/CD Approval gates + parent/child ITSM | ADR-033 |
-| Student merges needs_approval in GitLab | ADR-034 |
+| Async CI/CD Approval gates + parent/child ITSM | ADR-033 (superseded park model → ADR-035) |
+| Student merges needs_approval in GitLab | ADR-034 (superseded → ADR-035 all merges in GitLab) |
+| Webhook-driven AO, no Approval nodes | ADR-035 |

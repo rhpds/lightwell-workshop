@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (ADR-034 student GitLab merge; async CI/CD gates)
+Last updated: 2026-10-19 (ADR-035 webhook-driven AO; no Approval nodes)
 
 ## Where the pieces live
 
@@ -293,20 +293,16 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    republish AO + sync AAP for CI/CD gates (1a).
    → OpenSpec `ao-operator-async-remediation`; [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch)
 
-1a. **Async CI/CD + student GitLab merge (ADR-033/034) — AO v6 live on cng2l.**
-   `auto_approve`: AO merges → `await_build` → `await_deploy`.
-   `needs_approval`: park `await_gitlab_merge` (student merges in GitLab;
-   EDA MR-**merged** webhook signals; no AO Approve/Merge node) → build →
-   deploy.    **Smoke 2026-10-19** (`f4d247ee…`): reset → webhook →
-   `PATCH /approvals` approved on `await_gitlab_merge` → EDA
-   `trigger-cicd-signal` build/deploy → execution **completed**.
-   **GitLab MR webhook live on cng2l:** `acme-cng2l/wire-transfer-svc`
-   hook id=1 → EDA route (`merge_requests_events`); AAP/EDA synced to
-   `8273e02` (MR-merged → Signal `await_gitlab_merge` probed OK, JT 260).
-   Chart `create-gitlab-tenant` also ensures this hook for
-   `needs_approval` AO seeds.
-   → [ADR-033](ADR.md#adr-033--async-cicd-via-ao-approval-patch),
-   [ADR-034](ADR.md#adr-034--student-merges-needs_approval-mrs-in-gitlab)
+1a. **Webhook-driven AO (ADR-035) — replace Approval parking.** Canvas has
+   **no** Approval nodes and **no** AO merge. Start path ends at
+   SNOW `awaiting_merge` (student merges in GitLab). EDA MR-merged /
+   PipelineRun / Argo → JT `SDLC AO Lifecycle Webhook` → AO
+   `merged`/`build`/`deploy` eda_triggers (short SNOW bookkeeping runs).
+   Chart + `bootstrap-ao-tenant.py` updated; rulebook/playbooks in
+   `lw-sdlc-opencode` (local). **Still need:** push/sync `lw-sdlc-opencode`,
+   republish AO + EDA on `cng2l`, cancel any parked Approval executions,
+   MR hooks on all AO apps (benefits too), smoke merge→build→deploy.
+   → [ADR-035](ADR.md#adr-035--webhook-driven-ao-no-approval-nodes)
 
 2. **Automation Orchestrator** is installed by `bootstrap-infra` (AO CR +
    CNPG) and wired per tenant via `sdlc.orchestrator` (`enabled`, webhook

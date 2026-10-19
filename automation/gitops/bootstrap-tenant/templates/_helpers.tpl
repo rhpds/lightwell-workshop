@@ -223,11 +223,37 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 {{- end -}}
 {{- end -}}
 
+{{- /* Merged path — student merges in GitLab; EDA POSTs this AO trigger. */ -}}
+{{- define "bootstrap-tenant.aoMergedWebhookPath" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.mergedWebhookPath -}}
+{{- .Values.sdlc.orchestrator.mergedWebhookPath -}}
+{{- else -}}
+{{- printf "lightwell-remediation-merged-%s" .Values.guid -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Compat alias: resumeWebhookPath historically meant MR-open; now = merged. */ -}}
 {{- define "bootstrap-tenant.aoResumeWebhookPath" -}}
 {{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.resumeWebhookPath -}}
 {{- .Values.sdlc.orchestrator.resumeWebhookPath -}}
 {{- else -}}
-{{- printf "lightwell-remediation-resume-%s" .Values.guid -}}
+{{- include "bootstrap-tenant.aoMergedWebhookPath" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.aoBuildWebhookPath" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.buildWebhookPath -}}
+{{- .Values.sdlc.orchestrator.buildWebhookPath -}}
+{{- else -}}
+{{- printf "lightwell-remediation-build-%s" .Values.guid -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.aoDeployWebhookPath" -}}
+{{- if and .Values.sdlc.orchestrator .Values.sdlc.orchestrator.deployWebhookPath -}}
+{{- .Values.sdlc.orchestrator.deployWebhookPath -}}
+{{- else -}}
+{{- printf "lightwell-remediation-deploy-%s" .Values.guid -}}
 {{- end -}}
 {{- end -}}
 
