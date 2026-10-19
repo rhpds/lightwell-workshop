@@ -529,6 +529,16 @@ Copy and fill for each new decision:
 | **Decision** | (1) Bridge reads the promote commit title via GitLab (`promote <app> to <sha>`) and POSTs Deploy only for matching `AO_APP_PATHS`; fall back to full fan-out if token/parse unavailable. (2) `snow-finalize.yml` soft-skips (success + `finalize_skipped=true`) when parent cannot be resolved after `cmdb_ci` lookup — never fail the JT for orphan paths. |
 | **Consequences** | One Deploy execution per real promote in the common case; orphan fan-out (if any) no longer reds the AO canvas. Requires bridge ConfigMap + env (GITLAB_URL/TOKEN) + playbook inject; push `lw-sdlc-opencode` for finalize durability. |
 
+## ADR-050 — Upstream PR-check gate for auto_approve (not adopted)
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-19 |
+| **Title** | Record upstream proposal to poll `build-pull-request` before AO merge — deferred |
+| **Context** | Upstream `rhpds/lightwell-workshop` ADR-049 (same number as our Deploy ADR) and tenant `8djv7` showed AO can merge `auto_approve` ~33 s after MR open while `build-pull-request` (fills the validation table) has not finished — table stays Pending. Their fix: `Poll PR checks` node before `merge_auto`. |
+| **Decision** | **Not adopted on this fork.** AO canvas SSOT stays our Start path: Verifier → auto_approve → **Wait 2m + merge** (`merge_delay_seconds=120`, ADR-041). That covers demo pacing; a hard PR-status gate can be revisited later if Pending-table merges become a problem. |
+| **Consequences** | Merging `upstream/main` must not reintroduce `poll_pr_checks` into `bootstrap-ao-tenant.py`. Upstream `lw-sdlc-opencode` PR #7 (`watch_mr_head` / `build_status_context`) remains optional for Merged-compatible poll helpers. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -586,3 +596,4 @@ Copy and fill for each new decision:
 | Parent INC = top-level status + child links only | ADR-047 |
 | Deploy finalize parent from lifecycle artifacts | ADR-048 |
 | Deploy promote-scoped signal + finalize soft-skip | ADR-049 |
+| Upstream PR-check gate for auto_approve (deferred) | ADR-050 |

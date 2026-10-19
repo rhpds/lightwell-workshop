@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (auto_approve merge waits 2m)
+Last updated: 2026-10-19 (merge upstream; AO canvas SSOT)
 
 ## Where the pieces live
 
@@ -288,65 +288,17 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
 
-00aa. **~~AO `completed_with_errors` on Start/Merged/Deploy~~ (lab cng2l).**
-   Root cause: AO fails when `${…}` keys are **absent** (AAP drops `""`
-   `set_stats`; GitLab/EDA omit `merge_commit_sha`). Fixes: Impact always
-   exports `n/a` for OpenCode summary fields; lifecycle resolves SHA from MR;
-   canvas drops required `trigger.merge_commit_sha`. Finalize parent wiring
-   corrected in **00ab** (was wrongly pointed at `trigger.parent_incident`).
-   Merged **v6** / Deploy **v5**.
+000. **Parked (upstream): auto_approve vs Pending validation table.**
+   Upstream saw on `8djv7` that AO can merge before `build-pull-request`
+   fills the MR table. Their canvas fix (`Poll PR checks`) is **not
+   adopted** here — AO SSOT keeps the 2m merge delay (00ad / ADR-041).
+   Recorded as [ADR-050](ADR.md#adr-050--upstream-pr-check-gate-for-auto_approve-not-adopted).
+   Optional later: adopt `lw-sdlc-opencode` PR #7 helpers without changing
+   our Start edges.
 
-00z. **Parked: OpenCode as ITSM journal writer.** Evaluate later — rewrite
-   every AO SNOW comment via a tool-light agent. Prefer hybrid (templates
-   for status ticks; LLM only when Impact/Verifier narrative exists) once
-   Start/Merged/Deploy are solid end-to-end. Do not implement yet.
-
-00y. **~~Deploy missed after promote~~ → ADR-045 (live on cng2l).** Bridge
-   deploy key is now `{sync}/{health}@{rev}`. Restart catch-up POSTed
-   `argo_app_health` → AO Deploy / SNOW lifecycle for benefits (+ wire
-   fan-out). Next promote should fire without a restart.
-   → [ADR-045](ADR.md#adr-045--deploy-bridge-signal-keyed-by-argo-revision)
-
-00x. **~~Deploy SNOW deep links~~ → ADR-046 (lab on cng2l).** Child deploy
-   comments → Argo; finalize → Route + console project (+ Argo). Deploy
-   **v3**; playbooks injected. Next Deploy run shows the links.
-   → [ADR-046](ADR.md#adr-046--deploy-snow-comments-link-argo--route--console)
-
-00w. **~~Rich SNOW INC descriptions~~ (lab on cng2l).** Parent/child create
-   playbooks emit Markdown; Description panel uses the comment MD renderer.
-   Sample on INC0000003 — hard-refresh snow-mock. Next Start shows full shape.
-
-00v. **~~Parent INC = top-level status only~~ → ADR-047 (lab on cng2l).**
-   Parent comments = brief workflow finish + **[open child]** links; detail
-   on children. JT `SDLC SNOW Parent Status` (#25); Start **v8** / Merged
-   **v5** / Deploy **v3**; playbooks re-injected; project #7 `scm_clean=false`
-   so injects stick. Smoke OK on INC0000002. Still push `lw-sdlc-opencode`.
-   → [ADR-047](ADR.md#adr-047--parent-inc-holds-top-level-status-only)
-
-00. **~~auto_approve auto-merge~~ → ADR-041.** After Verifier pass, Start
-   conditions on `loop.item.approval`: `auto_approve` → JT Merge GitLab MR;
-   `needs_approval` → SNOW `awaiting_merge` (MR stays open). No Approval
-   gates. Unblock Module 3 “low-risk merges itself” copy against this.
-   → [ADR-041](ADR.md#adr-041--ao-merges-auto_approve-after-verifier)
-
-0z. **~~SNOW comments with MR / pipeline URLs~~ → ADR-042 (lab inject on
-   cng2l).** Iteration + lifecycle headlines + MR URL + PaC `build_url`.
-   Start **v6** / Merged **v4**; playbooks injected into AAP project #7.
-   Still push `lw-sdlc-opencode` for SCM durability.
-   → [ADR-042](ADR.md#adr-042--meaningful-snow-comments-with-mr--pipeline-urls)
-
-0y. **~~OpenCode deep link + agent summary~~ → ADR-043 (lab inject on
-   cng2l).** Impact idle → `/session/{id}/message` summary in AAP stdout +
-   SNOW; UI `…/global/session/{id}`. Start **v7** (`OPENCODE_UI_URL` baked).
-   Still push `lw-sdlc-opencode` for SCM durability.
-   → [ADR-043](ADR.md#adr-043--opencode-session-deep-links--summary-in-aapsnow)
-
-0x. **~~snow-mock Markdown + autolink~~ → ADR-044 (live on cng2l).**
-   Activity renders headings, lists, bold/italic/code, links. Duplicate
-   “Work notes list” panel removed (comments only under Activities).
-   Iteration/lifecycle playbooks emit Markdown. Sample comment posted if
-   an INC exists after wipe — refresh the snow-mock UI.
-   → [ADR-044](ADR.md#adr-044--snow-mock-comment-markdown--autolink)
+000a. **Idea (Natale): pre-pull Tekton images with a DaemonSet.** Cold
+   cluster image pulls delay first PaC runs; a prepuller would make Module
+   3 timings more predictable.
 
 0a. **Remediation MR body — verified end to end on a freshly seeded tenant
    (`54dp7`, 18 Oct).** Seed -> Nexus event -> AO -> MR

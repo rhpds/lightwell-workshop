@@ -367,16 +367,15 @@ Publish a remediation for a dependency that `wire-transfer-svc` declares — the
 ----
 curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/modules/_attachments/publish-remediation.sh \
   | bash -s -- \
-  com.h2database:h2:2.2.224 \
+  com.h2database:h2:1.4.200 \
   rhlw-00001 \
   "H2 Database Engine"
 ----
 
-// TODO verify: the `h2` base version declared by `wire-transfer-svc`. The AO
-// trigger helper and the 18 Oct end-to-end run both use `2.2.224`, but an
-// earlier tenant snapshot recorded `1.4.200` in that pom. The published base
-// version must match the pom exactly or the agent cannot find the dependency
-// to bump.
+// VERIFIED (19 Oct, tenant 8djv7): wire-transfer-svc declares h2 1.4.200.
+// The module previously said 2.2.224, which matches nothing in the pom, so
+// the agent would have had no dependency to bump. flyway-core 4.1.2 above is
+// correct as written.
 
 Everything you just watched happens again, identically: incident opened, TPA queried, application classified, agent dispatched, merge request opened, pipeline runs, validation table filled in. Follow it on the canvas if you like — it is the same shape.
 
@@ -407,7 +406,14 @@ Go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you
 
 Read that last point again, because it is the whole argument. Every automated check passed. The platform still refused to merge it. The policy says that on a system that moves customer money a person signs off even on a change that looks perfect, and the platform is not allowed to talk itself out of that — not even with a full table of green ticks to point at.
 
-Note also what the merge request is still marked as: *Draft*. The same verifier that marked the `benefits-mgmt-app` request ready left this one in Draft on purpose, because its risk class demands a reviewer. The state of the merge request is itself part of the policy.
+Note the *Recommended Action* block at the bottom. For `benefits-mgmt-app` it said the change was safe to take. Here it reads:
+
+[quote]
+____
+🔍 *Requires human review before merge.* A security or DevSecOps engineer should review the patch diff. Risk class *HIGH* requires review regardless of automated results.
+____
+
+"Regardless of automated results" is the policy in one phrase. Six checks passed; the seventh was never claimed. None of that changes the answer.
 
 When you are satisfied, merge it yourself in GitLab.
 
@@ -467,7 +473,7 @@ You have just run the *Full Automation* path end to end:
 . The `impact-analyzer` agent opened a merge request carrying CVE data, risk class and a validation table
 . The `build-pull-request` pipeline tested the change and wrote the real results back into that table
 . `benefits-mgmt-app` was auto-approved and merged by the Orchestrator, without you
-. `wire-transfer-svc` passed every check, stayed in Draft, and waited for you to merge it in GitLab
+. `wire-transfer-svc` passed every check, and its merge request still said human review was required, so it waited for you to merge it in GitLab
 . Both were built, signed, promoted and deployed by the same pipeline and ArgoCD
 . The parent incident resolved once ArgoCD reported the deployment Healthy, carrying a complete, timestamped trail
 
