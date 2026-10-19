@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-19 (snow-mock drop Work notes list)
+Last updated: 2026-10-19 (merged upstream/main; Module 3 auto_approve rewrite)
 
 ## Where the pieces live
 

@@ -384,7 +384,8 @@ Copy and fill for each new decision:
 | **Context** | Approval gates (`await_gitlab_merge` / `await_build` / `await_deploy`) and AO merge for `auto_approve` made the UX look like AO is the human gate. Product Wait cannot resume on events; Approval+PATCH was a workaround (ADR-033). Operators want a simple story: student merges in GitLab → webhook → pipelines continue; AO listens via `eda_trigger` webhooks. |
 | **Decision** | (1) **No** `type: approval` nodes and **no** AO Merge JT on the canvas. (2) Start path: Nexus → SNOW → TPA → classify → for-each (Impact → Verifier → SNOW `awaiting_merge`) → parent note; execution completes. (3) Students merge **only** in GitLab (policy labels remain informational). (4) Additional AO `eda_trigger` paths — `merged` / `build` / `deploy` — each start a short execution that books SNOW (resolve child by `gitlab_path`). (5) EDA rules POST those paths via JT `SDLC AO Lifecycle Webhook` (never Start remediation; never MR-open). (6) MR webhooks on **all** AO-owned apps. |
 | **Consequences** | One Nexus start run no longer spans deploy; lifecycle is a series of webhook-driven AO executions (honest for AO’s trigger model). Supersedes Approval parking in ADR-033/034. Requires republish AO + push `lw-sdlc-opencode` rulebook/playbooks + AAP/EDA sync. Old parked Approval executions on tenants should be cancelled. |
-| **Superseded in part by** | [ADR-037](#adr-037--single-ao-eda_trigger--switch-on-triggertype) (one webhook path; multi-trigger → switch). |
+| **Amended by** | [ADR-041](#adr-041--ao-merges-auto_approve-after-verifier) — restores AO Merge JT for `auto_approve` only; Approval-node removal stands. |
+| **Superseded in part by** | [ADR-037](#adr-037--single-ao-eda_trigger--switch-on-triggertype) (path model) → [ADR-038](#adr-038--four-ao-workflows-one-eda_trigger-each). |
 
 ## ADR-036 — CI/CD → EDA bridge (PipelineRun + Argo producers)
 

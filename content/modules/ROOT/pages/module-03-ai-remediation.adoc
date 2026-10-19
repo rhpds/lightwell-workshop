@@ -60,52 +60,52 @@ The back half of both paths is the same. Path 2 only replaces *who decides what 
 
 Event-Driven Ansible is deliberately thin here. It is a sensor: it recognises the `.rhlw` artifact event and launches one job template, `SDLC Start Orchestrator`, which posts to the Automation Orchestrator webhook. Everything after that is a node on the Orchestrator canvas, which means the whole flow is visible in one place and every step is recorded as it runs.
 
-// BLOCKED (19 Oct): this diagram shows the ADR-033/034 canvas, which no
-// longer exists. ADR-035 removed every `type: approval` node and the AO merge
-// job template, so there is no "Auto-approve?" condition, no "Merge MR (auto)"
-// and no "Approve remediation MR" gate. What the canvas does now:
-//   start   : SNOW parent -> TPA -> classify -> SNOW comment -> SNOW children
-//             -> for-each(Impact -> Already current? -> Verifier -> Verifier
-//             passed? -> SNOW iteration comment) -> SNOW parent "awaiting
-//             GitLab merge" -> execution ENDS
-//   merged  : separate execution, EDA webhook -> SNOW "MR merged"
-//   build   : separate execution -> SNOW build succeeded / failed
-//   deploy  : separate execution -> SNOW deployed -> SNOW finalize (parent)
-// Redrawing this is held pending the auto-merge decision (see HANDOFF): if
-// mr-verifier gains an auto-merge for approval==auto_approve the low-risk
-// branch changes shape, and the diagram should be drawn once, not twice.
-
 .Path 2: the Automation Orchestrator canvas
 [mermaid]
 ----
 flowchart TD
   NX["Nexus<br/>component CREATED"]
   EDA["Event-Driven Ansible<br/>(sensor only)"]
-  START["SDLC Start Orchestrator<br/>job template"]
-  SN1["Create SNOW incident"]
+  SN1["Create parent<br/>SNOW incident"]
   TPA["Query TPA<br/>which SBOMs contain this component?"]
   CL["Classify affected apps<br/>reads .lightwell/policy.json"]
-  SN2["SNOW classify comment"]
+  SN2["Create child incidents<br/>one per affected app"]
   LOOP{{"For each affected app"}}
   IMP["Impact Analyzer<br/>AI agent opens the MR"]
   VER["MR Verifier"]
   APPR{"Auto-approve?"}
-  AUTO["Merge MR (auto)"]
-  HUMAN["Approve remediation MR<br/>human gate"]
-  MERGE["Merge MR (after approval)"]
-  SN3["SNOW iteration comment"]
-  FIN["SNOW finalize + close"]
-  NX --> EDA --> START --> SN1 --> TPA --> CL --> SN2 --> LOOP
+  AUTO["Merge MR<br/>(auto-approved)"]
+  WAIT["SNOW — awaiting<br/>GitLab merge"]
+  HUMAN(["Human merges<br/>in GitLab"])
+  NX --> EDA --> SN1 --> TPA --> CL --> SN2 --> LOOP
   LOOP --> IMP --> VER --> APPR
-  APPR -->|auto_approve| AUTO --> SN3
-  APPR -->|needs_approval| HUMAN --> MERGE --> SN3
-  SN3 --> FIN
+  APPR -->|auto_approve| AUTO
+  APPR -->|needs_approval| WAIT -.-> HUMAN
   style HUMAN fill:#f8d7da,stroke:#b02a37,stroke-width:2px
   style AUTO fill:#d1e7dd,stroke:#146c43
   style IMP fill:#cfe2ff,stroke:#0d6efd,stroke-width:2px
 ----
 
-Merging is where Path 2 rejoins Path 1: the push to `main` starts the Tekton pipeline, the signed image goes to the Nexus OCI registry, the image tag is promoted into the deployment repository, and ArgoCD rolls it out.
+The merge — by the Orchestrator or by you — is where Path 2 rejoins Path 1. From there both applications follow exactly the same route, and the Orchestrator picks each stage up again as a webhook arrives:
+
+.After the merge: three short webhook-driven runs
+[mermaid]
+----
+flowchart LR
+  MG(["MR merged<br/>(AO or human)"])
+  LC1["AO: SNOW — MR merged"]
+  PIPE["Tekton build-push-to-main<br/>build, SBOM, sign, push, promote"]
+  LC2["AO: SNOW — build succeeded"]
+  ARGO["ArgoCD syncs<br/>new imageTag"]
+  LC3["AO: SNOW — deploy Healthy"]
+  FIN["AO: SNOW finalize<br/>parent Resolved"]
+  MG --> LC1
+  MG --> PIPE --> LC2
+  PIPE --> ARGO --> LC3 --> FIN
+  style FIN fill:#d1e7dd,stroke:#146c43
+----
+
+Each of those is a *separate* Orchestrator execution, started by an Event-Driven Ansible webhook rather than by waiting around. The first run ends as soon as the merge requests are ready; nothing sits idle holding a job open for the hours a human might take.
 
 NOTE: The `report-generator-app` you remediated in Module 2 never enters this loop. Its policy marks Renovate as the remediation owner, so the classify step records it and skips it. Two tools, one portfolio, no collisions.
 
@@ -297,23 +297,20 @@ image::gitlab-ai-mr-validation-table.png[Automated Validation table in the merge
 
 IMPORTANT: Six of those eight rows are measured. *Regression scan is not implemented* and renders as `Pending` — a behavioural diff would mean running the whole suite against the target-branch baseline as well, roughly doubling build time, and that call has not been made yet. Nothing here is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all.
 
-// BLOCKED (19 Oct): nothing auto-merges. ADR-035 removed the AO merge job
-// template; `gitlab_api.py mr-merge` exists but no playbook or rulebook calls
-// it (checked at lw-sdlc-opencode 9d7affa). Today the student merges BOTH
-// apps in GitLab; `auto_approve` only changes what the MR says — undrafted,
-// "safe to merge" — versus `needs_approval`, which stays Draft and says human
-// review is required. Held pending a decision on whether to re-add auto-merge
-// for approval==auto_approve or rewrite this section around that contrast.
-
 == The Low-Risk Application Merges Itself
 
-Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge request is open and healthy, then the *Auto-approve?* condition reads the approval value that travelled with the application's policy.
+Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge request is healthy and every check reported, then the *Auto-approve?* condition reads the approval value that travelled with the application's own policy.
 
-For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the auto branch straight to *Merge MR (auto)*. No human is asked. The incident gets an iteration comment recording the merge, and the loop moves on.
+For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the green branch to *Merge MR (auto-approved)*. The Orchestrator undrafts the merge request and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
 
-Go back to GitLab and confirm the merge request is already merged. You did not touch it.
+Go back to GitLab and open the merge request. It is already merged, and the merge was performed by the automation account — you never touched it.
 
-This is the volume case. An internal HR application, a compatible rebuild of a library, every automated check green — there is no decision here that a person adds value to, so no person is asked.
+This is the volume case, and it is the whole economic argument for the platform. An internal HR application, a compatible rebuild of a library, every automated check green: there is no decision here that a person adds value to, so no person is asked. Multiply that by forty remediations a week and the time saved is not the merge click — it is the context switch that surrounds it.
+
+[NOTE]
+====
+The decision is made from `.lightwell/policy.json` in the application's own repository, and it fails closed. If that file is missing, unreadable or malformed, the Orchestrator treats the application as `needs_approval` and routes it to a human. Nothing merges itself by accident.
+====
 
 == Build, Sign, Promote, Deploy
 
@@ -362,33 +359,22 @@ Everything you just watched happens again, identically: incident opened, TPA que
 
 Then the run stops.
 
-// BLOCKED (19 Oct): there is no AO approval node and no approve/reject
-// control in the AO UI any more (ADR-035). The pause is real but it lives in
-// GitLab, not on the canvas: the start execution ends at the SNOW parent
-// comment "awaiting GitLab merge", and merging the MR fires an EDA webhook
-// that starts a separate short AO execution. So the prompt text, the 24-hour
-// decision window and the "return to the Orchestrator and approve" step below
-// are all stale. The *argument* of this section still holds and should
-// survive the rewrite: every check passed and the platform still would not
-// merge it. Held with the section above.
-
 == The Judgement Call
 
-On the canvas, the *Auto-approve?* condition does not see `auto_approve`, so it routes to an approval node named *Approve remediation MR*. The Orchestrator is now waiting on a person. The prompt names the repository and the merge request number:
+On the canvas, the *Auto-approve?* condition does not see `auto_approve`, so it takes the other branch: a comment on the child incident recording that the merge request is ready and *awaiting a GitLab merge*. Then the execution ends.
 
-[source,text,subs=attributes+]
-----
-Approve merging the verified remediation MR for acme-{guid}/wire-transfer-svc (!1)?
-----
+Read that again, because it is easy to misread as a failure. The Orchestrator has not crashed, timed out, or parked a job that is burning a worker somewhere. It has done everything it is permitted to do and stopped. The merge request is open in GitLab with your name on it, and nothing further happens in this entire platform until a person acts.
 
-The gate has a 24-hour decision window and, if nobody answers in that time, it falls back to *reject*. An unanswered approval does not quietly become a yes.
+[IMPORTANT]
+====
+*The pause lives in GitLab, not in the Orchestrator.* There is no approve button on the canvas and no task in a queue waiting for you to tick it. The human gate is the merge request itself — the artifact that actually carries the evidence — rather than a prompt in an automation tool that quotes a ticket number at you.
+====
 
-// No screenshot to take here: the AO approval UI this described no longer
-// exists. Once the section is rewritten, the capture worth having is the
-// child SNOW incident sitting at "awaiting GitLab merge" next to the open
-// Draft MR — that pair is the actual pause.
+// TODO screenshot: the child SNOW incident sitting at "awaiting GitLab merge"
+// side by side with the open Draft MR in GitLab. That pair *is* the pause, and
+// no single screen shows it.
 
-Before you answer it, go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you need is in one page:
+Go and read the merge request in `acme-{guid}/wire-transfer-svc`. Everything you need is in one page:
 
 * The diff — a single version bump in `pom.xml`, the upstream version unchanged
 * The CVE and its CVSS score, pulled from TPA rather than from the model
@@ -396,15 +382,15 @@ Before you answer it, go and read the merge request in `acme-{guid}/wire-transfe
 * The risk class, `HIGH`, with its rationale: payment-critical, PCI-scoped
 * The recommended action, which says *human review required* precisely because the risk class is `HIGH` — not because anything failed
 
-Read that last point again, because it is the whole argument. Every automated check passed. The platform still refused to merge it. The policy says that on a system that moves customer money, a person signs off even on a change that looks perfect, and the platform is not allowed to talk itself out of that.
+Read that last point again, because it is the whole argument. Every automated check passed. The platform still refused to merge it. The policy says that on a system that moves customer money a person signs off even on a change that looks perfect, and the platform is not allowed to talk itself out of that — not even with a full table of green ticks to point at.
 
-Make your decision, then return to the Orchestrator and approve the task. The canvas resumes, the *Merge MR (after approval)* node merges the request for you, and the incident records who approved it and when.
+Note also what the merge request is still marked as: *Draft*. The same verifier that undrafted the `benefits-mgmt-app` request left this one drafted on purpose, because its risk class demands a reviewer. The state of the merge request is itself part of the policy.
 
-// ANSWERED (19 Oct): the student merges directly in GitLab. There is no
-// `SDLC Merge GitLab MR` node on the canvas and no pending AO approval to
-// race with — ADR-035.
+When you are satisfied, merge it yourself in GitLab.
 
-From here it is the same spine as before: `build-push-to-main`, SBOM to TPA, Tekton Chains signature, image to the Nexus OCI registry, `imageTag` promoted into `acme-deployment`, ArgoCD syncs, the new pod rolls out in `{user}-app`. Return to the ServiceNow mock and confirm the incident has been finalised and closed with the full timeline.
+That click is the only manual step in the entire module, and it is the one the whole design exists to protect. Everything up to it was preparation so that your decision is informed; everything after it is automation again.
+
+From here it is the same spine as the low-risk application: merging fires the GitLab webhook, Event-Driven Ansible relays it, and a short Orchestrator run records the merge on the child incident. `build-push-to-main` builds, generates the SBOM, signs via Tekton Chains, pushes to the Nexus OCI registry and promotes the `imageTag` into `acme-deployment`; ArgoCD syncs and the new pod rolls out in `{user}-app`. Each stage reports back as it completes.
 
 image::argocd-acme-apps-synced.png[ArgoCD showing the Acme applications synced and healthy after remediation]
 
@@ -456,10 +442,8 @@ You have just run the *Full Automation* path end to end:
 . Each application was classified against its own `.lightwell/policy.json`
 . The `impact-analyzer` agent opened a merge request carrying CVE data, risk class and a validation table
 . The `build-pull-request` pipeline tested the change and wrote the real results back into that table
-// BLOCKED: the next two bullets describe the removed auto-merge / AO approval
-// flow — rewrite them with the two scenario sections.
-. `benefits-mgmt-app` was auto-approved and merged without you
-. `wire-transfer-svc` passed every check and still waited for your approval
+. `benefits-mgmt-app` was auto-approved and merged by the Orchestrator, without you
+. `wire-transfer-svc` passed every check, stayed in Draft, and waited for you to merge it in GitLab
 . Both were built, signed, promoted and deployed by the same pipeline and ArgoCD
 . The parent incident resolved once ArgoCD reported the deployment Healthy, carrying a complete, timestamped trail
 
