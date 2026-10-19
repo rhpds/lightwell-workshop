@@ -28,6 +28,12 @@ Last updated: 2026-10-18 (publish-remediation JAR fix, TPA route fix, scale call
   the embedded `pom.properties`, so the SBOM showed no version change.
   Fixed: the script now patches `pom.properties` and the embedded
   `pom.xml` inside the JAR to reflect the `.rhlw` version before upload.
+  Note which artifacts this applies to: `jackson-databind`,
+  `commons-fileupload` and `flyway-core` all embed
+  `META-INF/maven/.../pom.properties`, so the patch is what makes Syft
+  report the remediated version. **`h2` embeds none**, so the patch is a
+  no-op there and Syft falls back to the filename, which already carries
+  the `.rhlw` version. Both paths work; only the first needs the fix.
 - **`publish-remediation.sh` TPA route fix (18 Oct).** The SME's TPA
   route discovery used `oc get route` in the TPA namespace, which the
   tenant user can't access. Added `|| true` and a fallback to
@@ -38,7 +44,10 @@ Last updated: 2026-10-18 (publish-remediation JAR fix, TPA route fix, scale call
   only their apps. Deployment repo cloned into GitLab during
   provisioning. `seed-app-tags` Job reads commit SHAs after initial
   builds and updates `values.yaml`. Promotion is a separate git commit
-  (not pipeline-driven) — ready for AO integration.
+  (not pipeline-driven) — ready for AO integration. **Superseded:**
+  `promote-to-deployment-repo` merged in the app repos' PR #1, so a
+  merge to main now bumps `imageTag` in `acme-deployment` from the
+  pipeline and ArgoCD deploys it. Verified end to end.
   Upstream deployment chart: `redhat-ads-tech/acme-deployment`.
 - **Sample apps now runnable (16 Oct).** `report-generator-app` switched
   to H2 in-memory + landing page at `/`. `benefits-mgmt-app` runs on
