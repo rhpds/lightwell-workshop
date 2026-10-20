@@ -23,6 +23,37 @@ Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was th
 
 ## Recently done
 
+- **Merge is now gated on the PaC pipeline (21 Oct).** `job-create.yaml` sets
+  `only_allow_merge_if_pipeline_succeeds` on the three Acme app repos (sixth
+  `seed_app` arg, default `true`; `acme-deployment` passes `false` because
+  nothing runs a pipeline there). External Status Checks would need Ultimate —
+  this GitLab is **17.4.1 CE** — but PaC registers its PipelineRun as an
+  `external` pipeline on the MR head commit, so the stock CE setting gates on
+  it. Verified on `8djv7/benefits-mgmt-app`: blocked as `ci_must_pass` from the
+  moment the MR opened (**before any pipeline existed** — the window fails
+  safe), `mergeable` once green, AO auto-merged 9s later with no `405`.
+  Side benefit: ADR-050's fail-open is now enforced by GitLab rather than by
+  the AO poller. **Existing tenants need the setting applied to their app
+  repos.** Read `detailed_merge_status`, not `merge_status` — the latter only
+  reports conflicts. → [ADR-055](ADR.md#adr-055--gitlab-blocks-the-merge-until-the-pac-pipeline-succeeds)
+
+- **Module 3 screenshots + two content bugs (21 Oct).** Added the three
+  screenshots asked for in the 20 Oct sync: `m3-ao-task-output.png` (Shaaf's
+  per-task output panel), `m3-hr-auto-approve-false.png` (the `Auto-approve?`
+  False branch, red callout), and `m3-pipeline-run.png` (closing the
+  `// TODO screenshot`). While wiring them: the "Merge Request the Agent
+  Wrote" section showed a **wire-transfer/h2** title under instructions to open
+  **benefits-mgmt-app**, and claimed the coloured dot "encodes severity" — it
+  encodes the *application's risk class*, which is why a 9.8 CVE shows 🟢.
+  Both fixed.
+
+- **Harness bug: the high-risk path was a silent no-op after the first run
+  (21 Oct).** Nexus fires only on component *created*; `next_suffix` read the
+  rhlw number from the pom on `main`, which the high-risk MR never updates
+  because it is never merged. So every re-run republished `rhlw-00001`, no
+  webhook fired, no AO run, no MR — and publish still reported PASS. Now takes
+  the higher of the pom and `lightwell-remediated`.
+
 - **Tenants would not schedule — TPA reserved 16.5Gi each (20 Oct).** A new
   tenant on `cluster-sgdql` parked with the showroom pod `Pending`:
   `0/6 nodes are available: 3 Insufficient memory, 3 node(s) had untolerated

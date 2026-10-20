@@ -136,6 +136,18 @@ spec:
                 # denied" and the Application never syncs. The app repos stay
                 # private -- only the deployment chart needs to be readable.
                 local VISIBILITY="${5:-private}"
+                # Block the Merge button until the Pipelines-as-Code run has
+                # succeeded. PaC registers its PipelineRun as a GitLab pipeline
+                # of source=external bound to the MR head commit, so GitLab can
+                # gate on it even though there is no .gitlab-ci.yml. Verified on
+                # 17.4.1 CE: the merge is refused from the moment the MR opens
+                # (detailed_merge_status=ci_must_pass, before any pipeline
+                # exists) until the run goes green, and the AO auto-merge then
+                # succeeds through the API as before.
+                #
+                # Off for acme-deployment: nothing runs a pipeline there, and a
+                # repo that can never satisfy the gate can never be merged into.
+                local MERGE_GATE="${6:-true}"
                 local PROJECT_PATH="${GROUP}/${APP_NAME}"
 
                 echo "Creating project ${PROJECT_PATH}..."
@@ -160,7 +172,7 @@ spec:
                 # stuck on anonymous clone (ComparisonError / Access denied).
                 curl -sk -o /dev/null -H "PRIVATE-TOKEN: ${ROOT_TOKEN}" -H "Content-Type: application/json" \
                   -X PUT "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" \
-                  -d "{\"visibility\":\"${VISIBILITY}\"}" || true
+                  -d "{\"visibility\":\"${VISIBILITY}\",\"only_allow_merge_if_pipeline_succeeds\":${MERGE_GATE}}" || true
 
                 echo "Seeding ${PROJECT_PATH} from ${SEED_REPO} (ref ${SEED_REF})..."
                 if ! command -v git >/dev/null 2>&1; then
@@ -203,7 +215,7 @@ spec:
 
               {{- if .Values.apps.enabled }}
               echo "Seeding deployment manifests repo..."
-              seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" '' "public"
+              seed_app "acme-deployment" "{{ .Values.apps.repoURL }}" "main" '' "public" "false"
               {{- end }}
 
               # MR webhooks → EDA for every AO-owned app. Students always merge

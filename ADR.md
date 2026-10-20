@@ -585,6 +585,18 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-055 — GitLab blocks the merge until the PaC pipeline succeeds
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-21 |
+| **Title** | Set `only_allow_merge_if_pipeline_succeeds` on the Acme app repos, not on `acme-deployment` |
+| **Context** | Two problems with one answer. (1) Adding the `regression` check doubles `build-pull-request`, measured at **43s mean over 5 real runs**, so the validation table would appear at ~86s instead of ~43s; James asked whether a student could merge before the results land. (2) **ADR-050**'s auto-merge gate is enforced by a poller inside the AO workflow — correct today, but a refactor that drops the poll silently restores the fail-open. GitLab Ultimate's External Status Checks would be the textbook fix, but this instance is **17.4.1 CE** (`"enterprise": false`), so they are unavailable. What *is* available: Pipelines-as-Code registers its PipelineRun as a GitLab pipeline of `source: external` bound to the MR head commit (verified: pipeline 156 → `Pipelines as Code CI / build-pull-request`), which means the stock CE setting `only_allow_merge_if_pipeline_succeeds` can gate on it even though there is no `.gitlab-ci.yml`. |
+| **Decision** | Enable it in `gitlab/job-create.yaml` via a sixth `seed_app` argument defaulting to `true`, and pass `false` for `acme-deployment`. An explicit argument rather than keying off the existing `VISIBILITY` parameter, which would couple two unrelated concerns. `acme-deployment` is excluded because nothing runs a pipeline there, and a repo that can never satisfy the gate can never be merged into. |
+| **Consequences** | Verified end to end on `acme-8djv7/benefits-mgmt-app`: MR opened at 22:38:35 with **no pipeline yet** and GitLab already reported `detailed_merge_status=ci_must_pass` — so the window between the agent opening the MR and PaC registering a run **fails safe**, which was the main risk. It flipped to `mergeable` at 22:40:38 when the run went green, and the AO auto-merge succeeded 9s later at 22:40:47 with no `405` and every downstream AAP job successful. The ADR-050 fail-open is now structurally impossible rather than poller-dependent. Note `merge_status` stays `can_be_merged` throughout — that legacy field only reports conflicts; `detailed_merge_status` is the one to read. Existing tenants need the setting applied to their three app repos, or a re-run of `create-gitlab-tenant`. |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
