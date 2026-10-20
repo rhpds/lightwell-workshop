@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-20 (tenant AAP job logs need Controller org Auditor — ADR-053; cng2l patched live)
+Last updated: 2026-10-20 (Module 3 passes end to end; Module 2 Renovate path broken — see Next up 0000000)
 
 ## Where the pieces live
 
@@ -310,6 +310,43 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    `cmdb_ci`/`gitlab_path`. Deploy **v5**; reinjected; catch-up finalize
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
+
+0000000. **Module 2 (Renovate, Path 1) does not produce the Lightwell MR.**
+   Found by the new `qa-automation/test-lab-flow.sh` on `l89bd`. Everything
+   up to Renovate works — the artifact publishes, `maven-public` serves
+   `2.13.5.rhlw-<n>`, advisories land in TPA — but Renovate never opens the
+   jackson-databind MR. Two separate causes, the first fixed, the second not:
+
+   1. **Registry.** The repo's `renovate.json` extends
+      `github>lightwell-experience/renovate-config:java-remediated`, whose
+      custom manager hardcodes
+      `"registryUrlTemplate": "https://packages.redhat.com/lightwell/java/remediated"`.
+      The tenant cannot reach that, so every Maven lookup logs
+      `no-result`. Module 2's `packageRules.registryUrls` override does
+      **not** displace it on Renovate 44.145.1 — verified with both
+      `matchManagers: ["custom.regex"]` and `["regex"]`. Redefining
+      `customManagers` inline in the RenovateJob *does* work: the dep then
+      carries the tenant Nexus URL.
+
+   2. **Versioning.** Even pointed at the right registry, Renovate proposes
+      no update. The preset's versioning regex
+      `^(?<compatibility>.*?)([.-]rhlw-(?<major>\d+)…)?$` yields no `major`
+      for a plain `2.13.5`, and its own description says it exists to bump
+      `3.7.1.rhlw-00001 → 3.7.1.rhlw-00002`, i.e. between rebuilds. The lab
+      asks it to make the *first* hop, `2.13.5 → 2.13.5.rhlw-00001`.
+      Unproven whether that ever worked or whether the preset changed —
+      `renovate-ui-pr-activity.png` in this repo shows it working on tenant
+      `jd6p4`, so something moved.
+
+   **Decision needed.** The preset lives in `lightwell-experience/`, outside
+   our control. Options: (a) inline the custom manager in module 2's
+   RenovateJob with the tenant registry and a versioning scheme that accepts
+   the first hop; (b) seed `report-generator-app` with a pom already on an
+   `.rhlw` version so the demo is rebuild-to-rebuild, which is what the
+   preset is actually for; (c) get the preset changed upstream. (a) or (b)
+   are ours to make; (b) also matches the preset's stated intent.
+
+   Module 3 is unaffected and passes end to end.
 
 000000. **CVE lookup fixed and verified; CVSS still blank.**
    `lw-sdlc-opencode` PR #8 is merged and confirmed on `8gmp5` (AAP project
