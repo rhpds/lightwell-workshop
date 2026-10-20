@@ -207,6 +207,24 @@ def ensure_controller_playbooks(
     missing_required = []
     for jt_name, playbook in templates:
         if jt_name in existing:
+            # Reconcile the one setting we care about on JTs that predate it;
+            # a bare "continue" here is why existing tenants kept serialising.
+            jt = existing[jt_name]
+            if not jt.get("allow_simultaneous"):
+                code, _ = aap_request(
+                    "PATCH",
+                    f"/api/controller/v2/job_templates/{jt['id']}/",
+                    user,
+                    password,
+                    base,
+                    {"allow_simultaneous": True},
+                )
+                print(
+                    f"JT {jt_name}: allow_simultaneous -> true ({code})"
+                    if code in (200, 201)
+                    else f"WARNING: could not set allow_simultaneous on {jt_name}: {code}",
+                    file=sys.stderr if code not in (200, 201) else sys.stdout,
+                )
             continue
         code, created = aap_request(
             "POST",
@@ -223,6 +241,15 @@ def ensure_controller_playbooks(
                 "playbook": playbook,
                 "organization": controller_org_id,
                 "ask_variables_on_launch": True,
+                # AAP serialises a job template by default, so one slow job
+                # blocks every later job of the same template. The merge JT
+                # polls the PR check for up to 10 minutes (ADR-050) and the
+                # build poll for up to 15, so a two-app remediation had the
+                # second app waiting behind the first with
+                # "waiting for job-N to finish". Every SDLC template acts on
+                # one app or one incident, named explicitly in extra_vars,
+                # and shares no mutable state — so they can run together.
+                "allow_simultaneous": True,
             },
         )
         if code not in (200, 201):

@@ -64,9 +64,9 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
 # name|sourceRepo|sourceRef|policy_json
 APPS=(
-  "wire-transfer-svc|https://github.com/redhat-ads-tech/wire-transfer-svc.git|main|{\"remediation_owner\":\"ao\",\"approval\":\"needs_approval\"}"
-  "benefits-mgmt-app|https://github.com/redhat-ads-tech/benefits-mgmt-app.git|main|{\"remediation_owner\":\"ao\",\"approval\":\"auto_approve\"}"
-  "report-generator-app|https://github.com/redhat-ads-tech/report-generator-app.git|main|{\"remediation_owner\":\"renovate\"}"
+  "wire-transfer-svc|https://github.com/redhat-ads-tech/wire-transfer-svc.git|main|{\"remediation_owner\":\"ao\",\"approval\":\"needs_approval\",\"riskClass\":\"HIGH\",\"riskRationale\":\"Payment-critical / PCI-scoped system — requires human review\"}"
+  "benefits-mgmt-app|https://github.com/redhat-ads-tech/benefits-mgmt-app.git|main|{\"remediation_owner\":\"ao\",\"approval\":\"auto_approve\",\"riskClass\":\"LOW\",\"riskRationale\":\"Internal HR application — no regulated data\"}"
+  "report-generator-app|https://github.com/redhat-ads-tech/report-generator-app.git|main|{\"remediation_owner\":\"renovate\",\"riskClass\":\"LOW\",\"riskRationale\":\"Internal reporting tool — no regulated data\"}"
 )
 
 GITLAB_HOST="$(oc get route gitlab -n "${GITLAB_NS}" -o jsonpath='{.spec.host}' 2>/dev/null || true)"
