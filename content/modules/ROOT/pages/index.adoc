@@ -2,7 +2,7 @@
 
 This lab demonstrates how https://www.redhat.com/lightwell[Lightwell^], combined with the Red Hat application platform — OpenShift Pipelines, OpenShift GitOps, Trusted Software Supply Chain, Ansible Automation Platform, and Red Hat AI — transforms open source vulnerability remediation from a weeks-long manual process into a continuous, automated operation that takes minutes.
 
-You will work through two remediation paths — a deterministic quick win using https://docs.renovatebot.com/[Renovate^] (an open source dependency update tool that automatically creates merge requests when newer package versions are available), and a full automation path using Automation Orchestrator, AI coding agents running on https://opencode.ai/[OpenCode^], and ServiceNow — and see a CVE go from detection to deployed fix in minutes.
+You will work through two remediation paths — a quick win using https://docs.renovatebot.com/[Renovate^] (an open source dependency update tool that automatically creates merge requests when newer package versions are available), and a full automation path using Automation Orchestrator, AI coding agents running on https://opencode.ai/[OpenCode^], and ServiceNow — and see a CVE go from detection to deployed fix in minutes.
 
 == Lab Modules
 
@@ -11,8 +11,41 @@ You will work through two remediation paths — a deterministic quick win using 
 | Module | Title | Duration
 | 0 | xref:module-00-concepts.adoc[CVEs, SBOMs, and the Patch Workflow — Foundations] | 5 min
 | 1 | xref:module-01-environment.adoc[The Environment] | 10 min
-| 2 | xref:module-02-renovate.adoc[Quick Win — Deterministic Remediation with Renovate] | 25 min
-| 3 | xref:module-03-ai-remediation.adoc[Full Automation — AI-Driven Remediation] | 30 min
+| 2 | xref:module-02-renovate.adoc[Quick Win — Automated Dependency Updates] | 25 min
+| 3 | xref:module-03-ai-remediation.adoc[Full Automation — AI-Assisted Remediation] | 30 min
 | 4 | xref:module-04-wrapup.adoc[Wrap-Up] | 5 min
 | | *Total* | *~75 min*
 |===
+
+== Using This Environment
+
+Your environment is split into two panels:
+
+* *Left panel* — these instructions. Use the navigation on the left side to move between modules and sections.
+* *Right panel* — a tabbed interface with a terminal and links to the various consoles you will use throughout the lab.
+
+=== Running Commands
+
+Throughout these instructions, you will see command blocks. Hover over a command block to reveal action icons in the upper-right corner:
+
+[source,sh,role=execute]
+----
+echo "Hello from Lightwell!"
+----
+
+* *Clipboard* — copies the text to your clipboard for pasting into a browser, a form, or another tool. Appears on all command blocks.
+* *Execute* (>_) — sends the command directly to the terminal on the right. This icon only appears on commands that are meant to be run in the terminal. No copy/paste needed.
+
+TIP: You can also type commands directly into the terminal. The terminal supports standard shell features like command history (kbd:[Up] / kbd:[Down] arrows), tab completion (kbd:[Tab]), and kbd:[Ctrl+C] to cancel a running command.
+
+=== Accessing Consoles
+
+Above the terminal on the right side, you will see tabs for different consoles and tools. Clicking a tab opens the corresponding interface. You are also free to open the consoles in separate browser tabs using the links in xref:module-01-environment.adoc[Module 1].
+
+=== Adjusting the Layout
+
+You can drag the divider between the instruction panel and the console panel to adjust the width of each. To quickly switch views, click the *<* icon at the far right of the screen to cycle between showing only instructions, only the console area, or the default split view.
+
+=== Expanding Screenshots
+
+All screenshots in this lab are clickable — click any image to open it full-size in a new tab for easier reading.

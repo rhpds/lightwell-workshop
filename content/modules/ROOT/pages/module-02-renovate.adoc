@@ -1,5 +1,5 @@
-= Module 2: Quick Win — Deterministic Remediation with Renovate
-:navtitle: Module 2: Renovate (Path 1)
+= Module 2: Quick Win — Automated Dependency Updates
+:navtitle: Module 2: Quick Win
 
 [WARNING]
 ====
@@ -8,18 +8,20 @@ This module is a *work in progress*. Steps and screenshots may change before the
 
 *Duration:* 25 minutes
 
-This module walks through *Path 1* — the simplest way to automate Lightwell remediations. No AI, no orchestration. https://docs.renovatebot.com/[Renovate^] watches the Lightwell mirror in Nexus for new `.rhlw` versions and creates merge requests to bump your dependencies. Standard CI/CD handles the build and deploy.
+This module walks through the simplest way to automate Lightwell remediations. No AI, no orchestration. A dependency management tool watches Lightwell for new `.rhlw` versions and creates merge requests to bump your dependencies. Standard CI/CD handles the build and deploy.
 
-In this lab you will remediate a single app — *report-generator-app* — but in the real world Renovate can manage dozens or hundreds of repositories simultaneously. Enterprises commonly configure it to:
+In this lab we use https://docs.renovatebot.com/[Renovate^] as the dependency management tool, but the same pattern works with any tool that can scan Maven repositories for updates — Dependabot, OWASP Dependency-Check, or even a custom script. In the real world, these tools can manage dozens or hundreds of repositories simultaneously. Enterprises commonly configure them to:
 
 * Auto-merge patch-level updates for low-risk internal services
 * Group related dependency bumps into a single merge request
 * Schedule scans during off-hours to avoid disrupting development
 * Apply different policies per repository or dependency type (e.g. auto-merge test dependencies, require review for production frameworks)
 
-For this workshop we are *not* enabling auto-merge, so you can inspect every result without Renovate acting on its own. See the https://docs.renovatebot.com/[Renovate documentation^] for the full set of configuration options.
+For this workshop we are *not* enabling auto-merge, so you can inspect every result before it lands. See the https://docs.renovatebot.com/[Renovate documentation^] for the full set of configuration options.
 
-== Understanding Renovate and the Lightwell Preset
+== Setup
+
+=== Understanding the Lightwell Preset
 
 The key integration point is the *java-remediated* preset from `lightwell-experience/renovate-config`. This preset:
 
@@ -36,9 +38,9 @@ Open https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] (username
 }
 ----
 
-The preset defaults to `packages.redhat.com` (the production Lightwell registry). In this lab your dedicated Nexus instance acts as a local Lightwell mirror, so the RenovateJob you create next will supply your Nexus URL and credentials at runtime — keeping them out of the source repository.
+The preset defaults to `packages.redhat.com` (the production Lightwell registry). In this lab your dedicated artifact manager acts as a local Lightwell mirror, so the RenovateJob you create next will supply your artifact manager URL and credentials at runtime — keeping them out of the source repository.
 
-== Logging In to OpenShift
+=== Logging In to OpenShift
 
 The commands in this module use `oc` (the OpenShift CLI) to interact with your cluster. Log in as your tenant user by running the following command in the terminal on the right:
 
@@ -49,13 +51,13 @@ oc login -u {user} -p {password} https://kubernetes.default.svc:443 --insecure-s
 
 You should see `Login successful` and your user name displayed. This gives you access to your dedicated namespaces on the cluster.
 
-== Creating the RenovateJob
+=== Creating the RenovateJob
 
-The Renovate operator is already installed on the cluster. A `renovate-runner` service account and its credentials are provisioned in your namespace. Create a `RenovateJob` custom resource to tell the operator what to scan — run the following command in the terminal on the right:
+Renovate is already installed on the cluster. A `renovate-runner` service account and its credentials are provisioned in your namespace. Create a `RenovateJob` custom resource to tell Renovate what to scan — run the following command in the terminal on the right:
 
 [source,yaml,role=execute,subs=attributes+]
 ----
-cat <<'EOF' | sed "s/{guid}/{guid}/g" | oc apply -f -
+cat <<EOF | oc apply -f -
 apiVersion: renovate-operator.mogenius.com/v1alpha1
 kind: RenovateJob
 metadata:
@@ -129,28 +131,30 @@ Here is what the key fields do:
 * *discoveryFilters* — scopes Renovate to only scan `report-generator-app`. In production you would list all repositories, use wildcards (e.g. `acme-*/*`), or omit this field entirely to scan every repository the bot user can access.
 * *access.adminUsers* — restricts visibility in the Renovate web UI to your user only
 * *renovateConfig* — inline Renovate config that merges with (and overrides) the `renovate.json` in each repository. Key settings:
-** `hostRules` — credentials for your Nexus Maven registry. In this lab the password is inline for simplicity; in production you would store credentials in a secrets manager such as HashiCorp Vault or use the External Secrets Operator to sync them into Kubernetes Secrets, then reference them via environment variables using Renovate's https://docs.renovatebot.com/self-hosted-configuration/#detecthostrulesfromenv[`detectHostRulesFromEnv`^] feature
-** `customManagers` — redefines the Lightwell pom.xml manager so its `registryUrlTemplate` points at *your* Nexus `maven-public` group. The shared preset this repository extends hardcodes the public Lightwell registry, which your tenant cannot reach, and a `packageRules` entry cannot displace a manager's own `registryUrlTemplate` — so the manager has to be redefined rather than patched
+** `hostRules` — credentials for your artifact manager's Maven registry. In this lab the password is inline for simplicity; in production you would store credentials in a secrets manager such as HashiCorp Vault or use the External Secrets Operator to sync them into Kubernetes Secrets, then reference them via environment variables using Renovate's https://docs.renovatebot.com/self-hosted-configuration/#detecthostrulesfromenv[`detectHostRulesFromEnv`^] feature
+** `customManagers` — redefines the Lightwell pom.xml manager so its `registryUrlTemplate` points at your artifact manager's `maven-public` group. The shared preset hardcodes the public Lightwell registry, which your tenant cannot reach, and a `packageRules` entry cannot displace a manager's own `registryUrlTemplate` — so the manager has to be redefined rather than patched
 ** `packageRules` — disables scanning of internal `com.acme.*` packages
 ** `dockerfile` / `github-actions` — disabled for this lab. Renovate supports https://docs.renovatebot.com/modules/manager/[over 100 package ecosystems^] including npm, pip, Go modules, Helm charts, Terraform providers, and container images. You enable or disable each manager independently — for example, `"npm": { "enabled": true }` would add JavaScript dependency scanning alongside the Java Lightwell preset. You can also configure https://docs.renovatebot.com/configuration-options/#automerge[auto-merge^] for low-risk dependency classes (e.g. test-only updates, patch-level bumps) so they land without human review.
 
-NOTE: Under the hood, the Renovate operator manages Kubernetes `RenovateJob` and `RenovateProject` custom resources. You can inspect them with `oc get renovatejobs` and `oc get renovateprojects`. In a production environment, these resources would typically be managed by ArgoCD alongside your other GitOps-managed infrastructure.
+NOTE: Under the hood, Renovate manages Kubernetes `RenovateJob` and `RenovateProject` custom resources. You can inspect them with `oc get renovatejobs` and `oc get renovateprojects`. In a production environment, these resources would typically be managed by ArgoCD alongside your other GitOps-managed infrastructure.
 
-== Viewing Your Job in the Renovate Web UI
+=== Viewing Your Job in the Renovate Web UI
 
-Open the https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate operator web UI^] and log in with your OpenShift credentials (`{user}` / `{password}`). If you do not see `acme-{guid}/report-generator-app` listed yet, click *Run Discovery* to force the operator to scan for your newly created RenovateJob. After a few seconds, refresh the page and your project should appear.
+Open the https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate web UI^] and log in with your OpenShift credentials (`{user}` / `{password}`). If you do not see `acme-{guid}/report-generator-app` listed yet, click *Run Discovery* to force Renovate to scan for your newly created RenovateJob. After a few seconds, refresh the page and your project should appear.
 
-image::renovate-ui-job-list.png[RenovateJob listed in the web UI]
+image::renovate-ui-job-list.png[RenovateJob listed in the web UI,link=_images/renovate-ui-job-list.png,window=_images]
 
-Since there is no Lightwell remediation in Nexus yet, the first run will find nothing to update. Rather than waiting for the next scheduled tick, click *Trigger* or *Trigger All* to force an immediate run.
+Since there is no Lightwell remediation in the artifact manager yet, the first run will find nothing to update. Rather than waiting for the next scheduled tick, click *Trigger* or *Trigger All* to force an immediate run.
 
-image::renovate-ui-trigger.png[Triggering a Renovate run from the web UI]
+image::renovate-ui-trigger.png[Triggering a Renovate run from the web UI,link=_images/renovate-ui-trigger.png,window=_images]
 
-Click the *Logs* button to view the running log or the log from a completed run. You will see Renovate discover your repository, scan `pom.xml`, query Nexus for each dependency, and find no Lightwell updates available. Expand the *Printing report* log item to see details on which packages were scanned and their current versions.
+Click the *Logs* button to view the running log or the log from a completed run. You will see Renovate discover your repository, scan `pom.xml`, query the artifact manager for each dependency, and find no Lightwell updates available. Expand the *Printing report* log item to see details on which packages were scanned and their current versions.
 
-image::renovate-ui-log-no-updates.png[Renovate log showing no updates found]
+image::renovate-ui-log-no-updates.png[Renovate log showing no updates found,link=_images/renovate-ui-log-no-updates.png,window=_images]
 
-== A New Lightwell Remediation Becomes Available
+== Publish and Detect
+
+=== A New Lightwell Remediation Becomes Available
 
 When Red Hat publishes a new Lightwell remediation, two things happen:
 
@@ -170,7 +174,7 @@ curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/mo
   "Jackson Databind"
 ----
 
-The script discovers your Nexus and TPA instances automatically, publishes the remediated artifact to Nexus, and publishes OSV advisories to TPA. It should succeed and end with:
+The script discovers your artifact manager and TPA instances automatically, publishes the remediated artifact, and publishes OSV advisories to TPA. It should succeed and end with:
 
 [source,text]
 ----
@@ -183,75 +187,78 @@ The script discovers your Nexus and TPA instances automatically, publishes the r
           https://<tpa-host>
 ----
 
-== Verifying the Remediation in Nexus
+=== Verifying the Remediation in the Artifact Manager
 
-Open https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[Nexus^] (username: `admin`, password: `{password}`) and click *Browse* in the left navigation. Select the `lightwell-remediated` repository. Navigate to `com/fasterxml/jackson/core/jackson-databind/2.13.5.rhlw-00001/` — you should see the POM and JAR that the publish script uploaded.
+Open https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[your artifact manager^] (username: `admin`, password: `{password}`) and click *Browse* in the left navigation. Select the `lightwell-remediated` repository. Navigate to `com/fasterxml/jackson/core/jackson-databind/2.13.5.rhlw-00001/` — you should see the POM and JAR that the publish script uploaded.
 
-NOTE: You are logging in as `admin` because this is your dedicated Nexus instance — each workshop participant gets their own. In a production environment, this would be your organization's artifact repository administrator.
+NOTE: You are logging in as `admin` because this is your dedicated artifact manager — each workshop participant gets their own. In a production environment, this would be your organization's artifact repository administrator.
 
-image::nexus-remediation-detail.png[Nexus showing the jackson-databind 2.13.5.rhlw-00001 artifact]
+image::nexus-remediation-detail.png[Nexus showing the jackson-databind 2.13.5.rhlw-00001 artifact,link=_images/nexus-remediation-detail.png,window=_images]
 
-This is the artifact that Renovate will discover when it scans for new Lightwell versions. In production, these artifacts are published by Red Hat to the Lightwell registry; here your Nexus instance acts as a local mirror.
+This is the artifact that Renovate will discover when it scans for new Lightwell versions. In production, these artifacts are published by Red Hat to the Lightwell registry; here your artifact manager acts as a local mirror.
 
-== Confirming the Vulnerability
+=== Confirming the Vulnerability
 
-Before triggering Renovate, verify that TPA has received the advisories and linked them to your application.
+While Renovate works in the background to detect the new remediation, verify that TPA has received the advisories and linked them to your application.
 
 Open https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] (log in via SSO with `{user}` / `{password}`) and navigate to *Advisories*. Type `RHLW` in the search box (or sort by date — the Lightwell advisories will be at the top). You should see the newly published `RHLW-` advisories for `jackson-databind`.
 
-image::tpa-rhlw-advisories.png[TPA Advisories showing the RHLW advisories for jackson-databind]
+image::tpa-rhlw-advisories.png[TPA Advisories showing the RHLW advisories for jackson-databind,link=_images/tpa-rhlw-advisories.png,window=_images]
 
 Click on one of the RHLW advisories, then click the *Vulnerabilities* tab. You will see the CVE that this remediation addresses. Click the CVE for details — severity, description, and affected versions.
 
 Near the bottom under the *Related SBOMs* section, it shows every application whose SBOM contains the affected package, including `report-generator-app` (sort by date to see the most recent SBOM first). This is how TPA automatically flags vulnerable applications — it matches the OSV advisories against the SBOMs you have uploaded.
 
-image::tpa-rhlw-related-sboms.png[TPA showing report-generator-app in the Related SBOMs tab]
+image::tpa-rhlw-related-sboms.png[TPA showing report-generator-app in the Related SBOMs tab,link=_images/tpa-rhlw-related-sboms.png,window=_images]
 
-Click on the `report-generator-app` SBOM, then click the *Vulnerabilities* tab. This shows the full list of known vulnerabilities in the application — you should see around 89. Take note of this number — after applying the Lightwell remediation, some of these will be resolved.
+Click on the `report-generator-app` SBOM, then click the *Vulnerabilities* tab. This shows the full list of known vulnerabilities in the application — you should see well over 100 vulnerabilities. Take note of this number — after applying the Lightwell remediation, some of these will be resolved.
 
-image::tpa-sbom-vulns-before.png[TPA showing the total vulnerability count for report-generator-app before remediation]
+image::tpa-sbom-vulns-before.png[TPA showing the total vulnerability count for report-generator-app before remediation,link=_images/tpa-sbom-vulns-before.png,window=_images]
 
-== Watching Renovate React
+=== Watching Renovate React
 
 Return to the https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate web UI^] and click *Trigger* or *Trigger All* to force an immediate run (or it may have already automatically run if you waited long enough.) Once the execution starts or has completed, click *Logs* to see what it did (you can expand each log entry to see details). This time you will see Renovate:
 
 . Discover your repository
 . Scan `pom.xml` and extract all dependencies
-. Query Nexus for each dependency via the `maven-public` group
+. Query the artifact manager for each dependency via the `maven-public` group
 . Find `jackson-databind` has a new version: `2.13.5.rhlw-00001`
 . Create a merge request (MR) in GitLab (future runs will not make a new MR if the previous one is still open)
 
-image::renovate-ui-log-mr-created.png[Renovate log showing MR created for the Lightwell remediation]
+image::renovate-ui-log-mr-created.png[Renovate log showing MR created for the Lightwell remediation,link=_images/renovate-ui-log-mr-created.png,window=_images]
 
 Once the run completes, the UI updates to show the created merge request with the `[Lightwell]` prefix in the title. Click the small PR link to open the MR in GitLab (login with `{user}` and `{password}` if needed):
 
-image::renovate-ui-pr-activity.png[PR activity showing the Lightwell remediation MR]
+image::renovate-ui-pr-activity.png[PR activity showing the Lightwell remediation MR,link=_images/renovate-ui-pr-activity.png,window=_images]
 
-== Reviewing and Approving the MR
+== Review and Build
+
+=== Reviewing and Approving the MR
 
 You should see a new merge request from `Renovate Bot` with the `[Lightwell]` prefix in the title. Click to open the `[Lightwell]` merge request:
 
-image::gitlab-renovate-mr.png[Merge requests from Renovate Bot in GitLab]
+image::gitlab-renovate-mr.png[Merge requests from Renovate Bot in GitLab,link=_images/gitlab-renovate-mr.png,window=_images]
 
-Inspect the diff in the _Changes_ tab. You will see a single change in `pom.xml` — an explicit version override added to the `jackson-databind` dependency:
+Inspect the diff in the _Changes_ tab. You will see a single change in `pom.xml` — the `jackson-databind` version bumped to the remediated build:
 
 [source,diff]
 ----
          <artifactId>jackson-databind</artifactId>
+-        <version>2.13.5</version>
 +        <version>2.13.5.rhlw-00001</version>
 ----
 
-This is the Lightwell pattern: the upstream version stays the same (`2.13.5`), and the `.rhlw-00001` suffix indicates this is a remediated rebuild that preserves API compatibility. The original dependency inherited its version from the Spring Boot BOM — Renovate adds an explicit `<version>` element to override it with the remediated build.
+This is the Lightwell pattern: the upstream version stays the same (`2.13.5`), and the `.rhlw-00001` suffix indicates this is a remediated rebuild that preserves API compatibility.
 
 NOTE: In this lab, `jackson-databind` was explicitly pinned in `pom.xml` so Renovate's regex manager could detect it. In production, the https://github.com/lightwell-experience/renovate-config[Lightwell Renovate config^] includes a `pin-transitives` script that automatically discovers *all* transitive dependencies with available Lightwell remediations — including BOM-managed ones — and generates a pinning BOM you import into `dependencyManagement`. This means you do not need to manually pin every dependency; the script handles discovery across the full dependency tree.
 
 Scroll down and click _Merge_ to approve the merge request and update the source.
 
-== Watching the Pipeline
+=== Watching the Pipeline
 
 Merging the MR triggers a Tekton CI pipeline run. Switch to the OpenShift Console (login with `{user}` and `{password}` if needed) and expand the left-side navigation menu, then navigate to *Pipelines* → *Pipelines* and click the *PipelineRuns* tab. Ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details.
 
-image::pipeline-run-renovate.png[Tekton pipeline building the remediated app]
+image::pipeline-run-renovate.png[Tekton pipeline building the remediated app,link=_images/pipeline-run-renovate.png,window=_images]
 
 Watch the pipeline:
 
@@ -263,13 +270,15 @@ Watch the pipeline:
 
 At this point, the application is remediated and the new container image is built, signed, and ready to go into production or other environments (e.g. using OpenShift GitOps / ArgoCD). We'll explore how remediated builds are deployed to production in the next module. But for now, it's enough to verify that the vulnerabilities are resolved, which we'll do next.
 
-== Comparing SBOMs — Proving the Fix
+== Verify
+
+=== Comparing SBOMs — Proving the Fix
 
 This exercise demonstrates that quick wins with Lightwell are real — a remediation can go from publication to verified, signed production build with minimal effort. But a single app and a single dependency is the easy case. For true automation and enterprise integration at scale — dozens of apps, hundreds of dependencies, change management, approvals, audit trails — more is needed. We will get there in the next module. For now, let's verify the fix. Navigate to https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] (log in via SSO with `{user}` / `{password}`).
 
-Click *SBOMs* → *All SBOMs* in the left navigation, then type `report-generator` into the search box. You should see two SBOMs in the list — the original `v1.0-build` and the new build from the Lightwell merge request. Compare the vulnerability counts: the original build shows ~89 vulnerabilities, while the remediated build drops to ~84 — three Critical and two Medium vulnerabilities resolved by a single dependency bump.
+Click *SBOMs* → *All SBOMs* in the left navigation, then type `report-generator` into the search box. You should see two SBOMs in the list — the original `v1.0-build` and the new build from the Lightwell merge request. Compare the vulnerability counts: the remediated build should show fewer vulnerabilities than the original — the exact number depends on which CVEs the advisories matched, but you should see several Critical and Medium vulnerabilities resolved by a single dependency bump.
 
-image::tpa-sbom-comparison.png[TPA showing both SBOMs with reduced vulnerability count after remediation]
+image::tpa-sbom-comparison.png[TPA showing both SBOMs with reduced vulnerability count after remediation,link=_images/tpa-sbom-comparison.png,window=_images]
 
 That is the Lightwell value in one screenshot: the same application, the same upstream version of `jackson-databind`, but the remediated `.rhlw-00001` build eliminates known CVEs without changing your application code or upgrading to an untested major version. A handful of resolved CVEs from a single dependency is a modest win — but the real value emerges at scale, when Lightwell is continuously remediating dozens, hundreds, or thousands of libraries across your entire application portfolio, integrated with your change management and approval workflows. That is what the next module is about.
 
@@ -279,7 +288,7 @@ You have just completed the *Quick Win* path:
 
 . A remediated artifact and its OSV vulnerability metadata arrived from the Lightwell Network
 . TPA immediately flagged the unpatched dependency as vulnerable based on the published advisories
-. Renovate detected the new `.rhlw` version and created a merge request
+. The dependency management tool detected the new `.rhlw` version and created a merge request
 . You reviewed and approved the change
 . Tekton built and signed the patched application with a SLSA Level 3 compliant software supply chain
 . The remediated application was rolled out into production (in a real environment, this would progress through dev, test, and staging first)
@@ -292,9 +301,9 @@ This is the lowest-effort way to start automating Lightwell remediations — no 
 The Quick Win path works well for a handful of applications and a manageable volume of remediations. But it has limits:
 
 * *Scale* — when Lightwell publishes dozens or hundreds of remediations per week across your portfolio, the merge request volume becomes unmanageable for human reviewers.
-* *Context* — Renovate creates merge requests mechanically. It does not assess business risk, check whether the affected application is customer-facing or internal, or correlate with your ITSM system.
-* *Auto-merge helps, but only so far* — https://docs.renovatebot.com/key-concepts/automerge/[auto-merge^] is great for updates where you would click "merge" anyway: lock file maintenance, dev-only dependencies, patch-level bumps with good test coverage. But for production frameworks, compliance-sensitive services, or anything without strong test coverage, human review remains essential — and at scale, that review needs context that Renovate alone cannot provide.
+* *Context* — dependency management tools create merge requests mechanically. They do not assess business risk, check whether the affected application is customer-facing or internal, or correlate with your ITSM system.
+* *Auto-merge helps, but only so far* — https://docs.renovatebot.com/key-concepts/automerge/[auto-merge^] is great for updates where you would click "merge" anyway: lock file maintenance, dev-only dependencies, patch-level bumps with good test coverage. But for production frameworks, compliance-sensitive services, or anything without strong test coverage, human review remains essential — and at scale, that review needs context that a dependency scanner alone cannot provide.
 
 For organizations that need to handle volume, assess risk, and maintain an audit trail, the next module introduces the *Full Automation* path. OpenShift provides the hybrid cloud platform for running and securing applications at scale. Ansible provides enterprise IT automation at scale. Together with AI agents and your ITSM systems, they triage, assess, and route remediations based on business context.
 
-Continue to xref:module-03-ai-remediation.adoc[Module 3: Full Automation — AI-Driven Remediation].
+Continue to xref:module-03-ai-remediation.adoc[Module 3: Full Automation — AI-Assisted Remediation].

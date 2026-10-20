@@ -13,7 +13,7 @@ Lightwell is a joint initiative between Red Hat and IBM focused on securing the 
 
 In practice, that means remediated rebuilds of open source components. When a CVE lands against a widely used library, Red Hat rebuilds the affected version with the fix applied, signs it, and publishes it together with machine-readable metadata describing which CVEs that rebuild resolves. The rebuild keeps the upstream version number and the original API, with an `.rhlw` suffix marking it as remediated — so adopting it is a version bump rather than an upgrade.
 
-image::lightwell-product-icon.png["Lightwell product icon: a translucent red cube assembled from smaller blocks, resting on concentric tracks dotted with small spheres"]
+image::lightwell-product-icon.png["Lightwell product icon: a translucent red cube assembled from smaller blocks, resting on concentric tracks dotted with small spheres",link=_images/lightwell-product-icon.png,window=_images]
 
 That matters because the slow part of patching is rarely the patch. It is finding a fixed version you trust, or backporting one yourself, and then proving to everyone downstream that it is safe to take. Lightwell removes that step. This lab exists to show what you can build once it is gone: if a trustworthy fixed artifact simply arrives, remediation becomes plumbing — notice the new build, work out which applications use the component, raise the change, ship it. The rest of this lab automates that plumbing two different ways.
 
@@ -26,7 +26,7 @@ Lightwell is offered in two forms, and both names come up in this lab:
 
 The split is worth holding on to: the Clearinghouse is about *what gets remediated for you*, the Network is *how the result reaches you*. Everything downstream of that — the merge request, the build, the deployment — is the same either way, and it is what you will spend the rest of the lab automating.
 
-Module 1 introduces the Lightwell Network as a simulated repository inside your own Nexus. From there on, every remediation you see begins as an artifact landing in it.
+Module 1 introduces the Lightwell Network as a simulated repository inside your own artifact manager. From there on, every remediation you see begins as an artifact landing in it.
 
 == What is a CVE?
 
@@ -70,7 +70,7 @@ flowchart TD
   style App fill:#cfe2ff,stroke:#0d6efd
 ----
 
-In this lab, SBOMs are stored and queried in *Red Hat Trusted Profile Analyzer* (RHTPA). In the deterministic path you will generate SBOMs as part of the build; in the AI-driven path, RHTPA actively identifies which of your applications are affected by a given CVE.
+In this lab, SBOMs are stored and queried in *Red Hat Trusted Profile Analyzer* (RHTPA). In the quick win path you will generate SBOMs as part of the build; in the full automation path, RHTPA actively identifies which of your applications are affected by a given CVE.
 
 == A Note on VEX
 
@@ -104,11 +104,11 @@ Three things make it slow, and Lightwell attacks all three:
 
 This lab demonstrates two approaches to automating CVE remediation with Lightwell. Both use the same underlying infrastructure — they differ in how much automation and intelligence is applied.
 
-=== Path 1: Quick Win — Deterministic Remediation
+=== Quick Win — Automated Dependency Updates
 
 The simplest path. No AI, no orchestration. https://docs.renovatebot.com/[Renovate^] (an open source dependency update tool) watches your Lightwell mirror for new remediated versions and mechanically creates merge requests to bump your dependencies. Standard CI/CD handles the rest.
 
-.Path 1: Lightwell + Renovate + CI/CD (click to enlarge)
+.Quick Win: Lightwell + Renovate + CI/CD (click to enlarge)
 [mermaid, role=expand]
 ----
 flowchart TB
@@ -125,11 +125,11 @@ flowchart TB
 
 You will use this path to remediate the *report-generator-app* — a low-risk internal reporting service.
 
-=== Path 2: Full Automation — AI-Driven Remediation
+=== Full Automation — AI-Assisted Remediation
 
 The enterprise path. An event-driven workflow queries RHTPA to find affected applications, dispatches AI coding agents running on https://opencode.ai/[OpenCode^] to write the change, and maintains a ServiceNow ticket throughout. Whether a human signs off is decided by each application's own policy file, not by the agent: low-risk applications merge automatically, high-risk ones wait for a reviewer.
 
-.Path 2: Lightwell + Automation Orchestrator + AI + ServiceNow (click to enlarge)
+.Full Automation: Lightwell + Automation Orchestrator + AI + ServiceNow (click to enlarge)
 [mermaid, role=expand]
 ----
 flowchart TB
@@ -157,7 +157,7 @@ You will use this path to remediate the `wire-transfer-svc` (high risk, needs yo
 
 === What They Share
 
-Both paths start with the same event (a remediated artifact arriving from the Lightwell Network) and end the same way (a signed container deployed to production with an updated SBOM). Path 2 adds orchestration, AI-powered risk assessment, and ITSM tracking on top of what Path 1 already provides.
+Both paths start with the same event (a remediated artifact arriving from the Lightwell Network) and end the same way (a signed container deployed to production with an updated SBOM). Full automation adds orchestration, AI-powered risk assessment, and ITSM tracking on top of what the quick win path already provides.
 
 NOTE: In this lab, deployment goes straight to production. Real-world customers typically add stages (test, staging, production), each with its own approval gate.
 

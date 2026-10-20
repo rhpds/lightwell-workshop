@@ -9,10 +9,10 @@ You have now used both approaches to automating CVE remediation with Red Hat Lig
 
 [cols="2,3,3",options="header"]
 |===
-| | Path 1: Quick Win | Path 2: Full Automation
+| | Quick Win | Full Automation
 
 | *What drives it*
-| Renovate (deterministic)
+| Renovate (manual)
 | Automation Orchestrator + AI agents
 
 | *How it finds affected apps*
@@ -40,23 +40,23 @@ You have now used both approaches to automating CVE remediation with Red Hat Lig
 | Enterprises at scale; compliance-heavy environments; mixed-risk portfolios
 
 | *What you need*
-| Renovate operator + CI/CD
+| Renovate + CI/CD
 | Automation Orchestrator + TPA + AI model endpoint + ServiceNow + CI/CD
 |===
 
-Neither path is "better" — they solve different problems, and they coexist. `report-generator-app` is owned by Renovate and `wire-transfer-svc` by the Orchestrator, in the same portfolio, with no collision between them: each repository's policy file says which tool is responsible for it. Many organisations will start with Path 1 and move applications across as their practice matures.
+Neither path is "better" — they solve different problems, and they coexist. `report-generator-app` is owned by Renovate and `wire-transfer-svc` by the Orchestrator, in the same portfolio, with no collision between them: each repository's policy file says which tool is responsible for it. Many organisations will start with the quick win approach and move applications across as their practice matures.
 
 === The Half You Did Not Have to Think About
 
 Look back at what the two paths actually have in common. Once a merge lands on `main` — whether Renovate proposed it, you merged it, or the Orchestrator merged it on policy — the rest is identical:
 
-`build-push-to-main` compiles, generates a CycloneDX SBOM and uploads it to TPA, signs the image with Tekton Chains via Trusted Artifact Signer, pushes to the Nexus OCI registry, and promotes the new `imageTag` into the deployment repository. ArgoCD notices the commit and rolls the application out.
+`build-push-to-main` compiles, generates a CycloneDX SBOM and uploads it to TPA, signs the image with Tekton Chains via Trusted Artifact Signer, pushes to the OCI registry, and promotes the new `imageTag` into the deployment repository. ArgoCD notices the commit and rolls the application out.
 
-That matters more than it looks. The signing, the SBOM and the deployment story do not change because you picked a different remediation strategy, which means adopting Path 2 later is not a re-platforming exercise. You are replacing *who decides what to change*, not how software gets built and shipped.
+That matters more than it looks. The signing, the SBOM and the deployment story do not change because you picked a different remediation strategy, which means adopting full automation later is not a re-platforming exercise. You are replacing *who decides what to change*, not how software gets built and shipped.
 
 == What Actually Made the Human Optional
 
-It is tempting to summarise Path 2 as "the AI decided". It did not, and the distinction is the most important thing in this lab.
+It is tempting to summarise the full automation path as "the AI decided". It did not, and the distinction is the most important thing in this lab.
 
 The AI agent wrote the change: it read the `pom.xml`, bumped the coordinate, pushed a branch and drafted the merge request. It was never asked whether the change should ship. That decision came from three places, none of them a model:
 
