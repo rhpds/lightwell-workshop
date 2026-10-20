@@ -65,14 +65,43 @@ POM_FILE=$(mktemp)
 # keeps the original licence; a POM that declares none reads as "the licence
 # was removed" to anything comparing the two, which is exactly what the
 # merge request's License compliance check does.
-LICENSE_BLOCK=$(curl -sk --max-time 30 \
-  "https://${NEXUS_HOST}/repository/maven-public/${GROUP_PATH}/${ARTIFACT_ID}/${BASE_VERSION}/${ARTIFACT_ID}-${BASE_VERSION}.pom" 2>/dev/null \
-  | python3 -c "
-import re, sys
-pom = sys.stdin.read()
-m = re.search(r'<licenses>.*?</licenses>', pom, re.S)
-print(('    ' + m.group(0).strip()) if m else '')
-" 2>/dev/null || true)
+# Most artifacts declare no <licenses> of their own: commons-text inherits
+# Apache-2.0 from commons-parent -> org.apache:apache. Reading only the
+# artifact's own POM finds nothing, publishes a licence-less artifact, and
+# leaves License compliance stuck on "the remediated POM declares no licence".
+# So follow <parent> the way Maven does.
+LICENSE_BLOCK=$(python3 -c "
+import re, ssl, sys, urllib.request
+base, group_path, artifact, version = sys.argv[1:5]
+ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+
+def pom_for(gpath, art, ver):
+    url = '%s/%s/%s/%s/%s-%s.pom' % (base, gpath, art, ver, art, ver)
+    try:
+        with urllib.request.urlopen(url, context=ctx, timeout=30) as f:
+            return f.read().decode('utf-8', 'replace')
+    except Exception:
+        return None
+
+for _ in range(4):
+    pom = pom_for(group_path, artifact, version)
+    if pom is None:
+        break
+    m = re.search(r'<licenses>.*?</licenses>', pom, re.S)
+    if m:
+        print('    ' + m.group(0).strip())
+        break
+    par = re.search(r'<parent>(.*?)</parent>', pom, re.S)
+    if not par:
+        break
+    def tag(name):
+        t = re.search(r'<%s>([^<]+)</%s>' % (name, name), par.group(1))
+        return t.group(1).strip() if t else None
+    g, a, v = tag('groupId'), tag('artifactId'), tag('version')
+    if not (g and a and v):
+        break
+    group_path, artifact, version = g.replace('.', '/'), a, v
+" "https://${NEXUS_HOST}/repository/maven-public" "${GROUP_PATH}" "${ARTIFACT_ID}" "${BASE_VERSION}" 2>/dev/null || true)
 if [ -n "${LICENSE_BLOCK}" ]; then
   echo "  Carrying upstream licence through"
 else
