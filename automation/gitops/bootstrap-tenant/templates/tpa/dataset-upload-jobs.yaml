@@ -4,6 +4,7 @@
 {{- $clientId := .Values.tpa.oidc.cliClientId }}
 {{- $image := .Values.tpa.images.dataset }}
 {{- $namespace := include "tpa.namespace" . }}
+{{- $wave := 3 }}
 {{- range $name, $ds := .Values.tpa.datasets }}
 ---
 apiVersion: batch/v1
@@ -12,7 +13,12 @@ metadata:
   name: tpa-dataset-upload-{{ $name }}
   namespace: {{ $namespace }}
   annotations:
-    argocd.argoproj.io/sync-wave: "3"
+    # One wave per dataset so the uploads are serialised. Both Jobs used to
+    # sit at wave 3 and POST /api/v3/dataset concurrently; on a fresh tenant
+    # one upload returned 201 and then silently ingested nothing, leaving
+    # CVElist-v5 at 0 while GHSA-OSV loaded fine. Observed on both tenants of
+    # cluster-klrql; re-POSTing the same zip by hand ingested it in 7s.
+    argocd.argoproj.io/sync-wave: {{ $wave | quote }}
 spec:
   backoffLimit: 10
   ttlSecondsAfterFinished: 86400
@@ -60,5 +66,6 @@ spec:
           configMap:
             name: tpa-dataset-upload-script
             defaultMode: 0555
+{{- $wave = add1 $wave }}
 {{- end }}
 {{- end }}
