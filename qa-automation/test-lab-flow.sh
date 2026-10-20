@@ -178,11 +178,25 @@ else
 fi
 
 step "Module 2 — Renovate reacts  ('Watching Renovate React')"
-_rg_mr() { local n; n="$(latest_mr report-generator-app)"; [[ -n "$n" && "$n" != "$rg_before" ]]; }
-if wait_for 900 "Renovate polls on a 5-minute schedule" _rg_mr; then
-  rg_iid="$(latest_mr report-generator-app)"
+# Must be the *Lightwell* MR. Renovate also proposes ordinary upstream bumps
+# (java-jdk, base images) on this repo, and an earlier version of this test
+# accepted the first new MR of any kind and merged it — a green run that
+# proved nothing about the Lightwell preset.
+lw_mr() {
+  gl "${GL}/api/v4/projects/$(proj report-generator-app)/merge_requests?state=opened&per_page=50" \
+    | jqp ";
+ms=json.load(sys.stdin)
+hit=[m for m in ms if 'jackson-databind' in (m.get('title') or '')]
+print(hit[0]['iid'] if hit else '')"
+}
+_rg_mr() { [[ -n "$(lw_mr)" ]]; }
+if wait_for 1200 "Renovate polls on a 5-minute schedule" _rg_mr; then
+  rg_iid="$(lw_mr)"
   rg_title="$(mr_json report-generator-app "$rg_iid" | jqp ";print(json.load(sys.stdin)['title'])")"
-  ok "Renovate opened MR !${rg_iid}: ${rg_title:0:60}"
+  ok "Renovate opened the Lightwell MR !${rg_iid}: ${rg_title:0:58}"
+  [[ "$rg_title" == *rhlw-* ]] \
+    && ok "it targets the .rhlw remediated build, not an upstream bump" \
+    || no "title has no .rhlw version: ${rg_title:0:70}"
 
   step "Module 2 — the attendee reviews and merges  ('Reviewing and Approving the MR')"
   if gl -X PUT "${GL}/api/v4/projects/$(proj report-generator-app)/merge_requests/${rg_iid}/merge" \
@@ -198,8 +212,10 @@ if wait_for 900 "Renovate polls on a 5-minute schedule" _rg_mr; then
   wait_for 900 "waiting for build-push-to-main" _rg_built \
     && ok "push build succeeded" || no "no successful build after the Renovate merge"
 else
-  no "Renovate never opened a merge request"
-  info "Check the Renovate job logs in user-${GUID}-renovate; the schedule is */5."
+  no "Renovate never opened an MR for jackson-databind"
+  info "Renovate may still have opened unrelated bumps — those do not count."
+  info "Check the job logs in user-${GUID}-renovate (schedule */5) and that"
+  info "renovate.json extends the Lightwell preset in report-generator-app."
 fi
 fi
 
