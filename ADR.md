@@ -551,6 +551,16 @@ Copy and fill for each new decision:
 | **Consequences** | No change to seven templates and no ConfigMap rename on every script edit. The cost is that the failure stays silent — Argo says `Synced` while the tenant runs old code — so the gotcha has to be *known*, which is why it is also in Handoff. Revisit only if long-lived shared tenants become normal. The real repair is for the Application template to stop ignoring `/data`; raise it with whoever owns that template, since the duplicated rule looks more like an accident than a decision. |
 | **Rejected** | Content-hash ConfigMap names (`cicd-eda-bridge-<sha8>`), which would make edits land by creating a new object. Correct, but it buys nothing for attendees and costs noise on every edit. |
 
+## ADR-052 — SNOW CVE titles ignore extra_var `unknown`
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-20 |
+| **Title** | SNOW parent/child titles prefer TPA-resolved CVE over AAP extra_var `cve_id` |
+| **Context** | On `cng2l`, Prepare resolved `package_info.cve_id=CVE-2022-42889` (and h2 `CVE-2023-48795`) but PATCHed parent + POSTed children with `[unknown]`. Job extra_vars carried `cve_id: unknown` from the Nexus component event via Start → AO. Ansible extra_vars outrank `set_fact`, so query-tpa's `Promote resolved CVE to top-level facts` never stuck; `cve_id \| default(package_info.cve_id)` never fell through because `"unknown"` is defined and non-empty. |
+| **Decision** | For SNOW titles and Prepare `set_stats` export, pick the first value matching `^CVE-[0-9]` from `[package_info.cve_id, resolved_cve_id, cve_id]`, else placeholder `CVE-` (never the literal `unknown`). Normalize the same way in `start-orchestrator.yml` and `snow-create-incident.yml` so the pre-TPA parent title is `[CVE-]` not `[unknown]`. Do **not** try to overwrite the extra_var named `cve_id` — read around it. |
+| **Consequences** | Demo SNOW cards show real CVEs after Query TPA. Requires playbook changes in `lw-sdlc-opencode` (injected on `cng2l` for the verify run; must be pushed/PRd for SCM durability). CVSS blank gap from Handoff 000000 is unchanged. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -610,3 +620,4 @@ Copy and fill for each new decision:
 | Deploy promote-scoped signal + finalize soft-skip | ADR-049 |
 | Gate auto_approve on the PR check, inside the merge | ADR-050 |
 | Script ConfigMap edits skip existing tenants (accepted) | ADR-051 |
+| SNOW CVE titles ignore extra_var `unknown` | ADR-052 |

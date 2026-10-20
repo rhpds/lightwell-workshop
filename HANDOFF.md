@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-20 (PR #8 merged — CVE now resolves; CVSS still blank, see Next up 000000)
+Last updated: 2026-10-20 (SNOW `[unknown]` = AAP extra_var shadowing; fixed+verified on cng2l — push lw-sdlc-opencode)
 
 ## Where the pieces live
 
@@ -265,6 +265,19 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
   → [ADR-017](ADR.md#adr-017--keyless-signing-via-tas--tekton-chains)
 
 ## Next up
+
+00ae. **~~SNOW titles `[unknown]` despite TPA CVE~~ → ADR-052 (lab on cng2l).**
+   Nexus → Start forwards `cve_id: unknown` as an AAP **extra_var**, which
+   shadows every later `set_fact: cve_id=CVE-…` from query-tpa. Parent PATCH
+   and child create read the extra_var and wrote `[unknown]` even when
+   `package_info.cve_id` was correct. Fix (local `lw-sdlc-opencode`, injected
+   into AAP project 7 on `cng2l`): pick first `^CVE-[0-9]` from
+   `package_info` / `resolved_cve_id` / `cve_id`; normalize `unknown` → `CVE-`
+   at Start + parent create. Verified e2e: commons-text
+   `1.9.rhlw-102844` → INC titles `[CVE-2022-42889]`, benefits !10 merged,
+   parent Resolved; h2 `2.2.224.rhlw-102845` → `[CVE-2023-48795]`, wire !18
+   left open. **Still push `lw-sdlc-opencode`** (not on SCM yet).
+   → [ADR-052](ADR.md#adr-052--snow-cve-titles-ignore-extra_var-unknown)
 
 00ad. **~~auto_approve merge waits 2 minutes~~ → ADR-041 (lab on cng2l).**
    Start Merge JT pauses `merge_delay_seconds=120` before GitLab merge so
