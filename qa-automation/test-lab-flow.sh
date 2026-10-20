@@ -175,10 +175,10 @@ if oc get renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2
 import sys
 d=json.load(sys.stdin)
 print((((d.get('spec') or {}).get('renovateConfig') or {}).get('inline') or ''))")"
-  if [[ "$have" == *"$NEXUS_HOST"* ]]; then
-    ok "RenovateJob renovate-${GUID} exists and points at the tenant Nexus"
+  if [[ "$have" == *"$NEXUS_HOST"* && "$have" == *customManagers* ]]; then
+    ok "RenovateJob renovate-${GUID} exists with a customManager on the tenant Nexus"
   else
-    no "RenovateJob exists but its config does not reference ${NEXUS_HOST}"
+    no "RenovateJob exists but has no customManager pointing at ${NEXUS_HOST}"
     info "Renovate will query packages.redhat.com and never see the .rhlw build."
     oc delete renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2>&1
     info "deleted it; recreating as the module specifies"
@@ -225,12 +225,21 @@ spec:
             "password": "${TENANT_PW}"
           }
         ],
-        "packageRules": [
+        "customManagers": [
           {
-            "matchManagers": ["custom.regex"],
-            "matchDatasources": ["maven"],
-            "registryUrls": ["https://${NEXUS_HOST}/repository/maven-public"]
-          },
+            "customType": "regex",
+            "managerFilePatterns": ["/(^|/)pom\\.xml\$/"],
+            "matchStringsStrategy": "any",
+            "matchStrings": [
+              "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<\${}]+)</version>"
+            ],
+            "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
+            "datasourceTemplate": "maven",
+            "registryUrlTemplate": "https://${NEXUS_HOST}/repository/maven-public",
+            "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?\$"
+          }
+        ],
+        "packageRules": [
           {
             "matchPackageNames": ["com.acme.*:*"],
             "enabled": false
@@ -263,11 +272,18 @@ step "Module 2 — Renovate reacts  ('Watching Renovate React')"
 # (java-jdk, base images) on this repo, and an earlier version of this test
 # accepted the first new MR of any kind and merged it — a green run that
 # proved nothing about the Lightwell preset.
+# Must also be a *new* MR. An earlier version accepted one that was already
+# open from a previous run and merged it, passing without Renovate having
+# done anything this cycle.
+RG_SEEN="$(gl "${GL}/api/v4/projects/$(proj report-generator-app)/merge_requests?state=all&per_page=100" \
+  | jqp ";print(','.join(str(m['iid']) for m in json.load(sys.stdin)))")"
 lw_mr() {
   gl "${GL}/api/v4/projects/$(proj report-generator-app)/merge_requests?state=opened&per_page=50" \
-    | jqp ";
+    | SEEN="$RG_SEEN" jqp ";
+import os
+seen=set(os.environ.get('SEEN','').split(','))
 ms=json.load(sys.stdin)
-hit=[m for m in ms if 'jackson-databind' in (m.get('title') or '')]
+hit=[m for m in ms if 'jackson-databind' in (m.get('title') or '') and str(m['iid']) not in seen]
 print(hit[0]['iid'] if hit else '')"
 }
 _rg_mr() { [[ -n "$(lw_mr)" ]]; }
