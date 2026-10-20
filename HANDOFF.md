@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-20 (TPA CVE dataset does not ingest on fresh tenants — Next up 00000; Module 3 low-risk path now commons-text)
+Last updated: 2026-10-20 (PR #8 merged — CVE now resolves; CVSS still blank, see Next up 000000)
 
 ## Where the pieces live
 
@@ -287,6 +287,39 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    `cmdb_ci`/`gitlab_path`. Deploy **v5**; reinjected; catch-up finalize
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
+
+000000. **CVE lookup fixed and verified; CVSS still blank.**
+   `lw-sdlc-opencode` PR #8 is merged and confirmed on `8gmp5` (AAP project
+   synced to `a8386b6`, Prepare job 328). All four new tasks ran and the MR
+   facts now resolve from the Lightwell advisory:
+
+   ```
+   cve_id:          CVE-2022-42889
+   cve_title:       Apache Commons Text prior to 1.10.0 allows RCE ...
+   cve_description: <full upstream text>
+   cvss_score:      ""          <- still empty
+   ```
+
+   **Remaining gap:** `cvss_score` stays blank because the seeded CVE records
+   carry no `base_score`, so the MR renders "CVSS Score: not scored" even
+   with the CVE correctly identified. Either the dataset needs records with
+   scores, or the MR body should fall back to the advisory's own
+   `severity[].score` (publish-remediation.sh writes a CVSS v3 vector into
+   every RHLW advisory, so the data is already there).
+
+   Requires advisories published with the coordinate in the summary — i.e.
+   `publish-remediation.sh` at 3bda34f or later.
+
+00000a. **Blast radius 504s on a reused tenant.** Hit three times on `8gmp5`:
+   `"benefits-mgmt-app: packages: HTTP Error 504"` from
+   `/api/v3/sbom/{id}/packages`, after which classify fails closed with
+   "No blast radius ... Skipping remediation". The same call returns 200 in
+   0.46s when TPA is idle, and a fresh tenant (`jq89x`) produced MRs fine.
+   Correlates with accumulated SBOMs — `8gmp5` had 7 for one app and
+   Postgres at ~500m CPU. Fails safe, but it silently drops an app from the
+   blast radius, so a demo re-run on a warm tenant can look like the
+   remediation simply ignored an application. Worth a retry/backoff in
+   `tpa_blast_radius.py` rather than one attempt.
 
 00000. **TPA CVE dataset silently does not ingest on a fresh tenant.**
    Both tenants on `cluster-klrql` came up with `GHSA-OSV: 285` and
