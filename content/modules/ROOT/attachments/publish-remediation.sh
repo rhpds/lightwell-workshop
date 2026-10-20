@@ -109,11 +109,15 @@ UPSTREAM_JAR="https://${NEXUS_HOST}/repository/maven-public/${GROUP_PATH}/${ARTI
 if curl -sfk --max-time 120 -o "${JAR_FILE}" "${UPSTREAM_JAR}" && [ -s "${JAR_FILE}" ]; then
   echo "  Rebuilt from upstream ${ARTIFACT_ID} ${BASE_VERSION} ($(wc -c < "${JAR_FILE}" | tr -d ' ') bytes)"
   # Stamp it so the remediated build is distinguishable from the original.
+  # mktemp, not a fixed path: the fleet test drives several tenants from one
+  # machine at once, and a shared name lets one tenant's version string end
+  # up stamped into another tenant's jar.
+  STAMP_FILE=$(mktemp)
   printf 'Lightwell-Remediation: %s\nLightwell-Base-Version: %s\n' \
-    "${RHLW_VERSION}" "${BASE_VERSION}" > /tmp/lw-remediation.txt
-  python3 - "${JAR_FILE}" "${GROUP_ID}" "${ARTIFACT_ID}" "${RHLW_VERSION}" <<'PYEOF' || true
+    "${RHLW_VERSION}" "${BASE_VERSION}" > "${STAMP_FILE}"
+  python3 - "${JAR_FILE}" "${GROUP_ID}" "${ARTIFACT_ID}" "${RHLW_VERSION}" "${STAMP_FILE}" <<'PYEOF' || true
 import sys, zipfile, io
-jar_path, group_id, artifact_id, rhlw_version = sys.argv[1:5]
+jar_path, group_id, artifact_id, rhlw_version, stamp_path = sys.argv[1:6]
 props_path = f"META-INF/maven/{group_id}/{artifact_id}/pom.properties"
 with zipfile.ZipFile(jar_path, "r") as zin:
     entries = {i.filename: zin.read(i) for i in zin.infolist()}
@@ -132,7 +136,7 @@ if pom_path in entries:
     import re
     new = re.sub(r"<version>[^<]+</version>", f"<version>{rhlw_version}</version>", old, count=1)
     entries[pom_path] = new.encode("utf-8")
-entries["META-INF/lightwell-remediation.txt"] = open("/tmp/lw-remediation.txt", "rb").read()
+entries["META-INF/lightwell-remediation.txt"] = open(stamp_path, "rb").read()
 with zipfile.ZipFile(jar_path, "w", zipfile.ZIP_DEFLATED) as zout:
     for name, data in entries.items():
         zout.writestr(name, data)
@@ -143,9 +147,10 @@ else
   echo "  WARN: could not fetch ${UPSTREAM_JAR}"
   echo "        falling back to a placeholder -- the remediated dependency"
   echo "        will resolve but will not run"
-  echo "remediated-${RHLW_VERSION}" > /tmp/lw-placeholder.txt
-  jar cf "${JAR_FILE}" /tmp/lw-placeholder.txt 2>/dev/null \
-    || python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],'w'); z.write(sys.argv[2],'lw-placeholder.txt'); z.close()" "${JAR_FILE}" /tmp/lw-placeholder.txt
+  PLACEHOLDER_FILE=$(mktemp)
+  echo "remediated-${RHLW_VERSION}" > "${PLACEHOLDER_FILE}"
+  jar cf "${JAR_FILE}" "${PLACEHOLDER_FILE}" 2>/dev/null \
+    || python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],'w'); z.write(sys.argv[2],'lw-placeholder.txt'); z.close()" "${JAR_FILE}" "${PLACEHOLDER_FILE}"
 fi
 echo "  JAR created"
 
@@ -193,7 +198,7 @@ HTTP=$(curl -sk -u "admin:${NEXUS_PASS}" -X PUT \
   -H "Content-Type: application/xml" --data-binary @"${META_FILE}" -o /dev/null -w "%{http_code}")
 echo "HTTP ${HTTP}"
 
-rm -f "${POM_FILE}" "${JAR_FILE}" "${META_FILE}" /tmp/lw-placeholder.txt
+rm -f "${POM_FILE}" "${JAR_FILE}" "${META_FILE}" "${STAMP_FILE:-}" "${PLACEHOLDER_FILE:-}"
 
 echo ""
 echo "  ${GROUP_ID}:${ARTIFACT_ID}:${RHLW_VERSION}"

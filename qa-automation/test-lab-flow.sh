@@ -39,6 +39,11 @@ done
 want() { [[ ",$ONLY," == *",$1,"* ]]; }
 [[ -n "$GUID" ]] || { echo "usage: $0 <guid> [--reset] [--only 1,2,3] [--auto-only|--human-only]" >&2; exit 2; }
 
+# Scratch files are per-guid. A fleet run drives ten tenants at once from one
+# machine, and with a fixed /tmp path tenant A's SNOW rows get read as tenant
+# B's — a silent wrong answer, not a crash.
+TMP="/tmp/lw-${GUID}"; mkdir -p "$TMP"
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Resolve the repo independently of where this script is invoked from: a copy
 # run out of /tmp would otherwise make REPO=/ and every helper path wrong.
@@ -258,13 +263,13 @@ rg_before="$(latest_mr report-generator-app)"
 M2SUF="$(next_suffix report-generator-app jackson-databind)"
 if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" \
      com.fasterxml.jackson.core:jackson-databind:2.13.5 "$M2SUF" "Jackson Databind" \
-     >/tmp/m2-publish.log 2>&1; then
+     >${TMP}/m2-publish.log 2>&1; then
   ok "published jackson-databind 2.13.5.${M2SUF}"
-  grep -q 'advisories published' /tmp/m2-publish.log \
+  grep -q 'advisories published' ${TMP}/m2-publish.log \
     && ok "OSV advisories published to TPA" \
     || no "no advisories published — 'Confirming the Vulnerability' needs them"
 else
-  no "publish failed — see /tmp/m2-publish.log"
+  no "publish failed — see ${TMP}/m2-publish.log"
 fi
 
 step "Module 2 — Renovate reacts  ('Watching Renovate React')"
@@ -361,10 +366,10 @@ fi
 
 if $RESET; then
   step "Reset the Acme repos to seed state"
-  if "${REPO}/ao-trigger-helper/reset-demo-repos.sh" "$GUID" >/tmp/m3-reset.log 2>&1; then
+  if "${REPO}/ao-trigger-helper/reset-demo-repos.sh" "$GUID" >${TMP}/m3-reset.log 2>&1; then
     ok "repos reset to upstream + policy.json"
   else
-    no "reset failed — see /tmp/m3-reset.log"
+    no "reset failed — see ${TMP}/m3-reset.log"
   fi
 fi
 
@@ -377,14 +382,14 @@ run_path() {
   before="$(latest_mr "$app")"
   local suf; suf="$(next_suffix "$app" "$(echo "$gav" | cut -d: -f2)")"
   if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" "$gav" "$suf" "$desc" \
-       >/tmp/m3-publish-${kind}.log 2>&1; then
-    if grep -q 'advisories published' /tmp/m3-publish-${kind}.log; then
+       >${TMP}/m3-publish-${kind}.log 2>&1; then
+    if grep -q 'advisories published' ${TMP}/m3-publish-${kind}.log; then
       ok "published $gav.$suf with advisories"
     else
       ok "published $gav.$suf (no advisories — CVE columns will be empty)"
     fi
   else
-    no "publish failed — see /tmp/m3-publish-${kind}.log"; return
+    no "publish failed — see ${TMP}/m3-publish-${kind}.log"; return
   fi
 
   step "[$kind] A merge request appears  (module: 'The Merge Request the Agent Wrote')"
@@ -499,18 +504,18 @@ lw=[i for i in items if (i.get('created_by') or '')=='Lightwell AO']
 print('COUNT', len(lw))
 for i in lw[:6]:
     print('ROW', i.get('number'), i.get('state'), (i.get('short_description') or '')[:64])
-" > /tmp/m3-snow.txt
-n="$(grep -c '^ROW' /tmp/m3-snow.txt || true)"
+" > ${TMP}/m3-snow.txt
+n="$(grep -c '^ROW' ${TMP}/m3-snow.txt || true)"
 (( n > 0 )) && ok "Lightwell AO raised ${n} incidents" || no "no incidents raised by Lightwell AO"
-grep '^ROW' /tmp/m3-snow.txt | while read -r _ num state rest; do info "$num  $state  $rest"; done
+grep '^ROW' ${TMP}/m3-snow.txt | while read -r _ num state rest; do info "$num  $state  $rest"; done
 
-if grep -q '\[unknown\]' /tmp/m3-snow.txt; then
+if grep -q '\[unknown\]' ${TMP}/m3-snow.txt; then
   no "an incident description still says [unknown] — the CVE did not reach SNOW"
 else
   ok "no '[unknown]' in incident descriptions"
 fi
 
-_parent_resolved() { grep '^ROW' /tmp/m3-snow.txt | grep -q 'Resolved'; }
+_parent_resolved() { grep '^ROW' ${TMP}/m3-snow.txt | grep -q 'Resolved'; }
 _parent_resolved \
   && ok "a parent incident reached Resolved (only happens on deploy Healthy)" \
   || skip "no parent Resolved yet — deploy may still be in flight"
