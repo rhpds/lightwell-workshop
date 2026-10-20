@@ -147,7 +147,7 @@ resourceQuota:
   requests:
     cpu: "16"
     memory: 32Gi
-    storage: 50Gi
+    storage: 20Gi
 
 limitRange:
   default:
