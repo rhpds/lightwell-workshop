@@ -23,6 +23,21 @@ Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was th
 
 ## Recently done
 
+- **Fleet test runner + parallel-safety fixes (20 Oct).**
+  `qa-automation/test-fleet.sh` runs `test-lab-flow.sh` across many guids
+  at once (`--jobs N`, `--stagger S`, args after `--` passed through) and
+  samples the cluster while they run, so a failure can be attributed to
+  the lab or to capacity — peak Pending pods, new FailedScheduling,
+  OOMKilled, Evicted, node CPU/memory, plus which checks failed in more
+  than one tenant. Built for the 10-tenant scale test.
+  Two latent bugs had to be fixed first, both of which would have given
+  **wrong answers rather than errors**: `test-lab-flow.sh` used fixed
+  `/tmp/m3-snow.txt` and three siblings (now `/tmp/lw-<guid>/`), and
+  `publish-remediation.sh` used fixed `/tmp/lw-remediation.txt` and
+  `/tmp/lw-placeholder.txt` (now `mktemp`), which would cross-contaminate
+  tenants. Students run one at a time and were never affected.
+  Dry-run against a stub flow script before any cluster use.
+
 - **`argo-notifications-eda` namespace fix (19 Oct).** The Job was
   templated into `{{ .Release.Namespace }}` (`openshift-gitops`) while
   requesting the `lightwell-tenant-jobs` SA, which only exists in
