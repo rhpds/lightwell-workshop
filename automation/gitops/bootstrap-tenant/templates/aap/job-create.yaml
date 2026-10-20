@@ -99,5 +99,39 @@ spec:
                   print(f"Assigned user {username} to org {org} (member)")
               except Exception as e:
                   print(f"WARN: role assignment failed: {e}")
+
+              # Member alone cannot open Controller job stdout (AO deep links 403).
+              # Gateway "Organization Audit" does not grant Controller job read —
+              # attach the Controller org Auditor object role (ADR-053).
+              try:
+                  corgs = req("GET", f"/api/controller/v2/organizations/?name={org}")
+                  corg_id = next(
+                      (o["id"] for o in corgs.get("results", []) if o.get("name") == org),
+                      None,
+                  )
+                  cusers = req("GET", f"/api/controller/v2/users/?username={username}")
+                  cuser_id = next(
+                      (u["id"] for u in cusers.get("results", []) if u.get("username") == username),
+                      None,
+                  )
+                  if not corg_id or not cuser_id:
+                      print(f"WARN: controller org/user missing ({corg_id}/{cuser_id}) — skip Auditor")
+                  else:
+                      obj_roles = req("GET", f"/api/controller/v2/organizations/{corg_id}/object_roles/")
+                      auditor = next(
+                          (r for r in obj_roles.get("results", []) if r.get("name") == "Auditor"),
+                          None,
+                      )
+                      if not auditor:
+                          print("WARN: Controller org Auditor role not found")
+                      else:
+                          # 204 on attach; already-attached is fine
+                          try:
+                              req("POST", f"/api/controller/v2/roles/{auditor['id']}/users/", {"id": cuser_id})
+                              print(f"Assigned Controller Auditor on org {org} (job stdout readable)")
+                          except Exception as e:
+                              print(f"WARN: Controller Auditor assign failed: {e}")
+              except Exception as e:
+                  print(f"WARN: Controller Auditor setup failed: {e}")
               PY
               echo "AAP tenant provisioning complete"

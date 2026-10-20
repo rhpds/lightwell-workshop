@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-20 (SNOW `[unknown]` = AAP extra_var shadowing; fixed+verified on cng2l — push lw-sdlc-opencode)
+Last updated: 2026-10-20 (tenant AAP job logs need Controller org Auditor — ADR-053; cng2l patched live)
 
 ## Where the pieces live
 
@@ -265,6 +265,16 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
   → [ADR-017](ADR.md#adr-017--keyless-signing-via-tas--tekton-chains)
 
 ## Next up
+
+00af. **~~AO → AAP job log link 403 for tenant user~~ → ADR-053.**
+   `create-aap-tenant` only granted gateway **Organization Member**. That
+   cannot list JTs or read `/jobs/{id}/stdout` (verified `user-cng2l`:
+   jobs count 0, job 785 → 403). Gateway **Organization Audit** is a no-op
+   for Controller jobs. Fix: also attach Controller org **Auditor** via
+   `/api/controller/v2/roles/{auditor}/users/`. Chart updated; **cng2l
+   patched live** (Auditor + Member). Reused tenants need the same attach
+   or a re-run of `create-aap-tenant`.
+   → [ADR-053](ADR.md#adr-053--tenant-users-get-controller-org-auditor-for-job-logs)
 
 00ae. **~~SNOW titles `[unknown]` despite TPA CVE~~ → ADR-052 (lab on cng2l).**
    Nexus → Start forwards `cve_id: unknown` as an AAP **extra_var**, which

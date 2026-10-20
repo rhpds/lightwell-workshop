@@ -561,6 +561,16 @@ Copy and fill for each new decision:
 | **Decision** | For SNOW titles and Prepare `set_stats` export, pick the first value matching `^CVE-[0-9]` from `[package_info.cve_id, resolved_cve_id, cve_id]`, else placeholder `CVE-` (never the literal `unknown`). Normalize the same way in `start-orchestrator.yml` and `snow-create-incident.yml` so the pre-TPA parent title is `[CVE-]` not `[unknown]`. Do **not** try to overwrite the extra_var named `cve_id` — read around it. |
 | **Consequences** | Demo SNOW cards show real CVEs after Query TPA. Requires playbook changes in `lw-sdlc-opencode` (injected on `cng2l` for the verify run; must be pushed/PRd for SCM durability). CVSS blank gap from Handoff 000000 is unchanged. |
 
+## ADR-053 — Tenant users get Controller org Auditor for job logs
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-20 |
+| **Title** | Grant Controller organization Auditor (not only gateway Member) so students can open AAP job stdout from AO |
+| **Context** | AO `aap_job_template` nodes deep-link into AAP (`/execution/jobs/playbook/{id}/output`). Students log into AAP as `user-{guid}` / `common_password`. `create-aap-tenant` only assigned gateway **Organization Member** (`shared.member_organization` + view org/team). On `cng2l`, that user got `jobs` count 0 and **403** on `/jobs/785` and stdout, while admin could read the same job. Gateway **Organization Audit** / **Auditor** / **Viewer** role_definitions do **not** unlock Controller job read (Audit was assigned and stdout stayed 403). Controller org object role **Auditor** (“Can view all aspects of the organization”) does: after `POST /api/controller/v2/roles/{auditor}/users/`, the same user got 200 on job list, detail, and stdout. **Execute** would also work but lets students launch every JT in the org — unnecessary for the lab. |
+| **Decision** | Keep gateway Member (org visible in UI). Additionally attach the Controller org **Auditor** object role in `create-aap-tenant`. Do not use Organization Execute or Admin for students. |
+| **Consequences** | New tenants can open AO → AAP log links after login. Existing tenants need a one-shot Auditor attach (or re-run the Job). Students can read credentials/projects/inventories in their org (Auditor scope) — accepted for a shared lab org that already holds the SDLC secrets the platform uses. |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -621,3 +631,4 @@ Copy and fill for each new decision:
 | Gate auto_approve on the PR check, inside the merge | ADR-050 |
 | Script ConfigMap edits skip existing tenants (accepted) | ADR-051 |
 | SNOW CVE titles ignore extra_var `unknown` | ADR-052 |
+| Tenant AAP job logs need Controller org Auditor | ADR-053 |

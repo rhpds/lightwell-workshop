@@ -10,7 +10,7 @@ Chart **v0.5.3** provisions T1–T4 plus the **SDLC control plane** (OpenCode, E
 |-------|-----------|
 | **OpenShift** | `{{ username }}-app`, `lightwell-tenant-<guid>`, `lightwell-nexus-<guid>`, `sdlc-<guid>`; user `edit` on app + nexus NS, `view` on job NS |
 | **GitLab** | User, `lightwell` group membership (Maintainer), demo project `lightwell/lw-demo-help-app-<guid>`, MR webhook → EDA (`GITLAB_WEBHOOK_TARGET_URL`) |
-| **AAP** | Org `user-<guid>`, tenant user, org membership (best-effort gateway API) |
+| **AAP** | Org `user-<guid>`, tenant user, gateway **Member** + Controller org **Auditor** (so AO → AAP job log deep links work; Member alone 403s stdout) |
 | **Nexus** | Dedicated instance, Maven repos + EDA webhooks (`nexus-reconcile` Job) |
 | **TPA seed** | `trustify-ui` client (direct access + SBOM scopes), per-tenant uploader, demo SBOM upload (`deploy-tpa.yml` parity) |
 | **EDA** | `eda-bootstrap` Job — project, decision env, activation `sdlc-remediation-<guid>`, Controller JTs (Start/Resume Orchestrator + worker JTs) |
