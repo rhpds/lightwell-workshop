@@ -573,6 +573,18 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-054 — Override the TPA chart's 8Gi request defaults to fit ten tenants
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-20 |
+| **Title** | Set `modules.server` / `modules.importer` resources explicitly instead of inheriting the upstream chart's `cpu 1 / memory 8Gi` |
+| **Context** | A tenant ordered on `cluster-sgdql` never started: the showroom pod sat `Pending` with `0/6 nodes are available: 3 Insufficient memory, 3 node(s) had untolerated taint(s)` (3 masters correctly skipped, all 3 workers full). Measured on `cluster-8tskw`, which has the identical 3×~58.7Gi worker shape: each tenant **requested 20.6Gi and 3.6 CPU**, of which TPA alone was **16.5Gi and 2 CPU** — the upstream `redhat-trusted-profile-analyzer` chart defaults both `modules.server` and `modules.importer` to `requests: {cpu: 1, memory: 8Gi}`, and our `valuesObject` never overrode them. Actual usage at rest across all three tenants: importer **8Mi** every time, server **171–267Mi**. The importer is idle *by design* — every entry under `modules.createImporters` is `disabled: true`, data arrives via the dataset-upload Jobs. So ~16Gi was reserved per tenant to run ~184Mi. With three tenants the workers sat at 107Gi/176Gi and 27/46.5 CPU; ten tenants would have needed ~206Gi and ~52 CPU, breaking **both** limits. |
+| **Decision** | **James Falkner's `0c21217`** sets them explicitly in `bootstrap-tenant`: server `requests 100m/512Mi, limits memory 2Gi`; importer `requests 50m/128Mi, limits memory 1Gi`, plus `workingDirectory.size` 32Gi → **2Gi**, which also reclaims per-tenant PVC storage. Natale reached the same diagnosis independently and the competing change was dropped in favour of this one, which is stricter and covers the working directory as well. Setting explicit limits supersedes the `tpa-limits` LimitRange default of 8Gi, so the burst ceiling is now 2Gi for the server — ~7.5× the highest observed resident size. The `tpa-quota` ResourceQuota (32Gi) was never the binding constraint. |
+| **Consequences** | Per tenant drops to roughly 5Gi / 1.5 CPU, so ten tenants fit on a 3-worker cluster with headroom. `27ffde7` additionally removes Quay, freeing a further ~15Gi cluster-wide. Measurements were taken at rest, so if heavy SBOM ingestion is ever added, re-check the server before assuming the 2Gi limit holds — an explicit limit means the pod is now OOM-killable where previously it could reach 8Gi. Existing tenants keep the old reservation until their TPA Application re-syncs. `tpa.chartVersion` is `"*"`, so an upstream bump can still change these defaults without warning. |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |

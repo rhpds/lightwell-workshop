@@ -23,6 +23,23 @@ Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was th
 
 ## Recently done
 
+- **Tenants would not schedule — TPA reserved 16.5Gi each (20 Oct).** A new
+  tenant on `cluster-sgdql` parked with the showroom pod `Pending`:
+  `0/6 nodes are available: 3 Insufficient memory, 3 node(s) had untolerated
+  taint(s)`. Not a config bug — capacity. Measured on `cluster-8tskw`
+  (identical 3×~58.7Gi workers): **20.6Gi and 3.6 CPU per tenant, 16.5Gi and
+  2 CPU of it TPA**, because the upstream chart defaults `modules.server` and
+  `modules.importer` to `cpu 1 / memory 8Gi` and we never overrode it. Real
+  usage: importer **8Mi** (it is disabled by design), server **171–267Mi**.
+  Fixed by James in `0c21217`: server `requests 100m/512Mi, limits 2Gi`,
+  importer `requests 50m/128Mi, limits 1Gi`, and `workingDirectory` 32Gi →
+  2Gi. `27ffde7` also removes Quay, freeing ~15Gi more. Per tenant → roughly
+  5Gi / 1.5 CPU, so ten tenants fit. Two things to watch: the explicit limits
+  supersede the LimitRange 8Gi default, so the server is now OOM-killable
+  above 2Gi (7.5× its observed peak, measured at rest), and **existing
+  tenants keep the old reservation until their TPA Application re-syncs.**
+  → [ADR-054](ADR.md#adr-054--override-the-tpa-charts-8gi-request-defaults-to-fit-ten-tenants)
+
 - **Fleet test runner + parallel-safety fixes (20 Oct).**
   `qa-automation/test-fleet.sh` runs `test-lab-flow.sh` across many guids
   at once (`--jobs N`, `--stagger S`, args after `--` passed through) and
