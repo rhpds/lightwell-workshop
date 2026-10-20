@@ -23,6 +23,26 @@ Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was th
 
 ## Recently done
 
+- **All seven validation rows now measured, and a green table is the merge
+  gate (21 Oct).** Lives in the **app repos** (`redhat-ads-tech/*`,
+  `.tekton/build-pull-request.yaml`), not here. Licence was Pending only on
+  `benefits-mgmt-app` because `publish-remediation.sh` published a
+  licence-less artifact — commons-text inherits Apache-2.0 from
+  `commons-parent` → `org.apache:apache` and the script only copied inline
+  `<licenses>`; h2 declares its own, which is why it looked app-specific.
+  Both the script and the check now walk `<parent>`. A new `baseline-tests`
+  task re-runs the suite against the target branch's pom and diffs **per-test
+  outcomes**, so `Regression scan` reports a real behavioural diff (~43s
+  extra, measured). `report-validation` then exits non-zero unless every row
+  is `passed` — `warning` and `pending` block too. Renovate MRs are unaffected
+  (no `lw:validation` markers → early return), so Module 2 is untouched.
+  **Two traps worth remembering**, both of which gave confident wrong answers
+  rather than errors: `-Dmaven.build.directory` does *not* move
+  `project.build.directory` (the baseline wrote into `target/`, failed on
+  "Operation not permitted", and then "compared" the head run with itself for
+  a fake "0 regressions"), and `tally()`'s recursive glob counted the baseline
+  too, doubling 4/4 into 8/8. → [ADR-056](ADR.md#adr-056--measure-the-regression-scan-and-make-a-green-table-the-merge-gate)
+
 - **Merge is now gated on the PaC pipeline (21 Oct).** `job-create.yaml` sets
   `only_allow_merge_if_pipeline_succeeds` on the three Acme app repos (sixth
   `seed_app` arg, default `true`; `acme-deployment` passes `false` because

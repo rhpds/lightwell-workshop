@@ -597,6 +597,18 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-056 — Measure the regression scan, and make a green table the merge gate
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-21 |
+| **Title** | Add `baseline-tests` to `build-pull-request`, and fail `report-validation` unless every row is `passed` |
+| **Context** | ADR-055 gates the merge on the *pipeline*, which only proves the table was written — MRs !7 and !8 merged with `Regression scan` and `License compliance` still `Pending`. The ask is stronger: nothing merges until every row is green. That is only safe once every row *can* be green, so two rows had to be fixed first. **Licence** was Pending only for `benefits-mgmt-app`: `publish-remediation.sh` copied `<licenses>` from the upstream POM and commons-text declares none (it inherits Apache-2.0 via `commons-parent` → `org.apache:apache`), so a licence-less artifact was published and the check then had nothing to find. h2 declares its licences inline, which is why the bug looked application-specific. **Regression** was never implemented; `module-03` recorded the reason as "roughly doubling build time, and that call has not been made yet". Measured here: `build-pull-request` averages 43s over 5 runs, so the cost is ~86s. |
+| **Decision** | Publish the inherited licence (`publish-remediation.sh` walks `<parent>`) and resolve it the same way in the check. Add a `baseline-tests` task that re-runs the suite against the target branch's `pom.xml` and compares **per-test outcomes**, so a test already failing before the bump is not blamed on it. Then `report-validation` exits non-zero unless every row is `passed`. Deliberately strict: `warning` and `pending` block as well as `failed`, because all three mean "not established". `risk_class` is excluded — it reports a classification, not a check. The table is still written before exiting, so a reviewer sees *why* it is red. |
+| **Consequences** | A merge request cannot be merged until all seven checks are green, enforced by GitLab rather than by convention. Renovate MRs are unaffected — they carry no `lw:validation` markers and the script returns before the gate, so Module 2 is untouched. Two implementation traps are worth remembering because both produced *confident wrong answers* rather than errors: `-Dmaven.build.directory` does **not** move `project.build.directory`, so the baseline initially wrote into `target/` (owned by the maven task's UID), died on "Operation not permitted" before any test ran, and — because `target/` still held the head reports — reported "0 regressions" having measured nothing; and `tally()`'s recursive glob counted the baseline run too, silently doubling every total from 4/4 to 8/8. The baseline therefore builds in its own copied tree, and `tally()` skips `baseline-build/`. Verified on a live tenant: baseline `BUILD SUCCESS` with its own reports, `Regression scan "0 regressions across 8 tests"`, totals back at 4/4, and a deliberately non-green MR held at `ci_must_pass` with the pipeline red. |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
