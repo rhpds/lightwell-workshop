@@ -1,7 +1,7 @@
 ---
 site:
-  title: My Project
-  url: https://github.com/rhpds/my-project
+  title: Lightwell Patch to Production
+  url: https://github.com/rhpds/lightwell-workshop
   start_page: modules::index.adoc
 
 content:
@@ -13,6 +13,7 @@ ui:
   bundle:
     url: https://github.com/rhpds/rhdp_showroom_theme/releases/download/v2.0.3/ui-bundle.zip
     snapshot: true
+  supplemental_files: ./supplemental-ui
 
 antora:
   extensions:

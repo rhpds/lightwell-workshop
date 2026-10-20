@@ -1,5 +1,5 @@
 name: modules
-title: My Lab Title
+title: Lightwell Patch to Production
 version: ~
 nav:
   - modules/ROOT/nav.adoc
