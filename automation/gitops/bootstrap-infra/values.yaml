@@ -72,10 +72,6 @@ pipelines:
   chains:
     audience: trusted-artifact-signer
 
-quay:
-  namespace: lightwell-quay
-  channel: stable-3.18
-
 opencodeImage:
   enabled: true
   namespace: lightwell-images

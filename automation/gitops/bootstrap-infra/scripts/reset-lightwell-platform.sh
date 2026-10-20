@@ -67,7 +67,6 @@ fi
 
 echo "==> Deleting platform custom resources..."
 oc delete ansibleautomationplatform aap -n aap --ignore-not-found --wait=false 2>/dev/null || true
-oc delete quayregistry lightwell -n lightwell-quay --ignore-not-found --wait=false 2>/dev/null || true
 oc delete trustedprofileanalyzer trustedprofileanalyzer-sample -n lightwell-tpa --ignore-not-found --wait=false 2>/dev/null || true
 oc delete securesign securesign-sample -n lightwell-tas --ignore-not-found --wait=false 2>/dev/null || true
 
@@ -105,7 +104,7 @@ if [[ "${LIGHTWELL_RESET_TENANTS:-0}" == "1" ]]; then
 fi
 
 echo "==> Deleting shared platform namespaces..."
-for ns in gitlab aap lightwell-tpa lightwell-tas lightwell-quay lightwell-nexus; do
+for ns in gitlab aap lightwell-tpa lightwell-tas lightwell-nexus; do
   oc delete namespace "$ns" --ignore-not-found --wait=false 2>/dev/null || true
 done
 
