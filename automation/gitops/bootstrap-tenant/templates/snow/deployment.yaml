@@ -20,7 +20,7 @@ spec:
       annotations:
         {{- if not ((.Values.snow | default dict).image) }}
         checksum/code: {{ .Files.Get "files/snow-mock/app.py" | sha256sum }}
-        checksum/static: {{ printf "%s%s%s" (.Files.Get "files/snow-mock/static/app.js") (.Files.Get "files/snow-mock/static/index.html") (.Files.Get "files/snow-mock/static/styles.css") | sha256sum }}
+        checksum/static: {{ printf "%s%s%s%s" (.Files.Get "files/snow-mock/static/app.js") (.Files.Get "files/snow-mock/static/index.html") (.Files.Get "files/snow-mock/static/styles.css") (.Files.Get "files/snow-mock/static/servicenow.png") | sha256sum }}
         {{- end }}
     spec:
       containers:
