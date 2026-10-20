@@ -328,23 +328,37 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
       `customManagers` inline in the RenovateJob *does* work: the dep then
       carries the tenant Nexus URL.
 
-   2. **Versioning.** Even pointed at the right registry, Renovate proposes
-      no update. The preset's versioning regex
-      `^(?<compatibility>.*?)([.-]rhlw-(?<major>\d+)…)?$` yields no `major`
-      for a plain `2.13.5`, and its own description says it exists to bump
-      `3.7.1.rhlw-00001 → 3.7.1.rhlw-00002`, i.e. between rebuilds. The lab
-      asks it to make the *first* hop, `2.13.5 → 2.13.5.rhlw-00001`.
-      Unproven whether that ever worked or whether the preset changed —
-      `renovate-ui-pr-activity.png` in this repo shows it working on tenant
-      `jd6p4`, so something moved.
+   2. **No update is proposed even with the registry correct — cause still
+      unknown.** My first guess was that the preset only bumps between
+      rebuilds (its own description says `3.7.1.rhlw-00001 → 00002`) and
+      cannot make the first hop from a bare `2.13.5`. **That is disproved.**
+      I set the pom to `2.13.5.rhlw-121618`, published `2.13.5.rhlw-999999`,
+      and Renovate still proposed nothing — same compatibility, strictly
+      higher rebuild number, correct registry.
 
-   **Decision needed.** The preset lives in `lightwell-experience/`, outside
-   our control. Options: (a) inline the custom manager in module 2's
-   RenovateJob with the tenant registry and a versioning scheme that accepts
-   the first hop; (b) seed `report-generator-app` with a pom already on an
-   `.rhlw` version so the demo is rebuild-to-rebuild, which is what the
-   preset is actually for; (c) get the preset changed upstream. (a) or (b)
-   are ours to make; (b) also matches the preset's stated intent.
+      What is ruled out: the registry is anonymously readable (metadata and
+      the rebuild's `.pom` both return 200), the metadata lists the newer
+      version as `<latest>` and `<release>`, and the lookup logs no
+      `no-result` or warning for the Nexus-backed dep.
+
+      Next diagnostic: re-run Renovate with `LOG_LEVEL=debug` and read the
+      datasource lookup — at default level it logs nothing about which
+      versions it retrieved or why it discarded them. Do that before
+      theorising again; I burned a cycle on a hypothesis the evidence then
+      contradicted.
+
+      `renovate-ui-pr-activity.png` in this repo shows this working on
+      tenant `jd6p4`, so something moved; what, is not established.
+
+   **Not ready for a decision.** Bug 1 has a known fix (inline the custom
+   manager so `registryUrlTemplate` points at the tenant Nexus — verified to
+   work). Bug 2 needs the debug-log diagnosis above before anyone picks a
+   remedy; seeding the pom on an `.rhlw` version was the obvious candidate
+   and it does not help.
+
+   Also noticed while testing: `publish-remediation.sh` **overwrites**
+   `maven-metadata.xml` rather than appending, so Nexus only ever lists the
+   most recent rebuild. Harmless for a single demo run, wrong as a registry.
 
    Module 3 is unaffected and passes end to end.
 
