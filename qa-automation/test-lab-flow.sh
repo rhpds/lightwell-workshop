@@ -48,7 +48,25 @@ if [[ ! -x "${REPO}/ao-trigger-helper/publish-remediation.sh" ]]; then
 fi
 [[ -x "${REPO}/ao-trigger-helper/publish-remediation.sh" ]] || {
   echo "cannot locate the repo; set LW_REPO=/path/to/lightwell-workshop" >&2; exit 2; }
-SUFFIX="rhlw-$(date +%H%M%S)"
+# The Lightwell versioning regex maps the rhlw digits to `major`, and Renovate
+# discards a candidate whose major increment exceeds maxMajorIncrement (500).
+# A clock-derived suffix like rhlw-121618 is therefore silently skipped:
+#   "Skipping ...@2.13.5.rhlw-999999 because major increment 878381
+#    exceeds maxMajorIncrement 500"
+# So derive the suffix from what the pom already has, +1, exactly as the lab's
+# rhlw-00001 / rhlw-00002 sequence does.
+next_suffix() {  # next_suffix <app> <artifactId>
+  local cur
+  cur="$(gl "${GL}/api/v4/projects/$(proj "$1")/repository/files/pom.xml/raw?ref=main" \
+         | python3 -c "
+import re,sys
+t=sys.stdin.read()
+m=re.search(r'<artifactId>\s*'+re.escape(sys.argv[1])+r'\s*</artifactId>\s*<version>([^<]+)</version>', t)
+v=m.group(1) if m else ''
+n=re.search(r'rhlw-(\d+)', v)
+print(int(n.group(1))+1 if n else 1)" "$2")"
+  printf 'rhlw-%05d' "${cur:-1}"
+}
 PASS=0; FAIL=0; SKIP=0
 
 c_ok=$'\033[32m'; c_no=$'\033[31m'; c_sk=$'\033[33m'; c_hd=$'\033[1m'; c_z=$'\033[0m'
@@ -228,10 +246,11 @@ fi
 
 step "Module 2 — publish the Lightwell remediation  ('A New Lightwell Remediation Becomes Available')"
 rg_before="$(latest_mr report-generator-app)"
+M2SUF="$(next_suffix report-generator-app jackson-databind)"
 if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" \
-     com.fasterxml.jackson.core:jackson-databind:2.13.5 "$SUFFIX" "Jackson Databind" \
+     com.fasterxml.jackson.core:jackson-databind:2.13.5 "$M2SUF" "Jackson Databind" \
      >/tmp/m2-publish.log 2>&1; then
-  ok "published jackson-databind 2.13.5.${SUFFIX}"
+  ok "published jackson-databind 2.13.5.${M2SUF}"
   grep -q 'advisories published' /tmp/m2-publish.log \
     && ok "OSV advisories published to TPA" \
     || no "no advisories published — 'Confirming the Vulnerability' needs them"
@@ -340,12 +359,13 @@ run_path() {
 
   step "[$kind] Publish the remediation  (module: 'Publishing the ... Remediation')"
   before="$(latest_mr "$app")"
-  if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" "$gav" "$SUFFIX" "$desc" \
+  local suf; suf="$(next_suffix "$app" "$(echo "$gav" | cut -d: -f2)")"
+  if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" "$gav" "$suf" "$desc" \
        >/tmp/m3-publish-${kind}.log 2>&1; then
     if grep -q 'advisories published' /tmp/m3-publish-${kind}.log; then
-      ok "published $gav.$SUFFIX with advisories"
+      ok "published $gav.$suf with advisories"
     else
-      ok "published $gav.$SUFFIX (no advisories — CVE columns will be empty)"
+      ok "published $gav.$suf (no advisories — CVE columns will be empty)"
     fi
   else
     no "publish failed — see /tmp/m3-publish-${kind}.log"; return

@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-20 (Module 3 passes end to end; Module 2 Renovate path broken — see Next up 0000000)
+Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was the test harness — see Next up 0000000)
 
 ## Where the pieces live
 
@@ -311,56 +311,38 @@ Orchestrator → MR Verifier, ~90s from trigger to MR.
    **#679** successful → parent Resolved. Still push `lw-sdlc-opencode`.
    Superseded for fan-out noise by **00ac** / ADR-049.
 
-0000000. **Module 2 (Renovate, Path 1) does not produce the Lightwell MR.**
-   Found by the new `qa-automation/test-lab-flow.sh` on `l89bd`. Everything
-   up to Renovate works — the artifact publishes, `maven-public` serves
-   `2.13.5.rhlw-<n>`, advisories land in TPA — but Renovate never opens the
-   jackson-databind MR. Two separate causes, the first fixed, the second not:
+0000000. **Module 2 (Renovate) — one real bug, now fixed; the other was my
+   test.** Diagnosed with `LOG_LEVEL=debug` on the Renovate job (at default
+   level it logs nothing about which versions it retrieved or discarded).
 
-   1. **Registry.** The repo's `renovate.json` extends
-      `github>lightwell-experience/renovate-config:java-remediated`, whose
-      custom manager hardcodes
-      `"registryUrlTemplate": "https://packages.redhat.com/lightwell/java/remediated"`.
-      The tenant cannot reach that, so every Maven lookup logs
-      `no-result`. Module 2's `packageRules.registryUrls` override does
-      **not** displace it on Renovate 44.145.1 — verified with both
-      `matchManagers: ["custom.regex"]` and `["regex"]`. Redefining
-      `customManagers` inline in the RenovateJob *does* work: the dep then
-      carries the tenant Nexus URL.
+   **Real bug, fixed:** the repo's `renovate.json` extends
+   `github>lightwell-experience/renovate-config:java-remediated`, whose
+   custom manager hardcodes
+   `"registryUrlTemplate": "https://packages.redhat.com/lightwell/java/remediated"`.
+   The tenant gets `401 Dependency lookup unauthorized` from it. Module 2's
+   `packageRules.registryUrls` override does **not** displace a manager's own
+   `registryUrlTemplate` — confirmed with both `custom.regex` and `regex`.
+   Fix: module 2's RenovateJob now redefines `customManagers` inline with the
+   tenant Nexus, instead of trying to patch the preset's manager.
 
-   2. **No update is proposed even with the registry correct — cause still
-      unknown.** My first guess was that the preset only bumps between
-      rebuilds (its own description says `3.7.1.rhlw-00001 → 00002`) and
-      cannot make the first hop from a bare `2.13.5`. **That is disproved.**
-      I set the pom to `2.13.5.rhlw-121618`, published `2.13.5.rhlw-999999`,
-      and Renovate still proposed nothing — same compatibility, strictly
-      higher rebuild number, correct registry.
+   **Not a bug — my test harness:** the second symptom (no update proposed
+   even with the right registry) was caused by the test generating
+   clock-derived suffixes. The versioning regex maps the rhlw digits to
+   `major`, so `rhlw-121618` is a major increment of ~121k and Renovate
+   silently drops it:
+   `Skipping …@2.13.5.rhlw-999999 because major increment 878381 exceeds maxMajorIncrement 500`.
+   With an increment of 1 it works immediately — verified, Renovate opened
+   `[Lightwell] Update dependency com.fasterxml.jackson.core:jackson-databind`.
+   `test-lab-flow.sh` now derives the suffix from the pom's current rhlw
+   number + 1, matching the lab's `rhlw-00001` / `rhlw-00002` sequence.
 
-      What is ruled out: the registry is anonymously readable (metadata and
-      the rebuild's `.pom` both return 200), the metadata lists the newer
-      version as `<latest>` and `<release>`, and the lookup logs no
-      `no-result` or warning for the Nexus-backed dep.
+   Worth knowing generally: a suffix that jumps by more than 500 is discarded
+   without an error. Anyone hand-triggering a demo should keep the sequence
+   tight.
 
-      Next diagnostic: re-run Renovate with `LOG_LEVEL=debug` and read the
-      datasource lookup — at default level it logs nothing about which
-      versions it retrieved or why it discarded them. Do that before
-      theorising again; I burned a cycle on a hypothesis the evidence then
-      contradicted.
-
-      `renovate-ui-pr-activity.png` in this repo shows this working on
-      tenant `jd6p4`, so something moved; what, is not established.
-
-   **Not ready for a decision.** Bug 1 has a known fix (inline the custom
-   manager so `registryUrlTemplate` points at the tenant Nexus — verified to
-   work). Bug 2 needs the debug-log diagnosis above before anyone picks a
-   remedy; seeding the pom on an `.rhlw` version was the obvious candidate
-   and it does not help.
-
-   Also noticed while testing: `publish-remediation.sh` **overwrites**
-   `maven-metadata.xml` rather than appending, so Nexus only ever lists the
-   most recent rebuild. Harmless for a single demo run, wrong as a registry.
-
-   Module 3 is unaffected and passes end to end.
+   Still outstanding: `publish-remediation.sh` overwrites
+   `maven-metadata.xml` rather than appending, so Nexus lists only the newest
+   rebuild.
 
 000000. **CVE lookup fixed and verified; CVSS still blank.**
    `lw-sdlc-opencode` PR #8 is merged and confirmed on `8gmp5` (AAP project

@@ -95,12 +95,21 @@ spec:
             "password": "{password}"
           }
         ],
-        "packageRules": [
+        "customManagers": [
           {
-            "matchManagers": ["custom.regex"],
-            "matchDatasources": ["maven"],
-            "registryUrls": ["https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}/repository/maven-public"]
-          },
+            "customType": "regex",
+            "managerFilePatterns": ["/(^|/)pom\\.xml$/"],
+            "matchStringsStrategy": "any",
+            "matchStrings": [
+              "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<${}]+)</version>"
+            ],
+            "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
+            "datasourceTemplate": "maven",
+            "registryUrlTemplate": "https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}/repository/maven-public",
+            "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?$"
+          }
+        ],
+        "packageRules": [
           {
             "matchPackageNames": ["com.acme.*:*"],
             "enabled": false
@@ -121,7 +130,8 @@ Here is what the key fields do:
 * *access.adminUsers* — restricts visibility in the Renovate web UI to your user only
 * *renovateConfig* — inline Renovate config that merges with (and overrides) the `renovate.json` in each repository. Key settings:
 ** `hostRules` — credentials for your Nexus Maven registry. In this lab the password is inline for simplicity; in production you would store credentials in a secrets manager such as HashiCorp Vault or use the External Secrets Operator to sync them into Kubernetes Secrets, then reference them via environment variables using Renovate's https://docs.renovatebot.com/self-hosted-configuration/#detecthostrulesfromenv[`detectHostRulesFromEnv`^] feature
-** `packageRules` — points the Lightwell custom manager at your `maven-public` group and disables scanning of internal `com.acme.*` packages
+** `customManagers` — redefines the Lightwell pom.xml manager so its `registryUrlTemplate` points at *your* Nexus `maven-public` group. The shared preset this repository extends hardcodes the public Lightwell registry, which your tenant cannot reach, and a `packageRules` entry cannot displace a manager's own `registryUrlTemplate` — so the manager has to be redefined rather than patched
+** `packageRules` — disables scanning of internal `com.acme.*` packages
 ** `dockerfile` / `github-actions` — disabled for this lab. Renovate supports https://docs.renovatebot.com/modules/manager/[over 100 package ecosystems^] including npm, pip, Go modules, Helm charts, Terraform providers, and container images. You enable or disable each manager independently — for example, `"npm": { "enabled": true }` would add JavaScript dependency scanning alongside the Java Lightwell preset. You can also configure https://docs.renovatebot.com/configuration-options/#automerge[auto-merge^] for low-risk dependency classes (e.g. test-only updates, patch-level bumps) so they land without human review.
 
 NOTE: Under the hood, the Renovate operator manages Kubernetes `RenovateJob` and `RenovateProject` custom resources. You can inspect them with `oc get renovatejobs` and `oc get renovateprojects`. In a production environment, these resources would typically be managed by ArgoCD alongside your other GitOps-managed infrastructure.
