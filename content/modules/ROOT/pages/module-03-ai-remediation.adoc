@@ -265,10 +265,12 @@ Open https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] and go to
 
 [source,text]
 ----
-[LW] 🔴 Bump h2 to 2.2.224.rhlw-70003 to fix CVE-2023-48795
+[LW] 🟢 Bump commons-text to 1.9.rhlw-00001 to fix CVE-2022-42889
 ----
 
-That example is from a real `wire-transfer-svc` run — yours will name the dependency you just published. The coloured dot encodes severity, so a reviewer scanning a list of twenty merge requests can triage before opening any of them.
+Yours will name the dependency you just published, with its own `.rhlw` number.
+
+The coloured dot is the *application's* Acme Inc. risk class, not the severity of the CVE. That distinction is easy to miss and worth pausing on: `CVE-2022-42889` is a critical-severity flaw, yet this merge request is green, because `benefits-mgmt-app` is a low-risk application and the fix is therefore allowed to merge itself. The `wire-transfer-svc` merge request later in this module carries a 🔴 for the opposite reason. A reviewer scanning twenty merge requests is triaging by *what the change can break*, not by how frightening the CVE sounds.
 
 The diff itself is almost boring — the same single-line `pom.xml` change Renovate made in Module 2. The interesting part is the description, which is the artifact a human is actually expected to read:
 
