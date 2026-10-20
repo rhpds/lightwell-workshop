@@ -410,6 +410,12 @@ On the canvas, the *Auto-approve?* condition does not see `auto_approve`, so it 
 
 Read that again, because it is easy to misread as a failure. The Orchestrator has not crashed, timed out, or parked a job that is burning a worker somewhere. It has done everything it is permitted to do and stopped. The merge request is open in GitLab with your name on it, and nothing further happens in this entire platform until a person acts.
 
+Open the *Lightwell Remediation — Start* run for this trigger and zoom in on the right-hand side of the canvas. The `False` branch of *Auto-approve?* carries the green tick, and the path onward to *Merge GitLab MR (auto_approve)* is dashed, meaning it was never taken:
+
+image::m3-hr-auto-approve-false.png["The Auto-approve? condition on the Orchestrator canvas with its False branch ticked and highlighted; the auto-merge path is dashed and the solid path leads to SNOW — MR ready",link=_images/m3-hr-auto-approve-false.png,window=_images]
+
+Compare that with the low-risk run earlier, where the same condition ticked `True` and ran straight into *Merge GitLab MR*. The green tick marks the branch that was taken — it is a record of a decision, not an error.
+
 [IMPORTANT]
 ====
 *The pause lives in GitLab, not in the Orchestrator.* There is no approve button on the canvas and no task in a queue waiting for you to tick it. The human gate is the merge request itself — the artifact that actually carries the evidence — rather than a prompt in an automation tool that quotes a ticket number at you.

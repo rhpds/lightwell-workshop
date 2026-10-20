@@ -60,17 +60,32 @@ fi
 #    exceeds maxMajorIncrement 500"
 # So derive the suffix from what the pom already has, +1, exactly as the lab's
 # rhlw-00001 / rhlw-00002 sequence does.
-next_suffix() {  # next_suffix <app> <artifactId>
-  local cur
-  cur="$(gl "${GL}/api/v4/projects/$(proj "$1")/repository/files/pom.xml/raw?ref=main" \
+#
+# The pom alone is not enough. Nexus fires its webhook on component *created*
+# and silently ignores a re-upload of the same coordinate, so publishing a
+# version that already exists starts nothing: no webhook, no AO run, no MR,
+# and the publish still reports success. That is exactly what happens on the
+# high-risk path, because it is never merged by design -- main's pom keeps no
+# rhlw version, so the pom-derived suffix is pinned at rhlw-00001 and every
+# re-run after the first is a silent no-op. Take whichever of the pom and the
+# repository is further ahead.
+next_suffix() {  # next_suffix <app> <groupId> <artifactId>
+  local from_pom from_nexus cur
+  from_pom="$(gl "${GL}/api/v4/projects/$(proj "$1")/repository/files/pom.xml/raw?ref=main" \
          | python3 -c "
 import re,sys
 t=sys.stdin.read()
 m=re.search(r'<artifactId>\s*'+re.escape(sys.argv[1])+r'\s*</artifactId>\s*<version>([^<]+)</version>', t)
 v=m.group(1) if m else ''
 n=re.search(r'rhlw-(\d+)', v)
-print(int(n.group(1))+1 if n else 1)" "$2")"
-  printf 'rhlw-%05d' "${cur:-1}"
+print(int(n.group(1)) if n else 0)" "$3")"
+  from_nexus="$(curl -sk --max-time 30 \
+      "https://${NEXUS_HOST}/repository/lightwell-remediated/${2//.//}/$3/maven-metadata.xml" 2>/dev/null \
+    | python3 -c "
+import re,sys
+print(max([int(x) for x in re.findall(r'rhlw-(\d+)', sys.stdin.read())] or [0]))" 2>/dev/null)"
+  cur=$(( ( ${from_pom:-0} > ${from_nexus:-0} ? ${from_pom:-0} : ${from_nexus:-0} ) + 1 ))
+  printf 'rhlw-%05d' "$cur"
 }
 PASS=0; FAIL=0; SKIP=0
 
@@ -260,7 +275,7 @@ fi
 
 step "Module 2 — publish the Lightwell remediation  ('A New Lightwell Remediation Becomes Available')"
 rg_before="$(latest_mr report-generator-app)"
-M2SUF="$(next_suffix report-generator-app jackson-databind)"
+M2SUF="$(next_suffix report-generator-app com.fasterxml.jackson.core jackson-databind)"
 if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" \
      com.fasterxml.jackson.core:jackson-databind:2.13.5 "$M2SUF" "Jackson Databind" \
      >${TMP}/m2-publish.log 2>&1; then
@@ -380,7 +395,7 @@ run_path() {
 
   step "[$kind] Publish the remediation  (module: 'Publishing the ... Remediation')"
   before="$(latest_mr "$app")"
-  local suf; suf="$(next_suffix "$app" "$(echo "$gav" | cut -d: -f2)")"
+  local suf; suf="$(next_suffix "$app" "$(echo "$gav" | cut -d: -f1)" "$(echo "$gav" | cut -d: -f2)")"
   if GUID="$GUID" "${REPO}/ao-trigger-helper/publish-remediation.sh" "$gav" "$suf" "$desc" \
        >${TMP}/m3-publish-${kind}.log 2>&1; then
     if grep -q 'advisories published' ${TMP}/m3-publish-${kind}.log; then
