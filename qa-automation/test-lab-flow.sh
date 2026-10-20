@@ -40,7 +40,14 @@ want() { [[ ",$ONLY," == *",$1,"* ]]; }
 [[ -n "$GUID" ]] || { echo "usage: $0 <guid> [--reset] [--only 1,2,3] [--auto-only|--human-only]" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/.." && pwd)"
+# Resolve the repo independently of where this script is invoked from: a copy
+# run out of /tmp would otherwise make REPO=/ and every helper path wrong.
+REPO="${LW_REPO:-$(git -C "$HERE" rev-parse --show-toplevel 2>/dev/null)}"
+if [[ ! -x "${REPO}/ao-trigger-helper/publish-remediation.sh" ]]; then
+  REPO="$(cd "$HERE/.." && pwd)"
+fi
+[[ -x "${REPO}/ao-trigger-helper/publish-remediation.sh" ]] || {
+  echo "cannot locate the repo; set LW_REPO=/path/to/lightwell-workshop" >&2; exit 2; }
 SUFFIX="rhlw-$(date +%H%M%S)"
 PASS=0; FAIL=0; SKIP=0
 
@@ -135,10 +142,31 @@ fi
 #############################################################################
 if want 2; then
 step "Module 2 — the RenovateJob the attendee creates"
+# The inline renovateConfig is not optional decoration: it repoints the Maven
+# datasource at the tenant Nexus and disables the dockerfile/github-actions
+# managers. Without it Renovate queries the real packages.redhat.com (which
+# the tenant cannot reach), logs "no-result" for every Maven package, and
+# instead opens unrelated bumps like java-jdk v27. Keep this in step with
+# module-02-renovate.adoc.
+TENANT_PW="$(oc get application "lightwell-tenant-${GUID}" -n openshift-gitops \
+  -o jsonpath='{.spec.source.helm.values}' 2>/dev/null | awk '/^password:/{print $2}')"
+NEXUS_HOST="nexus-lightwell-nexus-${GUID}.${DOMAIN}"
 if oc get renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2>&1; then
-  ok "RenovateJob renovate-${GUID} exists"
-else
-  info "creating it, as the module instructs"
+  have="$(oc get renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" -o json \
+          | jqp ";
+import sys
+d=json.load(sys.stdin)
+print((((d.get('spec') or {}).get('renovateConfig') or {}).get('inline') or ''))")"
+  if [[ "$have" == *"$NEXUS_HOST"* ]]; then
+    ok "RenovateJob renovate-${GUID} exists and points at the tenant Nexus"
+  else
+    no "RenovateJob exists but its config does not reference ${NEXUS_HOST}"
+    info "Renovate will query packages.redhat.com and never see the .rhlw build."
+    oc delete renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2>&1
+    info "deleted it; recreating as the module specifies"
+  fi
+fi
+if ! oc get renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2>&1; then
   if oc apply -f - >/dev/null 2>&1 <<EOF
 apiVersion: renovate-operator.mogenius.com/v1alpha1
 kind: RenovateJob
@@ -160,8 +188,42 @@ spec:
   access:
     adminUsers:
       - "user-${GUID}@demo.redhat.com"
+  renovateConfig:
+    fileName: config.json
+    inline: |
+      {
+        "onboarding": false,
+        "requireConfig": "optional",
+        "branchConcurrentLimit": 0,
+        "prConcurrentLimit": 0,
+        "prHourlyLimit": 0,
+        "commitMessagePrefix": "[Lightwell]",
+        "commitMessageExtra": "({{{newVersion}}})",
+        "hostRules": [
+          {
+            "matchHost": "${NEXUS_HOST}",
+            "hostType": "maven",
+            "username": "admin",
+            "password": "${TENANT_PW}"
+          }
+        ],
+        "packageRules": [
+          {
+            "matchManagers": ["custom.regex"],
+            "matchDatasources": ["maven"],
+            "registryUrls": ["https://${NEXUS_HOST}/repository/maven-public"]
+          },
+          {
+            "matchPackageNames": ["com.acme.*:*"],
+            "enabled": false
+          }
+        ],
+        "dockerfile": { "enabled": false },
+        "github-actions": { "enabled": false }
+      }
 EOF
-  then ok "RenovateJob created"; else no "could not create the RenovateJob"; fi
+  then ok "RenovateJob created with the Lightwell Nexus config"
+  else no "could not create the RenovateJob"; fi
 fi
 
 step "Module 2 — publish the Lightwell remediation  ('A New Lightwell Remediation Becomes Available')"
