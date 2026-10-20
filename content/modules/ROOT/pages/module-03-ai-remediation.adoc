@@ -368,9 +368,9 @@ Merging to `main` starts the `build-push-to-main` pipeline. Open the OpenShift C
 . *Push* — the signed image goes to the OCI registry
 . *Promote* — `promote-to-deployment-repo` bumps the application's `imageTag` in the `acme-deployment` repository
 
-// TODO screenshot: the PipelineRun detail view for `build-push-to-main` on
-// `benefits-mgmt-app` with every task complete, including the promote task.
-// (no capture yet — see the TODO above)
+image::m3-pipeline-run.png["The PipelineRun details view for build-push-to-main, Succeeded, with every task green through promote-to-deployment-repo",link=_images/m3-pipeline-run.png,window=_images]
+
+The task graph has one more box than the list above: `run-tests` and `maven-build` are separate tasks, and there is no `sign` task at all. Signing happens out of band — Tekton Chains observes the completed run and signs the image afterwards, which is why the signature shows up as the small shield badge next to the PipelineRun name rather than as a step you can watch.
 
 That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Open the https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[ArgoCD console^] (log in via OpenShift) and find the `acme-apps-{guid}` application. It syncs the new image tag and rolls the deployment in your `{user}-app` namespace.
 
