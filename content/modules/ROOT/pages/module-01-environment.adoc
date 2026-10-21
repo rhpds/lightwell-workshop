@@ -3,6 +3,8 @@
 
 *Duration:* 10 minutes
 
+include::partial$lab-access.adoc[]
+
 This module orients you to the pre-deployed environment. Everything described here is already running. You do not need to open anything yet — you will visit each component as needed throughout the lab.
 
 == Your Company: Acme Inc.
@@ -21,34 +23,7 @@ All three applications are stored in your GitLab instance under the `acme-{guid}
 
 == The Platform Components
 
-[cols="3,3",options="header"]
-|===
-| Component (opens in new tab) | Credentials
-
-| https://console-openshift-console.{openshift_cluster_ingress_domain}[OpenShift Console^]
-| `{user}` / `{password}`
-
-| https://ao.{openshift_cluster_ingress_domain}[Ansible Orchestrator^]
-| `{user}` / `{password}`
-
-| https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^]
-| `{user}` / `{password}`
-
-| https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[ArgoCD^]
-| `{user}` / `{password}` — via *Log in via OpenShift*
-
-| https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^]
-| `{user}` / `{password}`
-
-| https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate^]
-| `{user}` / `{password}`
-
-| https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow^]
-| (no login required)
-
-| https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[Artifact Manager (Nexus)^]
-| admin / `{password}`
-|===
+Every component you will use, with its credentials, is listed in the *Lab access and credentials* block at the top of this page. Expand it whenever you need a URL or a password — it is repeated at the start of every module so you never have to come back here for it.
 
 You will visit these as needed throughout the lab.
 

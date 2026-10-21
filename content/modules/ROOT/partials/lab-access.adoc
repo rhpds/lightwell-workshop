@@ -1,0 +1,40 @@
+.Lab access and credentials (click to expand)
+[%collapsible]
+====
+Everything below is already running. The tabs on the right of this Showroom
+window open each component in place, which is easier to follow than switching
+browser windows — the links are there if you prefer your own tab.
+
+[cols="3,3",options="header"]
+|===
+| Component | Credentials
+
+| https://console-openshift-console.{openshift_cluster_ingress_domain}[OpenShift Console^] — *Pipelines*, *Topology*
+| `{user}` / `{password}` (SSO)
+
+| https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^]
+| `{user}` / `{password}`
+
+| https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[Artifact Manager (Nexus)^]
+| admin / `{password}`
+
+| https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate^]
+| `{user}` / `{password}` (SSO)
+
+| https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[ArgoCD^]
+| `{user}` / `{password}` — via *Log in via OpenShift*
+
+| https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^]
+| `{user}` / `{password}` (SSO)
+
+| https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^]
+| `{user}` / `{password}`
+
+| https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow^]
+| (no login required)
+|===
+
+Your GUID is `{guid}`, and it appears in most of the names you will meet:
+the GitLab group `acme-{guid}`, the running applications in `{user}-app`, and
+the build pipelines in `build-{guid}`.
+====

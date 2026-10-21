@@ -3,6 +3,8 @@
 
 *Duration:* 25 minutes
 
+include::partial$lab-access.adoc[]
+
 This module walks through the simplest way to automate Lightwell remediations. No AI, no orchestration. A dependency management tool watches Lightwell for new `.rhlw` versions and creates merge requests to bump your dependencies. Standard CI/CD handles the build and deploy.
 
 In this lab we use https://docs.renovatebot.com/[Renovate^] as the dependency management tool, but the same pattern works with any tool that can scan Maven repositories for updates — Dependabot, OWASP Dependency-Check, or even a custom script. In the real world, these tools can manage dozens or hundreds of repositories simultaneously. Enterprises commonly configure them to:

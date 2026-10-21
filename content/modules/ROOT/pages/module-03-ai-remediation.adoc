@@ -3,6 +3,8 @@
 
 *Duration:* 30 minutes
 
+include::partial$lab-access.adoc[]
+
 Module 2 ended with a deliberate limitation: Renovate found one dependency in one repository and asked you to merge it. That works until the day Lightwell publishes forty remediations across sixty repositories, and "ask a human to merge it" stops being a strategy.
 
 This module walks through the same remediation event, handled by the platform instead of by you. An Ansible Orchestrator workflow opens a ServiceNow incident, asks Trusted Profile Analyzer which applications are actually affected, applies each application's own approval policy, and dispatches an AI agent to write the merge request. The pipeline then tests the change and writes the results back into the merge request body, so that when a human *is* asked to decide, they are reading evidence rather than guessing.
