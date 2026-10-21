@@ -34,11 +34,11 @@ All three applications are stored in your GitLab instance under the `acme-{guid}
 | https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate^]
 | `{user}` / `{password}` (SSO)
 
-| OpenShift Console — *Pipelines* (Tekton CI)
-| Log in via OpenShift SSO
+| https://console-openshift-console.{openshift_cluster_ingress_domain}[OpenShift Console^] — *Pipelines* (Tekton CI)
+| `{user}` / `{password}` (SSO)
 
 | https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[ArgoCD^]
-| Log in via OpenShift
+| `{user}` / `{password}` — via *Log in via OpenShift*
 
 | https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^]
 | `{user}` / `{password}` (SSO)
