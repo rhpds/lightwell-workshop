@@ -331,15 +331,22 @@ Refresh the merge request after a minute or two and the table will have filled i
 | Asserts that what the `pom.xml` declares is what the build actually resolved
 
 | Regression scan
-| *Not implemented.* This row stays `Pending`.
+| Re-runs the whole suite against the target branch's `pom.xml` and compares the result test by test, so a test that was already failing before the bump is not blamed on it
 
 | License compliance
 | Compares the licence declared by the base POM against the remediated POM, normalised so that equivalent phrasings do not raise a false alarm
 |===
 
-image::m3-mr-validation-filled.png["The same table after build-pull-request has run: six checks Passed, Regression scan still Pending",link=_images/m3-mr-validation-filled.png,window=_images]
+image::m3-mr-validation-filled.png["The same table after build-pull-request has run, with every check Passed",link=_images/m3-mr-validation-filled.png,window=_images]
 
-IMPORTANT: Six of those eight rows are measured. *Regression scan is not implemented* and renders as `Pending` — a behavioural diff would mean running the whole suite against the target-branch baseline as well, roughly doubling build time, and that call has not been made yet. Nothing here is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all.
+IMPORTANT: Every one of those rows is measured. Nothing is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all — and a row that *could not* be established says so, rather than quietly reading `Passed`.
+
+The regression scan is why this pipeline takes about twice as long as you might expect: it builds the application a second time against the dependency version you are replacing, so that "no behavioural change" is a comparison rather than an assumption. Roughly ninety seconds in total.
+
+[NOTE]
+====
+*The Merge button stays disabled until the table is green.* GitLab is configured to refuse a merge unless the pipeline succeeds, and the pipeline deliberately fails while any row is `Pending`, `Warning` or `Failed`. So for the minute or two the checks are running, the merge request genuinely cannot be merged — by you or by the Orchestrator. That is the gate doing its job, not a stuck pipeline.
+====
 
 == The Low-Risk Application Merges Itself
 
@@ -452,7 +459,7 @@ image::m3-hr-mr-summary.png["The high-risk merge request Summary, showing a link
 
 . *Check the evidence.* Six of the seven checks passed, measured on this exact change:
 +
-image::m3-hr-mr-validation.png["The Automated Validation table for wire-transfer-svc with six checks Passed and Regression scan Pending",link=_images/m3-hr-mr-validation.png,window=_images]
+image::m3-hr-mr-validation.png["The Automated Validation table for wire-transfer-svc with every check Passed",link=_images/m3-hr-mr-validation.png,window=_images]
 
 . *Read the verdict.* The Risk Assessment explains the exposure in plain language, and the Recommended Action states the policy outright:
 +
