@@ -24,7 +24,11 @@ The key integration point is the *java-remediated* preset from `lightwell-experi
 * Adds a custom regex manager that reads `pom.xml` and looks up versions in the Lightwell repository
 * Uses a versioning scheme that only bumps the `.rhlw-NNNNN` suffix — keeping the upstream version the same
 
-Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `{user}` / `{password}` if needed. Navigate to the `acme-{guid}/report-generator-app` repository and open `renovate.json`. You will see it extends the Lightwell preset:
+Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `{user}` / `{password}` if needed.
+
+TIP: If you don't see the left navigation panel, click the menu button (&#9776;) in the upper-left corner to reveal it.
+
+Navigate to the `acme-{guid}/report-generator-app` repository and open `renovate.json`. You will see it extends the Lightwell preset:
 
 [source,json,role=copypaste]
 ----
@@ -184,7 +188,7 @@ The script discovers your artifact manager and TPA instances automatically, publ
 
 === Verifying the Remediation in the Artifact Manager
 
-Switch to the *Nexus* tab on the right (or https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `admin` / `{password}` and click *Browse* in the left navigation. Select the `lightwell-remediated` repository. Navigate to `com/fasterxml/jackson/core/jackson-databind/2.13.5.rhlw-00001/` — you should see the POM and JAR that the publish script uploaded.
+Switch to the *Nexus* tab on the right (or https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `admin` / `{password}`. If the left navigation is hidden, click the menu button (&#9776;) in the upper-left corner, then click *Browse*. Select the `lightwell-remediated` repository. Navigate to `com/fasterxml/jackson/core/jackson-databind/2.13.5.rhlw-00001/` — you should see the POM and JAR that the publish script uploaded.
 
 NOTE: You are logging in as `admin` because this is your dedicated artifact manager — each workshop participant gets their own. In a production environment, this would be your organization's artifact repository administrator.
 
