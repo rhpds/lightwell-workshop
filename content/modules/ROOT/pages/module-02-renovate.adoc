@@ -1,11 +1,6 @@
 = Module 2: Quick Win — Automated Dependency Updates
 :navtitle: Module 2: Quick Win
 
-[WARNING]
-====
-This module is a *work in progress*. Steps and screenshots may change before the final version.
-====
-
 *Duration:* 25 minutes
 
 This module walks through the simplest way to automate Lightwell remediations. No AI, no orchestration. A dependency management tool watches Lightwell for new `.rhlw` versions and creates merge requests to bump your dependencies. Standard CI/CD handles the build and deploy.

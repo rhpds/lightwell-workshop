@@ -1,11 +1,6 @@
 = Module 3: Full Automation — AI-Assisted Remediation
 :navtitle: Module 3: Full Automation
 
-[WARNING]
-====
-This module is a *work in progress*. Steps and screenshots may change before the final version.
-====
-
 *Duration:* 30 minutes
 
 Module 2 ended with a deliberate limitation: Renovate found one dependency in one repository and asked you to merge it. That works until the day Lightwell publishes forty remediations across sixty repositories, and "ask a human to merge it" stops being a strategy.
