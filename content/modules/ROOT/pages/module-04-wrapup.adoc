@@ -3,8 +3,6 @@
 
 *Duration:* 5 minutes
 
-include::partial$lab-access.adoc[]
-
 == Two Paths, One Platform
 
 You have now used both approaches to automating CVE remediation with Red Hat Lightwell. Here is how they compare:
