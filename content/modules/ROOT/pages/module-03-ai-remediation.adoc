@@ -530,39 +530,51 @@ In the left-hand navigation, expand *SBOMs* and choose *All SBOMs*:
 
 image::m3-tpa-sboms-nav.png["The TPA left-hand navigation with All SBOMs highlighted",link=_images/m3-tpa-sboms-nav.png,window=_images]
 
-Filter on one of the applications you just remediated. Every build it has ever produced is listed, newest first — the top entry is the one the pipeline uploaded minutes ago:
+Every build each application has ever produced is listed, with its dependency and vulnerability counts. On a fresh tenant that is a short list, and both of the applications you just remediated appear twice — once as shipped, once as rebuilt.
 
-image::m3-tpa-sbom-list.png["The All SBOMs list filtered to benefits-mgmt-app, showing one SBOM per build with dependency and vulnerability counts",link=_images/m3-tpa-sbom-list.png,window=_images]
+You do not need to open anything to see the result — the list itself is the evidence. For each application the original build and the remediated one sit next to each other, so the before and after are on one screen:
 
-You do not need to open anything to see the result — the list itself is the evidence. The original build and the remediated one sit next to each other, and the *Vulnerabilities* column tells the story:
+image::m3-tpa-vuln-before-after.png["The TPA SBOM list with the original and remediated builds of both applications, their vulnerability counts highlighted",link=_images/m3-tpa-vuln-before-after.png,window=_images]
 
-image::m3-tpa-vuln-before-after.png["The TPA SBOM list with the original and remediated builds of benefits-mgmt-app, their vulnerability counts highlighted",link=_images/m3-tpa-vuln-before-after.png,window=_images]
+`v1.0-build` is the application as it shipped; `chore(deps)…` is the build produced after remediation. Same application, one dependency different:
 
-The `v1.0-build` row is the application as it shipped. The `chore(deps)…` rows are builds produced after remediation — same application, one dependency different:
-
-[cols="2,1,1,3",options="header"]
+[cols="2,2,1,2",options="header"]
 |===
-| Build | Dependencies | Vulnerabilities | What it means
+| Application | Build | Dependencies | Vulnerabilities
 
-| `v1.0-build` (original)
+.2+| `benefits-mgmt-app` (commons-text)
+| `v1.0-build`
 | 245
-| *14* — including *4 critical*
-| the state before anyone touched it
+| *14* — 4 critical
 
-| `chore(deps)…` (remediated)
+| `chore(deps)…`
 | 244
-| *12* — including *3 critical*
-| one of those critical findings was `CVE-2022-42889`, the flaw this module has been chasing
+| *12* — 3 critical
+
+.2+| `wire-transfer-svc` (h2)
+| `v1.0-build`
+| 238
+| *90* — 18 critical
+
+| `chore(deps)…`
+| 238
+| *90* — 17 critical
 |===
 
-Two vulnerabilities fewer, one of them critical, and one dependency fewer: the vulnerable `commons-text` is gone and the `.rhlw` build stands in its place. Open either SBOM and search the component list if you want to confirm the coordinate itself.
+The two tell different stories, and the difference is worth understanding.
 
-Notice what this is *not*. Nobody wrote a report and nobody updated a spreadsheet. The pipeline uploaded the SBOM as part of the build and TPA worked out the difference. The number moved because the software changed.
+For `benefits-mgmt-app` the headline number moves: two vulnerabilities fewer, one of them critical, and one dependency fewer. The vulnerable `commons-text` is gone and the `.rhlw` build stands in its place.
 
-[NOTE]
+For `wire-transfer-svc` the total does not move at all. It stays at 90, with one critical becoming one high. That is not a failed remediation — it is an honest picture of a payment system carrying 238 dependencies and a long tail of known issues that this one fix was never going to touch. The build changed; the backlog did not.
+
+[IMPORTANT]
 ====
-Do not expect every remediation to move the number. TPA can only subtract advisories it actually holds, so a component with no advisory in this tenant's dataset shows the same count before and after even though the dependency genuinely changed. That is also why `report-generator-app` still shows 132 — it has not been remediated. The SBOM contents are the reliable evidence; the count is the convenient one.
+*A count is not proof, and this is the clearest place in the lab to see why.* TPA can only subtract advisories it actually holds. If a component has no advisory in this tenant's dataset, the number is unchanged even though the dependency genuinely changed — and on an application with 90 findings, a single remediation barely registers.
+
+The reliable evidence is the SBOM *contents*: open either build and search the component list for the coordinate. The vulnerable version is absent and the `.rhlw` build is present. That is a fact about the software. The count is a summary of what the scanner happens to know, which is a different thing — and worth remembering the next time a dashboard is offered as evidence.
 ====
+
+Notice what none of this required: nobody wrote a report and nobody updated a spreadsheet.
 
 The verification is not a separate exercise bolted on at the end. The pipeline uploaded the SBOM as part of the build, which means the evidence for the *next* remediation is already in place. That is what makes the loop a loop.
 
