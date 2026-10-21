@@ -52,7 +52,7 @@ Renovate is already installed on the cluster. A `renovate-runner` service accoun
 
 [source,yaml,role=execute,subs=attributes+]
 ----
-cat <<EOF | oc apply -f -
+cat <<'EOF' | oc apply -f -
 apiVersion: renovate-operator.mogenius.com/v1alpha1
 kind: RenovateJob
 metadata:
