@@ -5,7 +5,7 @@
 
 Module 2 ended with a deliberate limitation: Renovate found one dependency in one repository and asked you to merge it. That works until the day Lightwell publishes forty remediations across sixty repositories, and "ask a human to merge it" stops being a strategy.
 
-This module walks through the same remediation event, handled by the platform instead of by you. An Automation Orchestrator workflow opens a ServiceNow incident, asks Trusted Profile Analyzer which applications are actually affected, applies each application's own approval policy, and dispatches an AI agent to write the merge request. The pipeline then tests the change and writes the results back into the merge request body, so that when a human *is* asked to decide, they are reading evidence rather than guessing.
+This module walks through the same remediation event, handled by the platform instead of by you. An Ansible Orchestrator workflow opens a ServiceNow incident, asks Trusted Profile Analyzer which applications are actually affected, applies each application's own approval policy, and dispatches an AI agent to write the merge request. The pipeline then tests the change and writes the results back into the merge request body, so that when a human *is* asked to decide, they are reading evidence rather than guessing.
 
 You will remediate two of your three applications:
 
@@ -55,7 +55,7 @@ The back half of both paths is the same. Full automation only replaces *who deci
 
 == The Orchestrated Pipeline
 
-Event-Driven Ansible is deliberately thin here. It is a sensor: it recognises the `.rhlw` artifact event and triggers a job template, which posts to an Automation Orchestrator webhook. Everything after that is a node on an Orchestrator canvas, recorded as it runs.
+Event-Driven Ansible is deliberately thin here. It is a sensor: it recognises the `.rhlw` artifact event and triggers a job template, which posts to an Ansible Orchestrator webhook. Everything after that is a node on an Orchestrator canvas, recorded as it runs.
 
 Your project contains *three* workflows, not one, and the split is the first thing worth understanding:
 
@@ -192,7 +192,7 @@ IMPORTANT: The webhook fires on *component created*. Re-publishing the same grou
 
 Switch to the *Ansible Orchestrator* tab on the right (or https://ao.{openshift_cluster_ingress_domain}[open it in a new tab^]) and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}`, and it holds the three workflows listed earlier.
 
-image::m3-ao-workflows-start.png["The Automation Orchestrator workflow list, with Lightwell Remediation — Start highlighted",link=_images/m3-ao-workflows-start.png,window=_images]
+image::m3-ao-workflows-start.png["The Ansible Orchestrator workflow list, with Lightwell Remediation — Start highlighted",link=_images/m3-ao-workflows-start.png,window=_images]
 
 Click *Lightwell Remediation — Start*, then open the *Runs* view to see the executions this remediation produced. There are three, one per workflow, and they completed at different times — Start first, then Merged, then Deploy as each webhook arrived.
 
