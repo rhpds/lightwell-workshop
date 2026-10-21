@@ -42,6 +42,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+from urllib.parse import quote
 
 
 def env(name: str, default: str | None = None, *, required: bool = False) -> str:
@@ -115,11 +116,35 @@ def find_by_name(resources: list[dict], name: str) -> dict | None:
 
 
 def list_all(client: AoClient, path: str) -> list[dict]:
-    code, data = client.request("GET", path)
-    if code != 200 or not isinstance(data, dict):
-        print(f"ERROR: GET {path} -> {code} {data}", file=sys.stderr)
-        sys.exit(1)
-    return list(data.get("resources") or [])
+    """Every page, not just the first.
+
+    AO paginates at 20 and returns an opaque cursor in `next`. Reading only
+    the first page was fine with a handful of tenants and silently wrong
+    beyond that: at three workflows per tenant, a seventh tenant's own
+    workflows fall off page 1, so ensure_workflow could not see them, tried
+    to create one, got 409 WORKFLOW_NAME_CONFLICT and exited. Argo retries
+    the hook, every retry repeated it, and the tenant wedged with no AAP job
+    templates -- which surfaces in the canvas as "job start fail".
+
+    The same blindness applied to projects, users and service accounts, so
+    the failure got likelier the more tenants a cluster held.
+    """
+    out: list[dict] = []
+    sep = "&" if "?" in path else "?"
+    cursor = ""
+    # Bounded rather than `while True`: a cursor that never clears would
+    # otherwise hang the bootstrap hook forever instead of failing.
+    for _ in range(200):
+        url = path if not cursor else f"{path}{sep}cursor={quote(cursor, safe='')}"
+        code, data = client.request("GET", url)
+        if code != 200 or not isinstance(data, dict):
+            print(f"ERROR: GET {url} -> {code} {data}", file=sys.stderr)
+            sys.exit(1)
+        out.extend(data.get("resources") or [])
+        cursor = data.get("next") or ""
+        if not cursor:
+            break
+    return out
 
 
 def ensure_project(client: AoClient, name: str, description: str) -> str:
@@ -1109,15 +1134,28 @@ def ensure_workflow(
     """Create/patch/publish one workflow from a full definition dict."""
     name = defn["name"]
     webhook_path = defn["triggers"][0]["parameters"]["webhook_path"]
-    workflows = list_all(client, "/api/v1/workflows")
-    existing = next(
-        (
-            w
-            for w in workflows
-            if w.get("name") == name and w.get("project_id") == project_id
-        ),
-        None,
-    )
+    def find_existing() -> dict | None:
+        """Locate an already-created workflow of this name in this project.
+
+        Must match on project_id as well as name. Every tenant's project
+        contains a workflow called "Lightwell Remediation — Start", so a
+        name-only match picks an arbitrary tenant's workflow and the
+        subsequent PATCH would rewrite someone else's canvas. AO rejected
+        exactly that with "credential references ... belong to a different
+        project", which is the only reason it was caught.
+        """
+        workflows = list_all(client, "/api/v1/workflows")
+        hit = next(
+            (
+                w
+                for w in workflows
+                if w.get("name") == name and w.get("project_id") == project_id
+            ),
+            None,
+        )
+        return hit
+
+    existing = find_existing()
     code, validated = client.request(
         "POST", "/api/v1/workflows/validate", {"workflow_definition": defn}
     )
@@ -1137,12 +1175,24 @@ def ensure_workflow(
                 "workflow_definition": defn,
             },
         )
-        if code not in (200, 201) or not isinstance(created, dict) or not created.get("id"):
+        if code == 409:
+            # Raced, or the listing did not show it. Either way the workflow
+            # exists: adopt it so the patch below brings its definition up to
+            # date, rather than aborting the whole bootstrap.
+            existing = find_existing()
+            if not existing:
+                print(f"ERROR: create {name} returned 409 but it cannot be "
+                      f"found in the project: {created}", file=sys.stderr)
+                sys.exit(1)
+            print(f"AO workflow already present: {name} ({existing['id']}); adopting")
+        elif code not in (200, 201) or not isinstance(created, dict) or not created.get("id"):
             print(f"ERROR: create {name} failed: {code} {created}", file=sys.stderr)
             sys.exit(1)
-        wf_id = created["id"]
-        print(f"AO workflow created: {name} ({wf_id})")
-    else:
+        else:
+            wf_id = created["id"]
+            print(f"AO workflow created: {name} ({wf_id})")
+
+    if existing:
         wf_id = existing["id"]
         code, patched = client.request(
             "PATCH",
