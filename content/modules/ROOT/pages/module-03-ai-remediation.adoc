@@ -311,6 +311,13 @@ image::m3-mr-merge-blocked.png["The merge request widget showing a running pipel
 
 This is the whole point of the gate. Evidence arrives *before* the decision, not after it. Notice also *Set to auto-merge*: you can commit to the merge now and let GitLab carry it out the moment the checks pass. You are never asked to choose between waiting and trusting.
 
+[NOTE]
+====
+*You cannot merge until the pipeline finishes and every check is green.* This is enforced by GitLab, not by convention — the *Merge* button is disabled, and so is merging through the API, which is why the Orchestrator cannot jump the queue either.
+
+Allow roughly *90 seconds*. A row still reading `Pending`, `Warning` or `Failed` keeps the pipeline red and the merge closed; the button only becomes available once all of them read `Passed`. If it still looks blocked after a couple of minutes, re-read the table rather than the button — it will say which check is holding things up.
+====
+
 Rather than watch a spinner, follow what is actually happening. Click *Pipeline #<n>* in that widget:
 
 image::m3-gitlab-pipeline-running.png["The GitLab pipeline page showing a single external stage running Pipelines as Code CI / build-pull-request",link=_images/m3-gitlab-pipeline-running.png,window=_images]
@@ -400,7 +407,16 @@ image::m3-pipeline-run.png["The PipelineRun details view for build-push-to-main,
 
 The task graph has one more box than the list above: `run-tests` and `maven-build` are separate tasks, and there is no `sign` task at all. Signing happens out of band — Tekton Chains observes the completed run and signs the image afterwards, which is why the signature shows up as the small shield badge next to the PipelineRun name rather than as a step you can watch.
 
-That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Switch to the *ArgoCD* tab on the right (or https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[open it in a new tab^]). Choose *Log in via OpenShift* and approve the *Authorize Access* prompt the first time. Find the `acme-apps-{guid}` application and look at the two panels at the top:
+That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Switch to the *ArgoCD* tab on the right (or https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[open it in a new tab^]). Choose *Log in via OpenShift*. The first time you do this, OpenShift asks you to approve the connection:
+
+image::m3-argocd-authorize.png["The OpenShift Authorize Access screen requesting user:info for the ArgoCD dex server",link=_images/m3-argocd-authorize.png,window=_images]
+
+[NOTE]
+====
+This screen appears *once*, on your first ArgoCD login, and it is expected. ArgoCD is asking OpenShift to confirm who you are — `user:info` is read-only access to your username and group membership, nothing more. Click *Allow selected permissions*. If you click *Deny* you will simply be returned to the login page.
+====
+
+Find the `acme-apps-{guid}` application and look at the two panels at the top:
 
 image::argocd-acme-apps-synced.png["The ArgoCD application for acme-apps with the Sync Status and Last Sync panels highlighted, showing the promote commit",link=_images/argocd-acme-apps-synced.png,window=_images]
 
