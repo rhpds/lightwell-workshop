@@ -43,6 +43,15 @@ Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was th
   a fake "0 regressions"), and `tally()`'s recursive glob counted the baseline
   too, doubling 4/4 into 8/8. → [ADR-056](ADR.md#adr-056--measure-the-regression-scan-and-make-a-green-table-the-merge-gate)
 
+  **Rollout state.** GitHub (`redhat-ads-tech/*`) is the source of truth and
+  has all three repos updated, so any *newly ordered* tenant gets it. Existing
+  tenants were seeded at creation and still run the old pipeline unless the
+  file is pushed into their GitLab copy — done so far only for `8djv7`
+  (`benefits-mgmt-app`, `wire-transfer-svc`). **Nothing is left broken by the
+  mix:** a tenant with the merge gate on but the old pipeline still merges
+  normally, because the old `report-validation` exits 0 with rows Pending. The
+  only difference is whether `Regression scan` is measured.
+
 - **Merge is now gated on the PaC pipeline (21 Oct).** `job-create.yaml` sets
   `only_allow_merge_if_pipeline_succeeds` on the three Acme app repos (sixth
   `seed_app` arg, default `true`; `acme-deployment` passes `false` because
