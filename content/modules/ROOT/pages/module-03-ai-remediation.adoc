@@ -301,7 +301,36 @@ NOTE: The advisory data comes from a TPA lookup, not from the model. If your TPA
 
 The merge request is created before any testing has happened, so every row in the *Automated Validation* table starts as `Pending`. A Pipelines-as-Code pipeline, `build-pull-request`, runs against the open merge request, executes `mvn verify` together with the CycloneDX SBOM plugin, and then rewrites that one section of the description with real results.
 
-Refresh the merge request after a minute or two and the table will have filled in:
+=== While You Wait: Following the Checks
+
+Scroll to the bottom of the merge request. For the next minute or two it looks like this:
+
+image::m3-mr-merge-blocked.png["The merge request widget showing a running pipeline and Merge blocked: Pipeline must succeed",link=_images/m3-mr-merge-blocked.png,window=_images]
+
+*Merge blocked: 1 check failed — Pipeline must succeed.* Nothing has gone wrong. The pipeline is still running, and GitLab will not let anyone merge — you, a colleague, or the Orchestrator — until it reports success. The wording is unfortunate: "1 check failed" here means "the required check has not passed yet", not "a test broke".
+
+This is the whole point of the gate. Evidence arrives *before* the decision, not after it. Notice also *Set to auto-merge*: you can commit to the merge now and let GitLab carry it out the moment the checks pass. You are never asked to choose between waiting and trusting.
+
+Rather than watch a spinner, follow what is actually happening. Click *Pipeline #<n>* in that widget:
+
+image::m3-gitlab-pipeline-running.png["The GitLab pipeline page showing a single external stage running Pipelines as Code CI / build-pull-request",link=_images/m3-gitlab-pipeline-running.png,window=_images]
+
+One stage, named *external*, running `Pipelines as Code CI / build-pull-request`. "External" is the interesting word: there is no `.gitlab-ci.yml` in this repository and no GitLab runner involved. The build is executing on OpenShift as a Tekton `PipelineRun`, and Pipelines-as-Code is mirroring its status back here so that GitLab has something to gate on. The merge gate and the build are deliberately in different systems.
+
+To watch the build itself, open the *OpenShift Console* tab, navigate to *Pipelines* → *Pipelines* → *PipelineRuns*, and select the `build-{guid}` project:
+
+image::m3-tekton-pipelinerun.png["The PipelineRun details view in the OpenShift console showing fetch-source, run-tests, baseline-tests and report-validation",link=_images/m3-tekton-pipelinerun.png,window=_images]
+
+Four tasks, and they map directly onto the table you are waiting for:
+
+* `fetch-source` — clones the merge request branch
+* `run-tests` — `mvn verify` plus the CycloneDX SBOM, against the *remediated* dependency
+* `baseline-tests` — the same tests again against the dependency version you are replacing. This is what makes *Regression scan* a comparison rather than an assumption, and it is why the pipeline takes roughly twice as long as a plain build
+* `report-validation` — writes the results into the merge request, and fails the pipeline if any row is not green
+
+That last task is the one holding your Merge button. Once it passes, the gate opens.
+
+Refresh the merge request and the table will have filled in:
 
 [cols="2,3",options="header"]
 |===
@@ -337,11 +366,6 @@ image::m3-mr-validation-filled.png["The same table after build-pull-request has 
 IMPORTANT: Every one of those rows is measured. Nothing is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all — and a row that *could not* be established says so, rather than quietly reading `Passed`.
 
 The regression scan is why this pipeline takes about twice as long as you might expect: it builds the application a second time against the dependency version you are replacing, so that "no behavioural change" is a comparison rather than an assumption. Roughly ninety seconds in total.
-
-[NOTE]
-====
-*The Merge button stays disabled until the table is green.* GitLab is configured to refuse a merge unless the pipeline succeeds, and the pipeline deliberately fails while any row is `Pending`, `Warning` or `Failed`. So for the minute or two the checks are running, the merge request genuinely cannot be merged — by you or by the Orchestrator. That is the gate doing its job, not a stuck pipeline.
-====
 
 == The Low-Risk Application Merges Itself
 
