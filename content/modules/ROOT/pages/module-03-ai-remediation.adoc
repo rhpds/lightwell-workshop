@@ -334,13 +334,6 @@ image::m3-mr-merge-blocked.png["The merge request widget showing a running pipel
 
 This is the whole point of the gate. Evidence arrives *before* the decision, not after it. Notice also *Set to auto-merge*: you can commit to the merge now and let GitLab carry it out the moment the checks pass. You are never asked to choose between waiting and trusting.
 
-[NOTE]
-====
-*You cannot merge until the pipeline finishes and every check is green.* This is enforced by GitLab, not by convention — the *Merge* button is disabled, and so is merging through the API, which is why the Orchestrator cannot jump the queue either.
-
-Allow roughly *90 seconds*. A row still reading `Pending`, `Warning` or `Failed` keeps the pipeline red and the merge closed; the button only becomes available once all of them read `Passed`. If it still looks blocked after a couple of minutes, re-read the table rather than the button — it will say which check is holding things up.
-====
-
 Rather than watch a spinner, follow what is actually happening. Click *Pipeline #<n>* in that widget:
 
 image::m3-gitlab-pipeline-running.png["The GitLab pipeline page showing a single external stage running Pipelines as Code CI / build-pull-request",link=_images/m3-gitlab-pipeline-running.png,window=_images]
@@ -403,11 +396,17 @@ Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge reque
 
 For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the green branch to *Merge MR (auto-approved)*. The Orchestrator marks the merge request ready and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
 
-Switch back to the *GitLab* tab and open the merge request again. It is already merged, and the merge was performed by the automation account — you never touched it:
+Switch back to the *GitLab* tab and open the merge request again. The block you watched earlier has cleared and the merge has already happened — performed by the automation account, with you never touching it:
 
-image::m3-mr-auto-merged.png["The merge request now showing Merged, with the full Summary table intact",link=_images/m3-mr-auto-merged.png,window=_images]
+image::m3-mr-auto-merged.png["The merge request showing the branch pipeline passed, then Merged by Administrator, then the pipeline on main",link=_images/m3-mr-auto-merged.png,window=_images]
 
-Check the timestamps while you are there. The merge happened roughly two minutes after the request was opened, not seconds — the Orchestrator was waiting for `build-pull-request` to report before it merged.
+Read those three panels top to bottom, because they are in causal order:
+
+. *Pipeline #60 passed* on `update-artifact-1.9…` — the branch build finished and every row of the table went green. Only now is merging possible at all.
+. *Merged by Administrator* — the Orchestrator took the gate the moment it opened.
+. *Pipeline #61 passed* on `main` — merging started a second, different build: the one that produces the image you will deploy.
+
+Check the timestamps while you are there. The merge happened roughly two minutes after the request was opened, not seconds — the Orchestrator was waiting for `build-pull-request` to report before it merged. It could not have jumped that queue even if it had tried.
 
 This is the volume case, and it is the whole economic argument for the platform. An internal HR application, a compatible rebuild of a library, every automated check green: there is no decision here that a person adds value to, so no person is asked. Multiply that by forty remediations a week and the time saved is not the merge click — it is the context switch that surrounds it.
 
@@ -523,7 +522,7 @@ Work through the page in order:
 +
 image::m3-hr-mr-summary.png["The high-risk merge request Summary, showing a linked CVE, its CVSS severity and a HIGH Lightwell risk score",link=_images/m3-hr-mr-summary.png,window=_images]
 
-. *Check the evidence.* Six of the seven checks passed, measured on this exact change:
+. *Check the evidence.* Every check passed, measured on this exact change:
 +
 image::m3-hr-mr-validation.png["The Automated Validation table for wire-transfer-svc with every check Passed",link=_images/m3-hr-mr-validation.png,window=_images]
 
@@ -534,10 +533,19 @@ image::m3-hr-recommended-action.png["Risk Assessment and Recommended Action, sta
 . *Make the call, then merge it yourself.* Scroll to the bottom of the merge request and click *Merge*:
 +
 image::m3-hr-merge-button.png["The Merge button at the bottom of the merge request, highlighted",link=_images/m3-hr-merge-button.png,window=_images]
++
+--
+[IMPORTANT]
+====
+*If the Merge button is greyed out, the checks have not finished.* You cannot merge until the pipeline succeeds and every row of the validation table reads `Passed` — enforced by GitLab, not by convention. Merging through the API is blocked too, which is why the Orchestrator could not jump the queue for the low-risk application either.
 
-"Regardless of automated results" is the policy in one phrase. Six checks passed; the seventh was never claimed. None of that changes the answer.
+Allow roughly *90 seconds* from when the merge request appeared. A row still reading `Pending`, `Warning` or `Failed` keeps the pipeline red and the button disabled. If it still looks stuck after a couple of minutes, read the *table* rather than the button — it names the check that is holding things up.
 
-When you are satisfied, merge it yourself in GitLab.
+This is the one place in the lab where you are the gate, so it is worth being clear what you are being asked to approve: not whether the tests passed — the platform already refused to let you merge until they did — but whether *this change, on this system, is one you are willing to sign your name to*.
+====
+--
+
+"Regardless of automated results" is the policy in one phrase. Every check passed. None of that changes the answer.
 
 That click is the only manual step in the entire module, and it is the one the whole design exists to protect. Everything up to it was preparation so that your decision is informed; everything after it is automation again.
 
