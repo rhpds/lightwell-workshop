@@ -400,7 +400,13 @@ image::m3-pipeline-run.png["The PipelineRun details view for build-push-to-main,
 
 The task graph has one more box than the list above: `run-tests` and `maven-build` are separate tasks, and there is no `sign` task at all. Signing happens out of band — Tekton Chains observes the completed run and signs the image afterwards, which is why the signature shows up as the small shield badge next to the PipelineRun name rather than as a step you can watch.
 
-That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Switch to the *ArgoCD* tab on the right (or https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in via OpenShift if needed and find the `acme-apps-{guid}` application. It syncs the new image tag and rolls the deployment in your `{user}-app` namespace.
+That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Switch to the *ArgoCD* tab on the right (or https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[open it in a new tab^]). Choose *Log in via OpenShift* and approve the *Authorize Access* prompt the first time. Find the `acme-apps-{guid}` application and look at the two panels at the top:
+
+image::argocd-acme-apps-synced.png["The ArgoCD application for acme-apps with the Sync Status and Last Sync panels highlighted, showing the promote commit",link=_images/argocd-acme-apps-synced.png,window=_images]
+
+*Sync Status* reads `Synced` and *Last Sync* reads `Sync OK`, but the useful part is the commit quoted under both: *promote benefits-mgmt-app to 5598d3ade…*, authored minutes ago. That is the pipeline's `promote-to-deployment-repo` task writing the new image digest into the deployment repository, and the sync beside it is ArgoCD noticing and rolling the deployment in your `{user}-app` namespace.
+
+Nothing here was triggered by a person, and the pipeline deployed nothing. It changed a file in git; ArgoCD reconciled the cluster to match. The answer to "what is running, and why" is a commit.
 
 The application keeps serving traffic throughout. That is not a staging trick: the remediated dependency is the real upstream library with the fix applied, so the application genuinely runs on it.
 
@@ -496,7 +502,7 @@ That click is the only manual step in the entire module, and it is the one the w
 
 From here it is the same spine as the low-risk application: merging fires the GitLab webhook, Event-Driven Ansible relays it, and a short Orchestrator run records the merge on the child incident. `build-push-to-main` builds, generates the SBOM, signs via Tekton Chains, pushes to the OCI registry and promotes the `imageTag` into `acme-deployment`; ArgoCD syncs and the new pod rolls out in `{user}-app`. Each stage reports back as it completes.
 
-image::argocd-acme-apps-synced.png[ArgoCD showing the Acme applications synced and healthy after remediation,link=_images/argocd-acme-apps-synced.png,window=_images]
+image::argocd-acme-apps-synced.png["ArgoCD showing the Acme applications synced and healthy after remediation, with the promote commit highlighted",link=_images/argocd-acme-apps-synced.png,window=_images]
 
 == Proving It in TPA
 
@@ -512,11 +518,34 @@ Filter on one of the applications you just remediated. Every build it has ever p
 
 image::m3-tpa-sbom-list.png["The All SBOMs list filtered to benefits-mgmt-app, showing one SBOM per build with dependency and vulnerability counts",link=_images/m3-tpa-sbom-list.png,window=_images]
 
-Open the newest SBOM and the one above it and compare them the way you did in Module 2: the vulnerable coordinate is gone and the `.rhlw` build is present in its place.
+You do not need to open anything to see the result — the list itself is the evidence. The original build and the remediated one sit next to each other, and the *Vulnerabilities* column tells the story:
+
+image::m3-tpa-vuln-before-after.png["The TPA SBOM list with the original and remediated builds of benefits-mgmt-app, their vulnerability counts highlighted",link=_images/m3-tpa-vuln-before-after.png,window=_images]
+
+The `v1.0-build` row is the application as it shipped. The `chore(deps)…` rows are builds produced after remediation — same application, one dependency different:
+
+[cols="2,1,1,3",options="header"]
+|===
+| Build | Dependencies | Vulnerabilities | What it means
+
+| `v1.0-build` (original)
+| 245
+| *14* — including *4 critical*
+| the state before anyone touched it
+
+| `chore(deps)…` (remediated)
+| 244
+| *12* — including *3 critical*
+| one of those critical findings was `CVE-2022-42889`, the flaw this module has been chasing
+|===
+
+Two vulnerabilities fewer, one of them critical, and one dependency fewer: the vulnerable `commons-text` is gone and the `.rhlw` build stands in its place. Open either SBOM and search the component list if you want to confirm the coordinate itself.
+
+Notice what this is *not*. Nobody wrote a report and nobody updated a spreadsheet. The pipeline uploaded the SBOM as part of the build and TPA worked out the difference. The number moved because the software changed.
 
 [NOTE]
 ====
-Whether the vulnerability count actually drops depends on the component. TPA can only subtract advisories it holds, so a component with no advisory in this tenant's dataset will show the same count before and after even though the dependency genuinely changed. The SBOM contents are the reliable evidence here; the count is a convenience.
+Do not expect every remediation to move the number. TPA can only subtract advisories it actually holds, so a component with no advisory in this tenant's dataset shows the same count before and after even though the dependency genuinely changed. That is also why `report-generator-app` still shows 132 — it has not been remediated. The SBOM contents are the reliable evidence; the count is the convenient one.
 ====
 
 The verification is not a separate exercise bolted on at the end. The pipeline uploaded the SBOM as part of the build, which means the evidence for the *next* remediation is already in place. That is what makes the loop a loop.
