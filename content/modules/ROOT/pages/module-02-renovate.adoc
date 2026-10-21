@@ -257,7 +257,7 @@ Scroll down and click _Merge_ to approve the merge request and update the source
 
 === Watching the Pipeline
 
-Merging the MR triggers a Tekton CI pipeline run. Switch to the *OpenShift Console* tab on the right (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `{user}` / `{password}` if needed, then expand the left-side navigation menu, then navigate to *Pipelines* → *Pipelines* and click the *PipelineRuns* tab. Ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details.
+Merging the MR triggers a Tekton CI pipeline run. Switch to the *OpenShift Console* tab on the right (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `{user}` / `{password}` if needed, then expand the left-side navigation menu, then navigate to *Pipelines* → *Pipelines* and click the *PipelineRuns* tab. Ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details. The pipeline typically takes about 2 minutes to complete.
 
 image::pipeline-run-renovate.png[Tekton pipeline building the remediated app,link=_images/pipeline-run-renovate.png,window=_images]
 
@@ -277,7 +277,7 @@ At this point, the application is remediated and the new container image is buil
 
 This exercise demonstrates that quick wins with Lightwell are real — a remediation can go from publication to verified, signed production build with minimal effort. But a single app and a single dependency is the easy case. For true automation and enterprise integration at scale — dozens of apps, hundreds of dependencies, change management, approvals, audit trails — more is needed. We will get there in the next module. For now, let's verify the fix. Switch to the *TPA* tab on the right (or https://tpa-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in via SSO with `{user}` / `{password}` if needed.
 
-Click *SBOMs* → *All SBOMs* in the left navigation, then type `report-generator` into the search box. You should see two SBOMs in the list — the original `v1.0-build` and the new build from the Lightwell merge request. Compare the vulnerability counts: the remediated build should show fewer vulnerabilities than the original — the exact number depends on which CVEs the advisories matched, but you should see several Critical and Medium vulnerabilities resolved by a single dependency bump.
+Click *SBOMs* → *All SBOMs* in the left navigation. If the search box is not visible, click the filter button (funnel icon) to reveal it, then type `report-generator`. You should see two SBOMs in the list — the original `v1.0-build` and the new build from the Lightwell merge request. Compare the vulnerability counts: the remediated build should show fewer vulnerabilities than the original — the exact number depends on which CVEs the advisories matched, but you should see several Critical and Medium vulnerabilities resolved by a single dependency bump.
 
 image::tpa-sbom-comparison.png[TPA showing both SBOMs with reduced vulnerability count after remediation,link=_images/tpa-sbom-comparison.png,window=_images]
 
