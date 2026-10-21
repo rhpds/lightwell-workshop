@@ -172,11 +172,11 @@ In the left-hand menu choose *Workloads* → *Topology*, then set *Project* to `
 
 image::m3-ocp-topology.png["The OpenShift Topology view for the user-app project showing three application nodes",link=_images/m3-ocp-topology.png,window=_images]
 
-Each blue ring is one deployment, and a complete ring means every pod it expects is running. These three are the same applications whose policies you just read: `benefits-mgmt-app-prod`, `wire-transfer-svc-prod` and `report-generator-app-prod`.
+Each blue ring is one deployment, and a complete ring means every pod it expects is running. The icon in the middle is the runtime: the two Tomcat cats are the WAR applications, `benefits-mgmt-app-prod` and `wire-transfer-svc-prod`, and the Spring Boot leaf is `report-generator-app-prod`, a JAR. These are the same three applications whose policies you just read.
 
 Click the ring for `benefits-mgmt-app-prod`. A panel opens on the right:
 
-image::m3-ocp-topology-pod.png["The Topology side panel for benefits-mgmt-app-prod, with the running pod highlighted",link=_images/m3-ocp-topology-pod.png,window=_images]
+image::m3-ocp-topology-pod.png["The Topology side panel for benefits-mgmt-app-prod showing its pod, service and route",link=_images/m3-ocp-topology-pod.png,window=_images]
 
 Under *Resources* you get the three things worth knowing: the *Pod* and whether it is `Running`, the *Service* that routes to it, and the *Route* it is reachable on. *View logs* is next to the pod if you want to watch it start.
 
