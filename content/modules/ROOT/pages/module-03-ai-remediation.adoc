@@ -162,7 +162,7 @@ The policy travels with the code, in the repository, reviewed like any other cha
 
 TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] before you start. It is four lines, and it is the entire governance model for this lab.
 
-== The Low-Risk Path
+== Remediating a Low-Risk Application
 
 Start with the easy one. Playing the Lightwell release engineer role once more, you will publish a remediated build of a dependency that `benefits-mgmt-app` declares directly in its `pom.xml`.
 
@@ -432,7 +432,7 @@ The application keeps serving traffic throughout. That is not a staging trick: t
 // stable per-app URL, add it here so students can load the running application
 // and see it working after the rollout.
 
-== The Higher-Risk Path
+== Remediating a High-Risk Application
 
 Publish a remediation for a dependency that `wire-transfer-svc` declares — the payment-critical, PCI-scoped service. Run the following command in the terminal on the right:
 
