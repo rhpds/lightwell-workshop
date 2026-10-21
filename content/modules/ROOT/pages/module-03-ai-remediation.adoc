@@ -164,7 +164,7 @@ TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https:/
 
 === What Is Actually Running
 
-Before changing anything, look at what you are about to change. Open the https://console-openshift-console.{openshift_cluster_ingress_domain}[OpenShift Console^] and sign in with `{user}` / `{password}`, the same credentials as everything else in this lab.
+Before changing anything, look at what you are about to change. Switch to the *OpenShift Console* tab on the right (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]) and sign in with `{user}` / `{password}` if needed.
 
 In the left-hand menu choose *Workloads* → *Topology*, then set *Project* to `{user}-app`. That namespace holds the running Acme applications — not the build pipelines, not the orchestration, just the three deployments serving traffic:
 
