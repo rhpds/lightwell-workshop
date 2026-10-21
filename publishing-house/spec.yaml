@@ -42,7 +42,7 @@ spec:
   - id: module-03
     title: "Full Automation \u2014 AI-Assisted Remediation"
     duration_min: 30
-    status: not_started
+    status: in_progress
   - id: module-04
     title: "Wrap-Up"
     duration_min: 5
