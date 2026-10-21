@@ -24,7 +24,7 @@ The key integration point is the *java-remediated* preset from `lightwell-experi
 * Adds a custom regex manager that reads `pom.xml` and looks up versions in the Lightwell repository
 * Uses a versioning scheme that only bumps the `.rhlw-NNNNN` suffix — keeping the upstream version the same
 
-Open https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] (username: `{user}`, password: `{password}`). Navigate to the `acme-{guid}/report-generator-app` repository and open `renovate.json`. You will see it extends the Lightwell preset:
+Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `{user}` / `{password}` if needed. Navigate to the `acme-{guid}/report-generator-app` repository and open `renovate.json`. You will see it extends the Lightwell preset:
 
 [source,json,role=copypaste]
 ----
@@ -135,7 +135,7 @@ NOTE: Under the hood, Renovate manages Kubernetes `RenovateJob` and `RenovatePro
 
 === Viewing Your Job in the Renovate Web UI
 
-Open the https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[Renovate web UI^] and log in with your OpenShift credentials (`{user}` / `{password}`). If you do not see `acme-{guid}/report-generator-app` listed yet, click *Run Discovery* to force Renovate to scan for your newly created RenovateJob. After a few seconds, refresh the page and your project should appear.
+Switch to the *Renovate* tab on the right (or https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[open it in a new tab^]) and log in with your OpenShift credentials (`{user}` / `{password}`). If you do not see `acme-{guid}/report-generator-app` listed yet, click *Run Discovery* to force Renovate to scan for your newly created RenovateJob. After a few seconds, refresh the page and your project should appear.
 
 image::renovate-ui-job-list.png[RenovateJob listed in the web UI,link=_images/renovate-ui-job-list.png,window=_images]
 
@@ -184,7 +184,7 @@ The script discovers your artifact manager and TPA instances automatically, publ
 
 === Verifying the Remediation in the Artifact Manager
 
-Open https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[your artifact manager^] (username: `admin`, password: `{password}`) and click *Browse* in the left navigation. Select the `lightwell-remediated` repository. Navigate to `com/fasterxml/jackson/core/jackson-databind/2.13.5.rhlw-00001/` — you should see the POM and JAR that the publish script uploaded.
+Switch to the *Nexus* tab on the right (or https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `admin` / `{password}` and click *Browse* in the left navigation. Select the `lightwell-remediated` repository. Navigate to `com/fasterxml/jackson/core/jackson-databind/2.13.5.rhlw-00001/` — you should see the POM and JAR that the publish script uploaded.
 
 NOTE: You are logging in as `admin` because this is your dedicated artifact manager — each workshop participant gets their own. In a production environment, this would be your organization's artifact repository administrator.
 
@@ -196,7 +196,7 @@ This is the artifact that Renovate will discover when it scans for new Lightwell
 
 While Renovate works in the background to detect the new remediation, verify that TPA has received the advisories and linked them to your application.
 
-Open https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] (log in via SSO with `{user}` / `{password}`) and navigate to *Advisories*. Type `RHLW` in the search box (or sort by date — the Lightwell advisories will be at the top). You should see the newly published `RHLW-` advisories for `jackson-databind`.
+Switch to the *TPA* tab on the right (or https://tpa-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in via SSO with `{user}` / `{password}` and navigate to *Advisories*. Type `RHLW` in the search box (or sort by date — the Lightwell advisories will be at the top). You should see the newly published `RHLW-` advisories for `jackson-databind`.
 
 image::tpa-rhlw-advisories.png[TPA Advisories showing the RHLW advisories for jackson-databind,link=_images/tpa-rhlw-advisories.png,window=_images]
 
@@ -221,6 +221,8 @@ Return to the https://renovate-operator-renovate-operator.{openshift_cluster_ing
 . Create a merge request (MR) in GitLab (future runs will not make a new MR if the previous one is still open)
 
 image::renovate-ui-log-mr-created.png[Renovate log showing MR created for the Lightwell remediation,link=_images/renovate-ui-log-mr-created.png,window=_images]
+
+NOTE: You may see package lookup failure warnings in the log for other dependencies. This is expected — the workshop's artifact manager only contains the remediation you just published, not the full Lightwell catalog. In production, the Lightwell registry would have remediations for many more packages.
 
 Once the run completes, the UI updates to show the created merge request with the `[Lightwell]` prefix in the title. Click the small PR link to open the MR in GitLab (login with `{user}` and `{password}` if needed):
 
@@ -251,7 +253,7 @@ Scroll down and click _Merge_ to approve the merge request and update the source
 
 === Watching the Pipeline
 
-Merging the MR triggers a Tekton CI pipeline run. Switch to the OpenShift Console (login with `{user}` and `{password}` if needed) and expand the left-side navigation menu, then navigate to *Pipelines* → *Pipelines* and click the *PipelineRuns* tab. Ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details.
+Merging the MR triggers a Tekton CI pipeline run. Switch to the *OpenShift Console* tab on the right (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in with `{user}` / `{password}` if needed, then expand the left-side navigation menu, then navigate to *Pipelines* → *Pipelines* and click the *PipelineRuns* tab. Ensure that the `build-{guid}` namespace is selected in the namespace dropdown (this is your dedicated CI namespace where pipelines run). You should see a new pipeline run for the remediated application either running or completed very recently. Click on it to view the details.
 
 image::pipeline-run-renovate.png[Tekton pipeline building the remediated app,link=_images/pipeline-run-renovate.png,window=_images]
 
@@ -269,7 +271,7 @@ At this point, the application is remediated and the new container image is buil
 
 === Comparing SBOMs — Proving the Fix
 
-This exercise demonstrates that quick wins with Lightwell are real — a remediation can go from publication to verified, signed production build with minimal effort. But a single app and a single dependency is the easy case. For true automation and enterprise integration at scale — dozens of apps, hundreds of dependencies, change management, approvals, audit trails — more is needed. We will get there in the next module. For now, let's verify the fix. Navigate to https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] (log in via SSO with `{user}` / `{password}`).
+This exercise demonstrates that quick wins with Lightwell are real — a remediation can go from publication to verified, signed production build with minimal effort. But a single app and a single dependency is the easy case. For true automation and enterprise integration at scale — dozens of apps, hundreds of dependencies, change management, approvals, audit trails — more is needed. We will get there in the next module. For now, let's verify the fix. Switch to the *TPA* tab on the right (or https://tpa-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in via SSO with `{user}` / `{password}` if needed.
 
 Click *SBOMs* → *All SBOMs* in the left navigation, then type `report-generator` into the search box. You should see two SBOMs in the list — the original `v1.0-build` and the new build from the Lightwell merge request. Compare the vulnerability counts: the remediated build should show fewer vulnerabilities than the original — the exact number depends on which CVEs the advisories matched, but you should see several Critical and Medium vulnerabilities resolved by a single dependency bump.
 

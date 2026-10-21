@@ -190,7 +190,7 @@ IMPORTANT: The webhook fires on *component created*. Re-publishing the same grou
 
 == Watching the Orchestrator Canvas
 
-Open the https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^] and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}`, and it holds the three workflows listed earlier.
+Switch to the *Ansible Orchestrator* tab on the right (or https://ao.{openshift_cluster_ingress_domain}[open it in a new tab^]) and log in with `{user}` / `{password}`. Your project is `lightwell-{guid}`, and it holds the three workflows listed earlier.
 
 image::m3-ao-workflows-start.png["The Automation Orchestrator workflow list, with Lightwell Remediation — Start highlighted",link=_images/m3-ao-workflows-start.png,window=_images]
 
@@ -227,7 +227,7 @@ The candidate list comes from TPA and nowhere else. If TPA has no SBOM containin
 
 Look at the order again. Opening the parent incident is the *first* thing *Prepare Remediation* does — before TPA is queried, before anything is classified, before a single line of anyone's `pom.xml` is read. The platform raises the ticket and then does the work, which is the opposite of how most automation behaves.
 
-Switch to the https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow^] (no login required). Your incident is at the top of the list, with the most recent state.
+Switch to the *ServiceNow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]) — no login required. Your incident is at the top of the list, with the most recent state.
 
 What you are looking at is a small hierarchy, not one ticket:
 
@@ -256,7 +256,7 @@ Leave the tab open. You will come back to it at the end, and the shape of what h
 
 In the loop, the Orchestrator tasks the `impact-analyzer` agent with creating the fix. The agent reads the application's `pom.xml`, bumps the dependency to the remediated `.rhlw` version, pushes a branch, and opens a merge request.
 
-Open https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] and go to `acme-{guid}/benefits-mgmt-app` → *Merge requests*. The title follows a fixed shape:
+Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]) and go to `acme-{guid}/benefits-mgmt-app` → *Merge requests*. The title follows a fixed shape:
 
 [source,text]
 ----
@@ -349,7 +349,7 @@ Back on the Orchestrator canvas, the *MR Verifier* node confirms the merge reque
 
 For `benefits-mgmt-app` that value is `auto_approve`, so the canvas takes the green branch to *Merge MR (auto-approved)*. The Orchestrator marks the merge request ready and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
 
-Go back to GitLab and open the merge request again. It is already merged, and the merge was performed by the automation account — you never touched it:
+Switch back to the *GitLab* tab and open the merge request again. It is already merged, and the merge was performed by the automation account — you never touched it:
 
 image::m3-mr-auto-merged.png["The merge request now showing Merged, with the full Summary table intact",link=_images/m3-mr-auto-merged.png,window=_images]
 
@@ -364,7 +364,7 @@ The decision is made from `.lightwell/policy.json` in the application's own repo
 
 == Build, Sign, Promote, Deploy
 
-Merging to `main` starts the `build-push-to-main` pipeline. Open the OpenShift Console, navigate to *Pipelines* → *Pipelines*, select the *PipelineRuns* tab, and make sure the `build-{guid}` namespace is selected. You should see the run for `benefits-mgmt-app`:
+Merging to `main` starts the build pipeline. Switch to the *OpenShift Console* tab on the right (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]), navigate to *Pipelines* → *Pipelines*, select the *PipelineRuns* tab, and make sure the `build-{guid}` namespace is selected. You should see the run for `benefits-mgmt-app`:
 
 . *Build* — compiles the application against the remediated dependency
 . *Generate SBOM* — CycloneDX SBOM, uploaded to your TPA instance
@@ -376,7 +376,7 @@ image::m3-pipeline-run.png["The PipelineRun details view for build-push-to-main,
 
 The task graph has one more box than the list above: `run-tests` and `maven-build` are separate tasks, and there is no `sign` task at all. Signing happens out of band — Tekton Chains observes the completed run and signs the image afterwards, which is why the signature shows up as the small shield badge next to the PipelineRun name rather than as a step you can watch.
 
-That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Open the https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[ArgoCD console^] (log in via OpenShift) and find the `acme-apps-{guid}` application. It syncs the new image tag and rolls the deployment in your `{user}-app` namespace.
+That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and ArgoCD does the rest. Switch to the *ArgoCD* tab on the right (or https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[open it in a new tab^]). Log in via OpenShift if needed and find the `acme-apps-{guid}` application. It syncs the new image tag and rolls the deployment in your `{user}-app` namespace.
 
 The application keeps serving traffic throughout. That is not a staging trick: the remediated dependency is the real upstream library with the fix applied, so the application genuinely runs on it.
 
@@ -476,7 +476,7 @@ image::argocd-acme-apps-synced.png[ArgoCD showing the Acme applications synced a
 
 == Proving It in TPA
 
-Open https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] and sign in through SSO with `{user}` / `{password}`. The dashboard tells you how much it is holding for this tenant, and when the last SBOM arrived — which should be the build you just watched:
+Switch to the *TPA* tab on the right (or https://tpa-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Sign in through SSO with `{user}` / `{password}` if needed. The dashboard tells you how much it is holding for this tenant, and when the last SBOM arrived — which should be the build you just watched:
 
 image::m3-tpa-dashboard.png["The Trusted Profile Analyzer dashboard showing total SBOMs, total advisories and the most recently ingested SBOM",link=_images/m3-tpa-dashboard.png,window=_images]
 
@@ -499,7 +499,7 @@ The verification is not a separate exercise bolted on at the end. The pipeline u
 
 == The Incident Closes Last
 
-Go back to the https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow^] tab you left open.
+Switch back to the *ServiceNow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]).
 
 The parent incident is now *Resolved*. Read its thread from the top — it is deliberately short, a sequence of milestones with links down into the children:
 
