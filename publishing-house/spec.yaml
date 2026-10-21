@@ -32,20 +32,20 @@ spec:
     duration_min: 5
     status: complete
   - id: module-01
-    title: "Patch Ingestion \u2014 From Lightwell to Artifactory to Ansible"
-    duration_min: 25
+    title: "The Environment"
+    duration_min: 10
     status: not_started
   - id: module-02
-    title: "Vulnerability Analysis with Trusted Profile Analyzer"
-    duration_min: 30
+    title: "Quick Win \u2014 Automated Dependency Updates"
+    duration_min: 25
     status: not_started
   - id: module-03
-    title: "AI-Assisted Remediation \u2014 Reviewing and Approving Patches"
+    title: "Full Automation \u2014 AI-Assisted Remediation"
     duration_min: 30
     status: not_started
   - id: module-04
-    title: "Build, Deploy, and Close the Loop"
-    duration_min: 30
+    title: "Wrap-Up"
+    duration_min: 5
     status: not_started
   environment:
     platform: ocp
@@ -81,8 +81,9 @@ spec:
   audience: intermediate
 development:
   automation:
+    status: complete
     gitops:
-      status: in_progress
+      status: complete
   e2e:
     status: not_started
   healthCheck:
