@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was the test harness — see Next up 0000000)
+Last updated: 2026-10-21 (showroom polish, resource sizing, revision footers, pipeline naming)
 
 ## Where the pieces live
 
@@ -23,6 +23,36 @@ Last updated: 2026-10-20 (Module 2 registry bug fixed; the second symptom was th
 
 ## Recently done
 
+- **Showroom content polish (20–21 Oct).** Renamed modules: "Automated
+  Dependency Updates" / "AI-Assisted Remediation". Removed "Path 1"/"Path 2",
+  "deterministic", "mock" terminology. Downplayed Nexus (say "artifact
+  manager", note JFrog Artifactory). Downplayed Renovate (one option,
+  not the star). Converted Module 2 to numbered steps with `+`
+  continuation. Split Module 2 and 3 into nav sub-sections. Added
+  "Using This Environment" guide to Lab Overview. Made all images
+  clickable. All console references now "Switch to the *Tab* tab".
+  Fixed lab title ("Lightwell Patch to Production"), site URL, and
+  Showroom header logo. Removed WIP warnings.
+- **Resource sizing for 10+ tenants (20 Oct).** TPA server 8Gi→512Mi,
+  importer 8Gi→128Mi requests; workdir PVC 32Gi→2Gi. Quay removed
+  entirely. AO workers scaled to 4 replicas. Storage quota 50Gi→20Gi.
+  10 tenants now fit on 3 workers (was impossible before). Capacity:
+  ~10 tenants/3 workers, ~20/4 workers, ~30/5–6 workers (16 CPU/64Gi each).
+- **Build revision footer on all 3 sample apps (20 Oct).** Multi-stage
+  Containerfile (Tomcat apps) or `USER 0` RUN (Spring Boot) writes
+  `revision.json` at build time with commit SHA, message, and date.
+  Pipeline passes `--build-arg=COMMIT_SHA` and single-quoted
+  `'--build-arg=COMMIT_MSG'` (spaces survive `xargs -n1` in buildah
+  task). Footer displays "Build: sha · message · X minutes ago".
+- **Pipeline run names include app name (21 Oct).** `build-push-to-main`
+  → `wire-transfer-svc-build`, `benefits-mgmt-app-build`,
+  `report-generator-app-build`. Easier to identify in OpenShift console.
+- **AgnosticV PRs (20 Oct):**
+  - #28658 — Showroom tabs: Renovate, ServiceNow, ArgoCD + reorder
+  - #28660 — Move workshop UI language from cluster to tenant CI
+  - #28661 — Bump tenant health retries to 180
+- **benefits-mgmt-app fixes (20 Oct).** SSO disabled (fixed 15s load
+  delay). Red "ACME INC. BENEFITS MANAGEMENT" header. Mock API servlet.
 - **All seven validation rows now measured, and a green table is the merge
   gate (21 Oct).** Lives in the **app repos** (`redhat-ads-tech/*`,
   `.tekton/build-pull-request.yaml`), not here. Licence was Pending only on
