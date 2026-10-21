@@ -50,7 +50,7 @@ oc login -u {user} -p {password} https://kubernetes.default.svc:443 --insecure-s
 
 You should see `Login successful` and your user name displayed. This gives you access to your dedicated namespaces on the cluster.
 
-=== Creating the RenovateJob
+=== Creating the Scan Job
 
 Renovate is already installed on the cluster. A `renovate-runner` service account and its credentials are provisioned in your namespace. Create a `RenovateJob` custom resource to tell Renovate what to scan — run the following command in the terminal on the right:
 
@@ -137,7 +137,7 @@ Here is what the key fields do:
 
 NOTE: Under the hood, Renovate manages Kubernetes `RenovateJob` and `RenovateProject` custom resources. You can inspect them with `oc get renovatejobs` and `oc get renovateprojects`. In a production environment, these resources would typically be managed by ArgoCD alongside your other GitOps-managed infrastructure.
 
-=== Viewing Your Job in the Renovate Web UI
+=== Viewing Your Scan Job
 
 . Switch to the *Renovate* tab on the right (or https://renovate-operator-renovate-operator.{openshift_cluster_ingress_domain}[open it in a new tab^]) and log in with your OpenShift credentials (`{user}` / `{password}`). If you do not see `acme-{guid}/report-generator-app` listed yet, click *Run Discovery* to force Renovate to scan for your newly created RenovateJob. After a few seconds, refresh the page and your project should appear.
 +
@@ -216,7 +216,7 @@ image::tpa-rhlw-related-sboms.png[TPA showing report-generator-app in the Relate
 +
 image::tpa-sbom-vulns-before.png[TPA showing the total vulnerability count for report-generator-app before remediation,link=_images/tpa-sbom-vulns-before.png,window=_images]
 
-=== Watching Renovate React
+=== Detecting the Remediation
 
 . Return to the *Renovate* tab and click *Trigger* or *Trigger All* to force an immediate run (or it may have already automatically run if you waited long enough.)
 . Once the execution starts or has completed, click *Logs* to see what it did (you can expand each log entry to see details). This time you will see Renovate:
