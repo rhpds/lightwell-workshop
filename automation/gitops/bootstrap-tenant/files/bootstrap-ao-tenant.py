@@ -139,8 +139,21 @@ def ensure_project(client: AoClient, name: str, description: str) -> str:
     return created["id"]
 
 
-# AO local-user policy (seen on create): password min length 14.
+# AO local-user policy (seen on create): password min length 14, and at
+# least 3 of {digits, uppercase, lowercase, punctuation/space}.
 AO_USER_PASSWORD_MIN_LEN = 14
+AO_USER_PASSWORD_MIN_CLASSES = 3
+
+
+def password_classes(password: str) -> int:
+    import string
+
+    return sum((
+        any(c.isdigit() for c in password),
+        any(c.isupper() for c in password),
+        any(c.islower() for c in password),
+        any(c in string.punctuation + " " for c in password),
+    ))
 
 
 def ensure_user(client: AoClient, username: str, password: str, email: str) -> str:
@@ -149,6 +162,23 @@ def ensure_user(client: AoClient, username: str, password: str, email: str) -> s
     if existing:
         print(f"AO user exists: {username} ({existing['id']})")
         return existing["id"]
+    # Checked before calling AO so the failure names itself. RHDP's
+    # common_password is alphanumeric but does not guarantee a digit, so a
+    # letters-only password turns up roughly one tenant in twelve and AO
+    # rejects it with a 422 that is easy to misread as an AO outage.
+    classes = password_classes(password)
+    if classes < AO_USER_PASSWORD_MIN_CLASSES:
+        print(
+            f"ERROR: the tenant password has only {classes} character "
+            f"class(es); AO requires >= {AO_USER_PASSWORD_MIN_CLASSES} of "
+            "digits / uppercase / lowercase / punctuation. This comes from "
+            "RHDP's common_password, so it cannot be fixed here: re-order the "
+            "tenant to draw a new one, or set a compliant `password` chart "
+            "value. Until then AO has no user and the tenant gets no AAP job "
+            "templates, which surfaces as 'job start fail' in the canvas.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if len(password) < AO_USER_PASSWORD_MIN_LEN:
         print(
             f"ERROR: AO user password is {len(password)} chars; AO requires "
@@ -227,6 +257,17 @@ def ensure_role_assignment(
         },
     )
     if code not in (200, 201):
+        # AO returns 422 "Role 'x' is already assigned to user 'y'" when the
+        # role is there from a previous attempt. This hook is retried by Argo,
+        # so a second run hits that every time -- treating it as fatal left
+        # ao-bootstrap looping forever, which in turn left the tenant with no
+        # AAP job templates and AO reporting "job start fail".
+        detail = ""
+        if isinstance(created, dict):
+            detail = str(created.get("detail") or created)
+        if code == 422 and "already assigned" in detail.lower():
+            print(f"{role_name} already assigned on project; continuing")
+            return
         print(f"ERROR: role assignment failed: {code} {created}", file=sys.stderr)
         sys.exit(1)
     print(f"Assigned {role_name} on project")
