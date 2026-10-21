@@ -136,7 +136,7 @@ NOTE: The `report-generator-app` you remediated in Module 2 never enters this lo
 
 == Two Applications, Two Policies
 
-Each repository carries a `.lightwell/policy.json` file. It is the only thing that decides whether a human is interrupted:
+Each repository carries a `.lightwell/policy.json` file. It is the primary control that decides whether a human is interrupted — but it is not the only one. If any step in the merge request pipeline fails (unit tests, regression scan, licence compliance), the merge is blocked regardless of policy, and the change requires human review:
 
 [cols="2,1,1,3",options="header"]
 |===
@@ -238,7 +238,7 @@ The children are where the detail goes. Each application's loop iteration commen
 
 The comments are not just prose, either. Open one and the merge request, the pipeline run and (later) the ArgoCD application and the running route are all clickable, so the ticket is a working console rather than a transcript.
 
-Your two incidents are at the top of the list, both raised by *Lightwell AO*. Open the parent — the one whose description starts with *remediate*:
+Your two incidents are at the top of the list, both raised by *Lightwell AO* (Ansible Orchestrator). Open the parent — the one whose description starts with *remediate*:
 
 image::m3-snow-incident-list.png["The ServiceNow incident list with the parent remediation incident highlighted",link=_images/m3-snow-incident-list.png,window=_images]
 
