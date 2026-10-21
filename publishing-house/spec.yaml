@@ -38,7 +38,7 @@ spec:
   - id: module-02
     title: "Quick Win \u2014 Automated Dependency Updates"
     duration_min: 25
-    status: not_started
+    status: in_progress
   - id: module-03
     title: "Full Automation \u2014 AI-Assisted Remediation"
     duration_min: 30
