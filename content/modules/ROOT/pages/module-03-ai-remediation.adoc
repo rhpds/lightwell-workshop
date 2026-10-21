@@ -182,7 +182,7 @@ Under *Resources* you get the three things worth knowing: the *Pod* and whether 
 
 [NOTE]
 ====
-Keep this tab open. Nothing here changes while the remediation runs — the agent is working in GitLab, not in the cluster. The pod you are looking at now is the *old* one, still running the vulnerable dependency.
+Leave this view as it is — we will come back to it. Nothing here changes while the remediation runs — the agent is working in GitLab, not in the cluster. The pod you are looking at now is the *old* one, still running the vulnerable dependency.
 
 Later in this module, after the merge request is merged and the build completes, ArgoCD will replace it. Come back to this view then: the deployment name is unchanged, but the pod name will be different, because it is a different pod running a different image. That substitution — with nobody touching the cluster — is the whole point of the exercise.
 ====
@@ -448,7 +448,7 @@ image::argocd-acme-apps-synced.png["The ArgoCD application for acme-apps with th
 
 Nothing here was triggered by a person, and the pipeline deployed nothing. It changed a file in git; ArgoCD reconciled the cluster to match. The answer to "what is running, and why" is a commit.
 
-Now go back to the *Topology* tab you left open and refresh it. The deployment is still called `benefits-mgmt-app-prod` and the ring is still complete — but click it and compare the pod name with the one you noted earlier. It is different. The old pod is gone and a new one is serving traffic, built from the remediated dependency, and nobody connected to the cluster to make that happen.
+Now go back to the *Topology* view from earlier and refresh it. The deployment is still called `benefits-mgmt-app-prod` and the ring is still complete — but click it and compare the pod name with the one you noted earlier. It is different. The old pod is gone and a new one is serving traffic, built from the remediated dependency, and nobody connected to the cluster to make that happen.
 
 The application keeps serving traffic throughout. That is not a staging trick: the remediated dependency is the real upstream library with the fix applied, so the application genuinely runs on it.
 
