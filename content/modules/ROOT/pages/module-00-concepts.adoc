@@ -17,16 +17,11 @@ image::lightwell-product-icon.png["Lightwell product icon: a translucent red cub
 
 That matters because the slow part of patching is rarely the patch. It is finding a fixed version you trust, or backporting one yourself, and then proving to everyone downstream that it is safe to take. Lightwell removes that step. This lab exists to show what you can build once it is gone: if a trustworthy fixed artifact simply arrives, remediation becomes plumbing — notice the new build, work out which applications use the component, raise the change, ship it. The rest of this lab automates that plumbing two different ways.
 
-=== The Network and the Clearinghouse
+=== How Lightwell Delivers Remediations
 
-Lightwell is offered in two forms, and both names come up in this lab:
+Lightwell publishes remediated artifacts through Red Hat secured repositories that you pull into your build alongside the public repositories you already use. When an eligible open source vulnerability is addressed, the signed rebuild lands in those repositories automatically — no manual download, no backporting on your end.
 
-* *Lightwell Network* — self-service access to signed libraries, remediations, and patched artifacts for eligible open source vulnerabilities as they are published, served from Red Hat secured repositories and pulled into your build alongside the public repositories you already use. This is where most organisations start, and it is the part the lab exercises end to end.
-* *Lightwell Clearinghouse* — everything the Network provides, plus the ability to request remediation of a specific vulnerability or package within an agreed scope, with verification, coordinated disclosure, and dedicated Red Hat security account support. It is a selective, higher-touch engagement rather than a self-service feed.
-
-The split is worth holding on to: the Clearinghouse is about *what gets remediated for you*, the Network is *how the result reaches you*. Everything downstream of that — the merge request, the build, the deployment — is the same either way, and it is what you will spend the rest of the lab automating.
-
-Module 1 introduces the Lightwell Network as a simulated repository inside your own artifact manager. From there on, every remediation you see begins as an artifact landing in it.
+Module 1 introduces Lightwell as a simulated repository inside your own artifact manager. From there on, every remediation you see begins as an artifact landing in it.
 
 == What is a CVE?
 
@@ -97,7 +92,7 @@ Each step is individually reasonable. Together they routinely take *weeks* — a
 Three things make it slow, and Lightwell attacks all three:
 
 * *Finding what is affected is manual.* Solved by SBOM data in RHTPA — a query, not an investigation.
-* *Sourcing a trustworthy fix is manual.* Solved by the *Lightwell Network*, which publishes remediated, signed builds of open source components. You will see these as versions carrying an `.rhlw-NNNNN` suffix, for example `1.4.0.rhlw-00001` — a remediated build of `1.4.0` that keeps the original API.
+* *Sourcing a trustworthy fix is manual.* Solved by *Lightwell*, which publishes remediated, signed builds of open source components. You will see these as versions carrying an `.rhlw-NNNNN` suffix, for example `1.4.0.rhlw-00001` — a remediated build of `1.4.0` that keeps the original API.
 * *Producing and shipping the change is manual.* Solved by the automation you are about to use — from event-driven triggers through merge requests to signed builds and automatic deployment.
 
 == Two Paths Through This Lab
@@ -112,7 +107,7 @@ The simplest path. No AI, no orchestration. https://docs.renovatebot.com/[Renova
 [mermaid, role=expand]
 ----
 flowchart TB
-  LW["Lightwell<br/>Network"]
+  LW["Lightwell<br/>Repository"]
   NX["Nexus<br/>mirror"]
   RN["Renovate"]
   MR["GitLab<br/>merge request"]
@@ -133,7 +128,7 @@ The enterprise path. An event-driven workflow queries RHTPA to find affected app
 [mermaid, role=expand]
 ----
 flowchart TB
-  LW["Lightwell<br/>Network"]
+  LW["Lightwell<br/>Repository"]
   NX["Nexus<br/>mirror"]
   AO["Ansible<br/>Orchestrator"]
   TPA["RHTPA<br/>SBOM analysis"]
@@ -157,7 +152,7 @@ You will use this path to remediate the `wire-transfer-svc` (high risk, needs yo
 
 === What They Share
 
-Both paths start with the same event (a remediated artifact arriving from the Lightwell Network) and end the same way (a signed container deployed to production with an updated SBOM). Full automation adds orchestration, AI-powered risk assessment, and ITSM tracking on top of what the quick win path already provides.
+Both paths start with the same event (a remediated artifact arriving from Lightwell) and end the same way (a signed container deployed to production with an updated SBOM). Full automation adds orchestration, AI-powered risk assessment, and ITSM tracking on top of what the quick win path already provides.
 
 NOTE: In this lab, deployment goes straight to production. Real-world customers typically add stages (test, staging, production), each with its own approval gate.
 

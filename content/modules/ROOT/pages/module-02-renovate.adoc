@@ -162,7 +162,7 @@ When Red Hat publishes a new Lightwell remediation, two things happen:
 
 The OSV metadata is key: Red Hat publishes machine-readable https://ossf.github.io/osv-schema/[OSV^] vulnerability data for every Lightwell remediation. This allows security scanners, SBOMs, and platforms like TPA to automatically recognize which CVEs a given `.rhlw` version resolves — closing the loop between remediation and verification without manual triage.
 
-In this lab, you will play the role of the Lightwell Network and publish a new remediation for Jackson Databind (one of the vulnerable dependencies in `report-generator-app`). Run the following command in the terminal on the right:
+For this step, you will briefly play the role of a Lightwell release engineer and publish a new remediation for Jackson Databind (one of the vulnerable dependencies in `report-generator-app`). Run the following command in the terminal on the right:
 
 [source,bash,role=execute,subs=attributes+]
 ----
@@ -297,7 +297,7 @@ That is the Lightwell value in one screenshot: the same application, the same up
 
 You have just completed the *Quick Win* path:
 
-. A remediated artifact and its OSV vulnerability metadata arrived from the Lightwell Network
+. A remediated artifact and its OSV vulnerability metadata arrived from Lightwell
 . TPA immediately flagged the unpatched dependency as vulnerable based on the published advisories
 . The dependency management tool detected the new `.rhlw` version and created a merge request
 . You reviewed and approved the change

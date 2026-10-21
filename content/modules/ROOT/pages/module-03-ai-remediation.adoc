@@ -164,7 +164,7 @@ TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https:/
 
 == The Low-Risk Path
 
-Start with the easy one. You are playing the Lightwell Network again, publishing a remediated build of a dependency that `benefits-mgmt-app` declares directly in its `pom.xml`.
+Start with the easy one. Playing the Lightwell release engineer role once more, you will publish a remediated build of a dependency that `benefits-mgmt-app` declares directly in its `pom.xml`.
 
 Run the following command in the terminal on the right:
 

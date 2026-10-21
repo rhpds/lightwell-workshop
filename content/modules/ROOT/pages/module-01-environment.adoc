@@ -52,9 +52,9 @@ All three applications are stored in your GitLab instance under the `acme-{guid}
 
 You will visit these as needed throughout the lab.
 
-=== Lightwell Network (Simulated)
+=== Lightwell Repository (Simulated)
 
-The Lightwell Network publishes remediated, signed builds of open source components — the `.rhlw-NNNNN` versions you read about in Module 0. In a production environment, these would be fetched from `packages.redhat.com` with an active Lightwell subscription.
+Lightwell publishes remediated, signed builds of open source components — the `.rhlw-NNNNN` versions you read about in Module 0. In a production environment, these would be fetched from `packages.redhat.com` with an active Lightwell subscription.
 
 For this lab, a *simulated* Lightwell repository is hosted in your dedicated artifact manager (Sonatype Nexus). It contains the same artifact structure as the real Lightwell repository — Maven metadata, POMs, and JARs with `.rhlw` version suffixes — so the automation behaves identically. The artifact manager also serves as a Maven build cache and an OCI container registry for your built images. In production, any Maven-compatible artifact manager works — JFrog Artifactory, Sonatype Nexus, or even a simple Maven proxy.
 
