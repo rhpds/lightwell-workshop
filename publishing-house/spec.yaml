@@ -46,7 +46,7 @@ spec:
   - id: module-04
     title: "Wrap-Up"
     duration_min: 5
-    status: not_started
+    status: in_progress
   environment:
     platform: ocp
     topology: shared-cluster
