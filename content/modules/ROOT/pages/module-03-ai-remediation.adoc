@@ -189,7 +189,7 @@ Later in this module, after the merge request is merged and the build completes,
 
 == Logging In to OpenShift
 
-The commands in this module use `oc` (the OpenShift CLI) to interact with your cluster. Log in as your tenant user by running the following command in the terminal on the right:
+The commands in this module use `oc` (the OpenShift CLI) to interact with your cluster. If you already logged in during Module 2 and the terminal still shows your user name for `oc whoami`, skip this step. Otherwise log in as your tenant user by running the following command in the terminal on the right:
 
 [source,bash,role=execute,subs=attributes+]
 ----
@@ -198,9 +198,7 @@ oc login -u {user} -p {password} https://kubernetes.default.svc:443 --insecure-s
 
 You should see `Login successful` and your user name displayed. This gives you access to your dedicated namespaces on the cluster.
 
-Run it even if you already logged in during Module 2 — logging in twice is harmless, and the terminal loses its session if the Showroom pod restarts.
-
-NOTE: Without this, `oc` falls back to the Showroom pod's own service account, which cannot read your artifact manager. The script below stops with an error telling you to come back here.
+NOTE: Without a login, `oc` falls back to the Showroom pod's own service account, which cannot read your artifact manager. The script below stops with an error telling you to come back here. The session is also lost if the Showroom pod restarts, so come back here if that error appears later in the module.
 
 == Remediating a Low-Risk Application
 
