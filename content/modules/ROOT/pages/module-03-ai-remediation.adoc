@@ -7,7 +7,7 @@ include::partial$lab-access.adoc[]
 
 Module 2 ended with a deliberate limitation: Renovate found one dependency in one repository and asked you to merge it. That works until the day Lightwell publishes forty remediations across sixty repositories, and "ask a human to merge it" stops being a strategy.
 
-This module walks through the same remediation event, handled by the platform instead of by you. An Ansible Orchestrator workflow opens a ServiceNow incident, asks Trusted Profile Analyzer which applications are actually affected, applies each application's own approval policy, and dispatches an AI agent to write the merge request. The pipeline then tests the change and writes the results back into the merge request body, so that when a human *is* asked to decide, they are reading evidence rather than guessing.
+This module walks through the same remediation event, handled by the platform instead of by you. An Ansible Orchestrator workflow opens a Snow incident, asks Trusted Profile Analyzer which applications are actually affected, applies each application's own approval policy, and dispatches an AI agent to write the merge request. The pipeline then tests the change and writes the results back into the merge request body, so that when a human *is* asked to decide, they are reading evidence rather than guessing.
 
 You will remediate two of your three applications:
 
@@ -46,7 +46,7 @@ Before diving into the hands-on steps, this section compares what changes betwee
 
 | Audit trail
 | Git history only
-| A ServiceNow incident, commented at every stage
+| A Snow incident, commented at every stage
 
 | Build, sign, deploy
 | Shared — Tekton, OCI registry, ArgoCD, TPA
@@ -75,7 +75,7 @@ Your project contains *three* workflows, not one, and the split is the first thi
 | ArgoCD reports the application healthy. Closes the incident out.
 |===
 
-They are separate because the Orchestrator cannot pause a run and resume it on an outside event. Rather than hold a job open for the hours a human review might take, each stage is its own short execution, woken by a webhook. The ServiceNow incident is what ties them back into one story.
+They are separate because the Orchestrator cannot pause a run and resume it on an outside event. Rather than hold a job open for the hours a human review might take, each stage is its own short execution, woken by a webhook. The Snow incident is what ties them back into one story.
 
 .Start: from artifact to reviewable merge request
 [mermaid]
@@ -265,7 +265,7 @@ The candidate list comes from TPA and nowhere else. If TPA has no SBOM containin
 
 Look at the order again. Opening the parent incident is the *first* thing *Prepare Remediation* does — before TPA is queried, before anything is classified, before a single line of anyone's `pom.xml` is read. The platform raises the ticket and then does the work, which is the opposite of how most automation behaves.
 
-Switch to the *ServiceNow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]) — no login required. Your incident is at the top of the list, with the most recent state.
+Switch to the *Snow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]) — no login required. Your incident is at the top of the list, with the most recent state.
 
 What you are looking at is a small hierarchy, not one ticket:
 
@@ -278,7 +278,7 @@ The comments are not just prose, either. Open one and the merge request, the pip
 
 Your two incidents are at the top of the list, both raised by *Lightwell AO* (Ansible Orchestrator). Open the parent — the one whose description starts with *remediate*:
 
-image::m3-snow-incident-list.png["The ServiceNow incident list with the parent remediation incident highlighted",link=_images/m3-snow-incident-list.png,window=_images]
+image::m3-snow-incident-list.png["The Snow incident list with the parent remediation incident highlighted",link=_images/m3-snow-incident-list.png,window=_images]
 
 image::m3-snow-parent-incident.png["The parent incident, showing the blast-radius classification and the child tickets it opened",link=_images/m3-snow-parent-incident.png,window=_images]
 
@@ -510,7 +510,7 @@ Compare that with the low-risk run earlier, where the same condition ticked `Tru
 *The pause lives in GitLab, not in the Orchestrator.* There is no approve button on the canvas and no task in a queue waiting for you to tick it. The human gate is the merge request itself — the artifact that actually carries the evidence — rather than a prompt in an automation tool that quotes a ticket number at you.
 ====
 
-Check ServiceNow first. The child incident for `wire-transfer-svc` records that the merge request is ready and hands the decision to you — *please review and merge in GitLab when you are satisfied; CI/CD will continue from there*:
+Check Snow first. The child incident for `wire-transfer-svc` records that the merge request is ready and hands the decision to you — *please review and merge in GitLab when you are satisfied; CI/CD will continue from there*:
 
 image::m3-hr-snow-awaiting-merge.png["The wire-transfer-svc child incident showing the remediation is ready for review under the needs_approval policy",link=_images/m3-hr-snow-awaiting-merge.png,window=_images]
 
@@ -628,7 +628,7 @@ The verification is not a separate exercise bolted on at the end. The pipeline u
 
 == The Incident Closes Last
 
-Switch back to the *ServiceNow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]).
+Switch back to the *Snow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]).
 
 The parent incident is now *Resolved*. Read its thread from the top — it is deliberately short, a sequence of milestones with links down into the children:
 
@@ -657,7 +657,7 @@ You have just run the *Full Automation* path end to end:
 
 . You published a remediated artifact; the artifact manager raised a `component CREATED` event
 . Event-Driven Ansible acted as a sensor and started the Orchestrator workflow
-. The Orchestrator opened a ServiceNow incident before proposing any change
+. The Orchestrator opened a Snow incident before proposing any change
 . TPA answered which applications were genuinely affected, from SBOM data
 . Each application was classified against its own `.lightwell/policy.json`
 . The `impact-analyzer` agent opened a merge request carrying CVE data, risk class and a validation table

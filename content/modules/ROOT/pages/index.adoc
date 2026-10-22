@@ -2,7 +2,7 @@
 
 This lab demonstrates how https://www.redhat.com/lightwell[Lightwell^], combined with the Red Hat application platform — OpenShift Pipelines, OpenShift GitOps, Trusted Software Supply Chain, Ansible Automation Platform, and Red Hat AI — transforms open source vulnerability remediation from a weeks-long manual process into a continuous, automated operation that takes minutes.
 
-You will work through two remediation paths — a quick win using https://docs.renovatebot.com/[Renovate^] (an open source dependency update tool that automatically creates merge requests when newer package versions are available), and a full automation path using Ansible Orchestrator, AI coding agents running on https://opencode.ai/[OpenCode^], and ServiceNow — and see a CVE go from detection to deployed fix in minutes.
+You will work through two remediation paths — a quick win using https://docs.renovatebot.com/[Renovate^] (an open source dependency update tool that automatically creates merge requests when newer package versions are available), and a full automation path using Ansible Orchestrator, AI coding agents running on https://opencode.ai/[OpenCode^], and Snow — and see a CVE go from detection to deployed fix in minutes.
 
 == Lab Modules
 

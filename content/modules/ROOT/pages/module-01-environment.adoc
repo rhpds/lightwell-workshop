@@ -29,11 +29,11 @@ You will visit these as needed throughout the lab.
 
 === Red Hat OpenShift
 
-The application platform underneath everything in this lab. Every component listed below — GitLab, Nexus, TPA, ArgoCD, Ansible Orchestrator, ServiceNow, and the AI agents — runs on OpenShift. The platform provides the develop, secure, deploy, and monitor capabilities they all rely on: container builds and image registries, role-based access control and security context constraints, operator-managed infrastructure, service networking, and the web console you will use to observe pipelines, deployments, and pod health. Whether you are running a quick dependency bump or a full AI-assisted remediation, OpenShift is the platform that makes the pipeline possible.
+The application platform underneath everything in this lab. Every component listed below — GitLab, Nexus, TPA, ArgoCD, Ansible Orchestrator, Snow, and the AI agents — runs on OpenShift. The platform provides the develop, secure, deploy, and monitor capabilities they all rely on: container builds and image registries, role-based access control and security context constraints, operator-managed infrastructure, service networking, and the web console you will use to observe pipelines, deployments, and pod health. Whether you are running a quick dependency bump or a full AI-assisted remediation, OpenShift is the platform that makes the pipeline possible.
 
 === Ansible Orchestrator
 
-Drives the full automation workflow. Receives events from the artifact manager, dispatches queries to TPA, hands off to AI agents, and tracks the entire flow through ServiceNow.
+Drives the full automation workflow. Receives events from the artifact manager, dispatches queries to TPA, hands off to AI agents, and tracks the entire flow through Snow.
 
 * *Quick Win:* Not used.
 * *Full Automation:* Orchestrates the entire remediation pipeline end to end.
@@ -73,9 +73,9 @@ A dependency update tool that creates merge requests when it finds newer version
 * *Quick Win:* You create a RenovateJob and watch it generate merge requests.
 * *Full Automation:* Not used — the AI agents handle remediation instead.
 
-=== ServiceNow
+=== Snow
 
-A lightweight ServiceNow implementation for this workshop. Provides an audit trail from detection through deployment.
+Snow is the IT Service Management (ITSM) ticketing system used in this lab to track remediation from detection through deployment. In production, any ITSM platform works here — ServiceNow, Jira Service Management, BMC Helix, or Freshservice, for example.
 
 * *Quick Win:* Not used.
 * *Full Automation:* The Ansible Orchestrator opens a ticket at the start and updates it at every stage — TPA analysis, AI assessment, MR creation, build, deploy, and closure.

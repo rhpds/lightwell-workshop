@@ -122,9 +122,9 @@ You will use this path to remediate the *report-generator-app* — a low-risk in
 
 === Full Automation — AI-Assisted Remediation
 
-The enterprise path. An event-driven workflow queries RHTPA to find affected applications, dispatches AI coding agents running on https://opencode.ai/[OpenCode^] to write the change, and maintains a ServiceNow ticket throughout. Whether a human signs off is decided by each application's own policy file, not by the agent: low-risk applications merge automatically, high-risk ones wait for a reviewer.
+The enterprise path. An event-driven workflow queries RHTPA to find affected applications, dispatches AI coding agents running on https://opencode.ai/[OpenCode^] to write the change, and maintains a Snow ITSM ticket throughout. Whether a human signs off is decided by each application's own policy file, not by the agent: low-risk applications merge automatically, high-risk ones wait for a reviewer.
 
-.Full Automation: Lightwell + Ansible Orchestrator + AI + ServiceNow (click to enlarge)
+.Full Automation: Lightwell + Ansible Orchestrator + AI + Snow (click to enlarge)
 [mermaid, role=expand]
 ----
 flowchart TB
@@ -137,7 +137,7 @@ flowchart TB
   TK["Tekton<br/>build + sign"]
   AC["ArgoCD<br/>deploy"]
   OS["OpenShift<br/>production"]
-  SN["ServiceNow<br/>updated throughout"]
+  SN["Snow<br/>updated throughout"]
   LW --> NX --> AO --> TPA --> AI --> MR --> TK --> AC --> OS
   AO -.-> SN
   TPA -.-> SN

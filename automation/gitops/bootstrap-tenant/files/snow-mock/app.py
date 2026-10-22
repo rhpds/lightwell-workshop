@@ -997,7 +997,7 @@ def update_incident(incident_number):
     inc = incidents_db[key]
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-    # Journal fields posted via PATCH become comments (ServiceNow-style)
+    # Journal fields posted via PATCH become comments (Snow-style)
     journal = {}
     for jk in ("additional_comments", "work_notes", "comment"):
         if jk in request.json and request.json[jk]:

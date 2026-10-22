@@ -27,10 +27,10 @@ browser windows — the links are there if you prefer your own tab.
 | https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^]
 | `{user}` / `{password}` (SSO)
 
-| https://ao.{openshift_cluster_ingress_domain}[Automation Orchestrator^]
+| https://ao.{openshift_cluster_ingress_domain}[Ansible Orchestrator^]
 | `{user}` / `{password}`
 
-| https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[ServiceNow^]
+| https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[Snow^]
 | (no login required)
 |===
 
