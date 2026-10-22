@@ -12,4 +12,4 @@
 ** xref:module-03-ai-remediation.adoc#_remediating_a_low_risk_application[Remediating a Low-Risk Application]
 ** xref:module-03-ai-remediation.adoc#_remediating_a_high_risk_application[Remediating a High-Risk Application]
 ** xref:module-03-ai-remediation.adoc#_summary[Summary]
-* xref:module-04-wrapup.adoc[Module 4: Wrap-Up]
+* xref:conclusion.adoc[Module 4: Wrap-Up]

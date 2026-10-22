@@ -13,7 +13,7 @@ You will work through two remediation paths — a quick win using https://docs.r
 | 1 | xref:module-01-environment.adoc[The Environment] | 10 min
 | 2 | xref:module-02-renovate.adoc[Quick Win — Automated Dependency Updates] | 25 min
 | 3 | xref:module-03-ai-remediation.adoc[Full Automation — AI-Assisted Remediation] | 30 min
-| 4 | xref:module-04-wrapup.adoc[Wrap-Up] | 5 min
+| 4 | xref:conclusion.adoc[Wrap-Up] | 5 min
 | | *Total* | *~75 min*
 |===
 

@@ -664,4 +664,4 @@ The difference from the quick win path is not "AI wrote the merge request". It i
 
 Scale is what makes this necessary. One remediation a week is a Renovate problem. Forty a week across sixty repositories, each needing a risk judgement and an audit trail, is an orchestration problem — and the only way a human stays in the loop at that volume is if the loop stops bothering them about `benefits-mgmt-app`.
 
-Continue to xref:module-04-wrapup.adoc[Module 4: Wrap-Up].
+Continue to xref:conclusion.adoc[Module 4: Wrap-Up].
