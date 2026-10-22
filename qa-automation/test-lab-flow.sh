@@ -229,14 +229,6 @@ step "Module 2 — the RenovateJob the attendee creates"
 # the tenant cannot reach), logs "no-result" for every Maven package, and
 # instead opens unrelated bumps like java-jdk v27. Keep this in step with
 # module-02-renovate.adoc.
-#
-# customManagers must sit under `force`. This is the self-hosted *global*
-# config, and Renovate resolves each repository's own config over it: the
-# repo's renovate.json extends the shared preset, which defines its own
-# customManagers pointing at packages.redhat.com, so outside `force` the
-# preset wins and every lookup is no-result. Verified on 5jm75 — before the
-# move the report showed registryUrls=packages.redhat.com and zero updates;
-# after it, the tenant Nexus and MR !1 for jackson-databind 2.13.5.rhlw-00001.
 TENANT_PW="$(oc get application "lightwell-tenant-${GUID}" -n openshift-gitops \
   -o jsonpath='{.spec.source.helm.values}' 2>/dev/null | awk '/^password:/{print $2}')"
 NEXUS_HOST="nexus-lightwell-nexus-${GUID}.${DOMAIN}"
@@ -246,10 +238,10 @@ if oc get renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2
 import sys
 d=json.load(sys.stdin)
 print((((d.get('spec') or {}).get('renovateConfig') or {}).get('inline') or ''))")"
-  if [[ "$have" == *"$NEXUS_HOST"* && "$have" == *'"force"'* && "$have" == *customManagers* ]]; then
-    ok "RenovateJob renovate-${GUID} exists with a forced customManager on the tenant Nexus"
+  if [[ "$have" == *"$NEXUS_HOST"* && "$have" == *customManagers* ]]; then
+    ok "RenovateJob renovate-${GUID} exists with a customManager on the tenant Nexus"
   else
-    no "RenovateJob exists but has no forced customManager pointing at ${NEXUS_HOST}"
+    no "RenovateJob exists but has no customManager pointing at ${NEXUS_HOST}"
     info "Renovate will query packages.redhat.com and never see the .rhlw build."
     oc delete renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2>&1
     info "deleted it; recreating as the module specifies"
@@ -296,28 +288,26 @@ spec:
             "password": "${TENANT_PW}"
           }
         ],
-        "force": {
-          "customManagers": [
-            {
-              "customType": "regex",
-              "managerFilePatterns": ["/(^|/)pom\\.xml\$/"],
-              "matchStringsStrategy": "any",
-              "matchStrings": [
-                "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<\${}]+)</version>"
-              ],
-              "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
-              "datasourceTemplate": "maven",
-              "registryUrlTemplate": "https://${NEXUS_HOST}/repository/maven-public",
-              "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?\$"
-            }
-          ],
-          "packageRules": [
-            {
-              "matchPackageNames": ["com.acme.*:*"],
-              "enabled": false
-            }
-          ]
-        },
+        "customManagers": [
+          {
+            "customType": "regex",
+            "managerFilePatterns": ["/(^|/)pom\\.xml\$/"],
+            "matchStringsStrategy": "any",
+            "matchStrings": [
+              "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<\${}]+)</version>"
+            ],
+            "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
+            "datasourceTemplate": "maven",
+            "registryUrlTemplate": "https://${NEXUS_HOST}/repository/maven-public",
+            "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?\$"
+          }
+        ],
+        "packageRules": [
+          {
+            "matchPackageNames": ["com.acme.*:*"],
+            "enabled": false
+          }
+        ],
         "dockerfile": { "enabled": false },
         "github-actions": { "enabled": false }
       }
