@@ -17,5 +17,5 @@ data:
   styles.css: |
 {{ .Files.Get "files/snow-mock/static/styles.css" | indent 4 }}
 binaryData:
-  servicenow.png: {{ .Files.Get "files/snow-mock/static/servicenow.png" | b64enc }}
+  snow.png: {{ .Files.Get "files/snow-mock/static/snow.png" | b64enc }}
 {{- end }}
