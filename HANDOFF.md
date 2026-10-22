@@ -263,8 +263,8 @@ Last updated: 2026-10-22 (terminal login guard, agent namespaces visible to atte
   prefix `pr-test-mr-<guid>`. Agent prompts read `SDLC_SANDBOX_NAMESPACE` /
   `EPHEMERAL_NS_PREFIX` from env (lw-sdlc-opencode#3, merged).
   → [ADR-005](ADR.md#adr-005--per-tenant-sandbox-namespaces)
-- LiteLLM/MaaS wired through AgnosticV: model `qwen3-235b` (an alias — the
-  upstream name `qwen3-235b-a22b` is rejected), 14d virtual keys.
+- LiteLLM/MaaS wired through AgnosticV: model `qwen3-235b-a22b` (switched
+  from alias `qwen3-235b` after Vertex AI shut it down 2026-10-21), 14d virtual keys.
   → [ADR-006](ADR.md#adr-006--litellm-model-alias-for-maas)
 - EDA rulebook defaults from `sdlc.orchestrator.enabled` (true →
   `sdlc-remediation.yml` AO bridge; false → `sdlc-remediation-legacy.yml`).

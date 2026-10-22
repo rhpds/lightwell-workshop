@@ -84,11 +84,11 @@ Copy and fill for each new decision:
 
 | Field | Content |
 |-------|---------|
-| **Date** | 2026-10-07 |
-| **Title** | Use MaaS model alias `qwen3-235b` |
-| **Context** | The upstream model name `qwen3-235b-a22b` is rejected by the RHDP MaaS / LiteLLM gateway. AgnosticV wires per-tenant virtual keys (14d). |
-| **Decision** | Use the gateway alias `qwen3-235b` as the configured model id (`litellm/{model}`). |
-| **Consequences** | Docs and AgnosticV must not advertise the rejected upstream name. Key rotation / TTL is owned by the litellm_virtual_keys role. |
+| **Date** | 2026-10-07 (updated 2026-10-22) |
+| **Title** | Use the upstream model name `qwen3-235b-a22b` for MaaS |
+| **Context** | Originally the RHDP MaaS / LiteLLM gateway rejected the upstream name `qwen3-235b-a22b` and required the alias `qwen3-235b`. On 2026-10-21 Google Vertex AI shut down the MaaS endpoint for `qwen3-235b`; the RHDP MaaS team rerouted `qwen3-235b-a22b` to an alternative backend. AgnosticV wires per-tenant virtual keys (14d). |
+| **Decision** | Use the full upstream model name `qwen3-235b-a22b` as the configured model id (`litellm/{model}`). AgnosticV PR [#28692](https://github.com/rhpds/agnosticv/pull/28692). |
+| **Consequences** | The old alias `qwen3-235b` no longer works. Key rotation / TTL is owned by the litellm_virtual_keys role. |
 
 ## ADR-007 — EDA rulebook selected by Orchestrator flag
 
@@ -642,7 +642,7 @@ Copy and fill for each new decision:
 | EDA JTs per org | ADR-003 |
 | `opencodePermission: allow` | ADR-004 |
 | Per-tenant sandboxes | ADR-005 |
-| LiteLLM `qwen3-235b` | ADR-006 |
+| LiteLLM `qwen3-235b-a22b` (was `qwen3-235b`) | ADR-006 |
 | Rulebook from `orchestrator.enabled` | ADR-007 |
 | AO infra + tenant canvas | ADR-008 |
 | SCM `rhpds/lw-sdlc-opencode` | ADR-009 |
