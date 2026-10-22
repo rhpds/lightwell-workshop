@@ -96,8 +96,19 @@ no()    { FAIL=$((FAIL+1)); printf "  ${c_no}FAIL${c_z}  %s\n" "$*"; }
 skip()  { SKIP=$((SKIP+1)); printf "  ${c_sk}SKIP${c_z}  %s\n" "$*"; }
 info()  { printf "        %s\n" "$*"; }
 
-DOMAIN="$(oc get ingresses.config cluster -o jsonpath='{.spec.domain}' 2>/dev/null)"
-[[ -n "$DOMAIN" ]] || { echo "cannot reach the cluster (oc login first)" >&2; exit 1; }
+# Retry rather than abort. RHDP DNS resolves these clusters through NetBird
+# and intermittently SERVFAILs for a minute or two; a fleet run that gives up
+# on the first miss throws away the whole tenant after 30 seconds and reports
+# it as a failure indistinguishable from a real one. Three tenants were lost
+# that way on 22 Oct.
+DOMAIN=""
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  DOMAIN="$(oc get ingresses.config cluster -o jsonpath='{.spec.domain}' 2>/dev/null)"
+  [[ -n "$DOMAIN" ]] && break
+  echo "        cluster unreachable, retry ${attempt}/10 in 30s" >&2
+  sleep 30
+done
+[[ -n "$DOMAIN" ]] || { echo "cannot reach the cluster after 5 minutes (oc login first?)" >&2; exit 1; }
 GL="https://gitlab-gitlab.${DOMAIN}"
 SNOW="https://$(oc get route snow-mock -n "snow-${GUID}" -o jsonpath='{.spec.host}' 2>/dev/null)"
 TPA="https://server-tpa-${GUID}.${DOMAIN}"
