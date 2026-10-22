@@ -162,7 +162,7 @@ Each repository carries a `.lightwell/policy.json` file. It is the primary contr
 
 The policy travels with the code, in the repository, reviewed like any other change. There is no approval matrix in a wiki that nobody has opened since the last audit.
 
-TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] before you start. It is four lines, and it is the entire governance model for this lab.
+TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] before you start. It is a single JSON object with four fields, and it is the entire governance model for this lab.
 
 === What Is Actually Running
 
@@ -294,7 +294,7 @@ Leave the tab open. You will come back to it at the end, and the shape of what h
 
 In the loop, the Orchestrator tasks the `impact-analyzer` agent with creating the fix. The agent reads the application's `pom.xml`, bumps the dependency to the remediated `.rhlw` version, pushes a branch, and opens a merge request.
 
-Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]) and go to `acme-{guid}/benefits-mgmt-app` → *Merge requests*. The title follows a fixed shape:
+Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]) and go to `acme-{guid}/benefits-mgmt-app` → *Merge requests*. If the list is empty, the Orchestrator has already auto-merged it — click the *Merged* tab to find it. The title follows a fixed shape:
 
 [source,text]
 ----
@@ -329,7 +329,7 @@ The diff itself is almost boring — the same single-line `pom.xml` change Renov
 
 image::m3-mr-summary.png["The agent's merge request: title, Summary table and Vulnerability Details",link=_images/m3-mr-summary.png,window=_images]
 
-Scroll to *Automated Validation*. Every row says `Pending` — the agent opened the merge request, it did not test it. That is the honest state of a change nobody has verified yet:
+Scroll to *Automated Validation*. When the agent first opens the merge request, every row says `Pending` — the agent proposed the change but did not test it. If the pipeline has already started or finished by the time you look, some or all rows will show real results instead (for example, `4/4 tests passed`). Either way, the point is the same: the table is filled by the pipeline, not by the agent:
 
 image::m3-mr-validation-pending.png["The Automated Validation table with every check Pending, as the agent wrote it",link=_images/m3-mr-validation-pending.png,window=_images]
 
