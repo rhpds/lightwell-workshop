@@ -609,6 +609,30 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-057 — The Showroom terminal has no identity until the attendee logs in
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-22 |
+| **Title** | Check `oc whoami` in `publish-remediation.sh`, and repeat the login step in Module 3 |
+| **Context** | An attendee on `r5twk` ran the Module 3 publish command and it stopped dead after `--- Discovering Nexus ---` with no error. The terminal container mounts a PVC at `/home/lab-user` but no kubeconfig, so until the attendee runs `oc login` every `oc` call authenticates as the pod's own service account, `system:serviceaccount:user-<guid>-showroom:showroom`, which is `edit` in its own namespace and nothing else. The script derives the GUID with `oc whoami \| sed 's/user-//'`, which turned that into `system:serviceaccount:<guid>-showroom:showroom`, so it looked for a namespace `lightwell-nexus-system:serviceaccount:...`. The route lookup's error was sent to `/dev/null` for the benefit of the `\|\|` fallback, the fallback failed too, and `set -e` killed the script mid-sentence. The login step existed only in Module 2. |
+| **Decision** | Validate the identity before using it: accept `GUID` from the environment (how a cluster-admin debugs), otherwise require `oc whoami` to match `user-*` and print the exact `oc login` command when it does not. Treat an empty `NEXUS_HOST` as an error rather than an empty variable. Give Module 3 its own `== Logging In to OpenShift` section before the first command, worded to skip if Module 2's login is still live. |
+| **Consequences** | The failure now names itself. Worth knowing for anything else that shells out in the terminal: the Showroom SA is not a tenant identity, so the same silent-death shape is available to any future script that derives a namespace from `oc whoami`. The login is not idempotently re-applied either — the PVC keeps `~/.kube/config` across a pod restart, but a tenant that has never logged in has only `~/.kube/cache`, which is the quickest way to tell the two apart. |
+
+---
+
+## ADR-058 — Tenant users can see the agent's namespaces, read-only
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-22 |
+| **Title** | Bind the tenant user to `view` in `sdlc-<guid>` and `sdlc-sandboxes-<guid>` |
+| **Context** | `bootstrap-tenant/templates/rbac.yaml` bound the tenant user only in `<user>-app`; other bindings exist for `build-`, `snow-`, `renovate`, `nexus`, `tpa` and the tenant-jobs namespace. The two namespaces the lab is *about* — `sdlc-<guid>`, where `deployment/opencode` runs, and `sdlc-sandboxes-<guid>`, where the agent's ephemeral verification Jobs run — had none, so they did not appear in the attendee's console project list at all and `oc get pods -n sdlc-<guid>` was Forbidden. |
+| **Decision** | Add two `view` RoleBindings, guarded by `.Values.sdlc.enabled` and at the same sync-wave 2 the namespaces are created in. `view` rather than `edit`: `sdlc-<guid>` holds the GitLab root PAT and the model API key, and `view` excludes secrets. Nothing in the lab asks the attendee to change anything there — they drive the agent through the OpenCode UI and GitLab. |
+| **Consequences** | The attendee can watch the agent's pod and its Jobs in the console, which previously required cluster-admin. The agent's throwaway `pr-test-mr-*` namespaces are created at runtime by the OpenCode SA and are **not** covered; making those visible would need a ClusterRole, which is a bigger grant than this buys. Existing tenants need the bindings applied directly or an Argo sync — they were applied by hand across all 11 tenants on `cluster-2jr49` on 22 Oct. |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
@@ -668,3 +692,8 @@ Copy and fill for each new decision:
 | Script ConfigMap edits skip existing tenants (accepted) | ADR-051 |
 | SNOW CVE titles ignore extra_var `unknown` | ADR-052 |
 | Tenant AAP job logs need Controller org Auditor | ADR-053 |
+| TPA request sizing to fit ten tenants | ADR-054 |
+| GitLab blocks the merge until the pipeline passes | ADR-055 |
+| Regression scan measured; green table is the gate | ADR-056 |
+| Showroom terminal has no identity until `oc login` | ADR-057 |
+| Tenant users see the agent's namespaces, read-only | ADR-058 |

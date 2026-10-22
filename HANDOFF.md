@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-21 (showroom polish, resource sizing, revision footers, pipeline naming)
+Last updated: 2026-10-22 (terminal login guard, agent namespaces visible to attendees)
 
 ## Where the pieces live
 
@@ -23,6 +23,30 @@ Last updated: 2026-10-21 (showroom polish, resource sizing, revision footers, pi
 
 ## Recently done
 
+- **The Showroom terminal has no identity until the attendee logs in
+  (22 Oct).** `publish-remediation.sh` died silently after
+  `--- Discovering Nexus ---` on a tenant that had skipped Module 2's
+  `oc login`. The terminal mounts a PVC at `/home/lab-user` but no
+  kubeconfig, so `oc` falls back to the Showroom pod's own service account
+  (`edit` in its own namespace only); `oc whoami \| sed 's/user-//'` then
+  produced `system:serviceaccount:<guid>-showroom:showroom` and the script
+  looked for a namespace of that name. The route lookup's error went to
+  `/dev/null` and `set -e` did the rest. The script now checks the identity
+  up front and prints the login command; Module 3 has its own
+  `Logging In to OpenShift` section before the first command, worded to skip
+  if Module 2's login is still live. **Quick triage:** `~/.kube/` with only
+  `cache/` and no `config` means they never logged in.
+  → [ADR-057](ADR.md#adr-057--the-showroom-terminal-has-no-identity-until-the-attendee-logs-in)
+- **Attendees can see the agent's namespaces (22 Oct).** `sdlc-<guid>`
+  (the `opencode` deployment) and `sdlc-sandboxes-<guid>` (the ephemeral
+  verification Jobs) had no RoleBinding for the tenant user, so they were
+  invisible in the console project list. Added two `view` bindings to
+  `bootstrap-tenant/templates/rbac.yaml` — `view`, not `edit`, because
+  `sdlc-<guid>` holds the GitLab PAT and the model API key. Applied by hand
+  to all 11 tenants on `cluster-2jr49`; other live clusters need an Argo
+  sync or the same `oc create rolebinding`. The runtime `pr-test-mr-*`
+  namespaces are still not visible.
+  → [ADR-058](ADR.md#adr-058--tenant-users-can-see-the-agents-namespaces-read-only)
 - **Showroom content polish (20–21 Oct).** Renamed modules: "Automated
   Dependency Updates" / "AI-Assisted Remediation". Removed "Path 1"/"Path 2",
   "deterministic", "mock" terminology. Downplayed Nexus (say "artifact
