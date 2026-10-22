@@ -139,6 +139,38 @@ wait_for() {
   return 1
 }
 
+# A successful push build for one app, started after a given epoch.
+#
+# Do not grep the PipelineRun name: the runs were renamed from
+# `build-push-to-main-*` to `<app>-build-*` on 21 Oct so they are legible in
+# the console, and this check went on waiting 900s for a name that no longer
+# exists on every run after that. Select on the PaC labels instead, which are
+# the pipeline's own identity rather than a display choice.
+#
+# Scoped to the app *and* to runs newer than `since`, because the tenant is
+# seeded with a successful push build for all three apps: an unscoped check
+# passes before the test has done anything.
+push_build_ok() {  # push_build_ok <app> <since-epoch>
+  local app="$1" since="$2"
+  oc get pipelinerun -n "build-${GUID}" \
+     -l "pipelinesascode.tekton.dev/repository=${app},pipelinesascode.tekton.dev/event-type=push" \
+     -o json 2>/dev/null \
+  | python3 -c "
+import datetime, json, sys
+since = int(sys.argv[1])
+for pr in json.load(sys.stdin).get('items', []):
+    ts = pr['metadata']['creationTimestamp']
+    started = int(datetime.datetime.strptime(ts, '%Y-%m-%dT%H:%M:%SZ')
+                  .replace(tzinfo=datetime.timezone.utc).timestamp())
+    if started < since:
+        continue
+    for c in pr.get('status', {}).get('conditions', []):
+        if c.get('type') == 'Succeeded' and c.get('status') == 'True':
+            sys.exit(0)
+sys.exit(1)
+" "$since"
+}
+
 mr_json() { gl "${GL}/api/v4/projects/$(proj "$1")/merge_requests/$2"; }
 latest_mr() {
   gl "${GL}/api/v4/projects/$(proj "$1")/merge_requests?state=all&order_by=created_at" \
@@ -197,6 +229,14 @@ step "Module 2 — the RenovateJob the attendee creates"
 # the tenant cannot reach), logs "no-result" for every Maven package, and
 # instead opens unrelated bumps like java-jdk v27. Keep this in step with
 # module-02-renovate.adoc.
+#
+# customManagers must sit under `force`. This is the self-hosted *global*
+# config, and Renovate resolves each repository's own config over it: the
+# repo's renovate.json extends the shared preset, which defines its own
+# customManagers pointing at packages.redhat.com, so outside `force` the
+# preset wins and every lookup is no-result. Verified on 5jm75 — before the
+# move the report showed registryUrls=packages.redhat.com and zero updates;
+# after it, the tenant Nexus and MR !1 for jackson-databind 2.13.5.rhlw-00001.
 TENANT_PW="$(oc get application "lightwell-tenant-${GUID}" -n openshift-gitops \
   -o jsonpath='{.spec.source.helm.values}' 2>/dev/null | awk '/^password:/{print $2}')"
 NEXUS_HOST="nexus-lightwell-nexus-${GUID}.${DOMAIN}"
@@ -206,10 +246,10 @@ if oc get renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2
 import sys
 d=json.load(sys.stdin)
 print((((d.get('spec') or {}).get('renovateConfig') or {}).get('inline') or ''))")"
-  if [[ "$have" == *"$NEXUS_HOST"* && "$have" == *customManagers* ]]; then
-    ok "RenovateJob renovate-${GUID} exists with a customManager on the tenant Nexus"
+  if [[ "$have" == *"$NEXUS_HOST"* && "$have" == *'"force"'* && "$have" == *customManagers* ]]; then
+    ok "RenovateJob renovate-${GUID} exists with a forced customManager on the tenant Nexus"
   else
-    no "RenovateJob exists but has no customManager pointing at ${NEXUS_HOST}"
+    no "RenovateJob exists but has no forced customManager pointing at ${NEXUS_HOST}"
     info "Renovate will query packages.redhat.com and never see the .rhlw build."
     oc delete renovatejob "renovate-${GUID}" -n "user-${GUID}-renovate" >/dev/null 2>&1
     info "deleted it; recreating as the module specifies"
@@ -256,26 +296,28 @@ spec:
             "password": "${TENANT_PW}"
           }
         ],
-        "customManagers": [
-          {
-            "customType": "regex",
-            "managerFilePatterns": ["/(^|/)pom\\.xml\$/"],
-            "matchStringsStrategy": "any",
-            "matchStrings": [
-              "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<\${}]+)</version>"
-            ],
-            "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
-            "datasourceTemplate": "maven",
-            "registryUrlTemplate": "https://${NEXUS_HOST}/repository/maven-public",
-            "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?\$"
-          }
-        ],
-        "packageRules": [
-          {
-            "matchPackageNames": ["com.acme.*:*"],
-            "enabled": false
-          }
-        ],
+        "force": {
+          "customManagers": [
+            {
+              "customType": "regex",
+              "managerFilePatterns": ["/(^|/)pom\\.xml\$/"],
+              "matchStringsStrategy": "any",
+              "matchStrings": [
+                "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<\${}]+)</version>"
+              ],
+              "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
+              "datasourceTemplate": "maven",
+              "registryUrlTemplate": "https://${NEXUS_HOST}/repository/maven-public",
+              "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?\$"
+            }
+          ],
+          "packageRules": [
+            {
+              "matchPackageNames": ["com.acme.*:*"],
+              "enabled": false
+            }
+          ]
+        },
         "dockerfile": { "enabled": false },
         "github-actions": { "enabled": false }
       }
@@ -335,9 +377,12 @@ if wait_for 1200 "Renovate polls on a 5-minute schedule" _rg_mr; then
   fi
 
   step "Module 2 — the pipeline builds  ('Watching the Pipeline')"
-  _rg_built() { oc get pipelinerun -n "build-${GUID}" --no-headers 2>/dev/null \
-                  | grep -q 'build-push-to-main.*True .*Succeeded'; }
-  wait_for 900 "waiting for build-push-to-main" _rg_built \
+  # Two minutes of slack: `date` is this workstation's clock and
+  # creationTimestamp is the cluster's, and the seed builds this is
+  # distinguishing itself from are hours old, so the window is generous.
+  rg_merged_at=$(( $(date +%s) - 120 ))
+  wait_for 900 "waiting for the report-generator-app push build" \
+    push_build_ok report-generator-app "$rg_merged_at" \
     && ok "push build succeeded" || no "no successful build after the Renovate merge"
 else
   no "Renovate never opened an MR for jackson-databind"
@@ -504,12 +549,11 @@ print('human review' if 'Requires human review before merge' in d else 'MISSING'
   fi
 
   step "[$kind] Build and deploy  (module: 'Build, Sign, Promote, Deploy')"
-  _built() { oc get pipelinerun -n "build-${GUID}" --no-headers 2>/dev/null \
-               | grep -q 'build-push-to-main.*True .*Succeeded'; }
-  if wait_for 900 "waiting for build-push-to-main" _built; then
+  local merged_at=$(( $(date +%s) - 120 ))
+  if wait_for 900 "waiting for the ${app} push build" push_build_ok "$app" "$merged_at"; then
     ok "push build succeeded"
   else
-    no "no successful build-push-to-main"
+    no "no successful push build for ${app}"
   fi
 }
 

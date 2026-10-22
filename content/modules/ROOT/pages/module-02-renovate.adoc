@@ -98,26 +98,28 @@ spec:
             "password": "{password}"
           }
         ],
-        "customManagers": [
-          {
-            "customType": "regex",
-            "managerFilePatterns": ["/(^|/)pom\\.xml$/"],
-            "matchStringsStrategy": "any",
-            "matchStrings": [
-              "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<${}]+)</version>"
-            ],
-            "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
-            "datasourceTemplate": "maven",
-            "registryUrlTemplate": "https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}/repository/maven-public",
-            "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?$"
-          }
-        ],
-        "packageRules": [
-          {
-            "matchPackageNames": ["com.acme.*:*"],
-            "enabled": false
-          }
-        ],
+        "force": {
+          "customManagers": [
+            {
+              "customType": "regex",
+              "managerFilePatterns": ["/(^|/)pom\\.xml$/"],
+              "matchStringsStrategy": "any",
+              "matchStrings": [
+                "<groupId>(?<groupId>[^<]+)</groupId>\\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\\s*<version>(?<currentValue>[^<${}]+)</version>"
+              ],
+              "depNameTemplate": "{{{groupId}}}:{{{artifactId}}}",
+              "datasourceTemplate": "maven",
+              "registryUrlTemplate": "https://nexus-lightwell-nexus-{guid}.{openshift_cluster_ingress_domain}/repository/maven-public",
+              "versioningTemplate": "regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\\d+)(\\.n(?<minor>\\d+))?)?$"
+            }
+          ],
+          "packageRules": [
+            {
+              "matchPackageNames": ["com.acme.*:*"],
+              "enabled": false
+            }
+          ]
+        },
         "dockerfile": { "enabled": false },
         "github-actions": { "enabled": false }
       }
@@ -131,9 +133,9 @@ Here is what the key fields do:
 * *provider* — connects to your dedicated GitLab instance. The operator also supports `github`, `bitbucket-server`, `gitea`, and other providers — the RenovateJob spec is the same, just change the `provider.name` and `endpoint`.
 * *discoveryFilters* — scopes Renovate to only scan `report-generator-app`. In production you would list all repositories, use wildcards (e.g. `acme-*/*`), or omit this field entirely to scan every repository the bot user can access.
 * *access.adminUsers* — restricts visibility in the Renovate web UI to your user only
-* *renovateConfig* — inline Renovate config that merges with (and overrides) the `renovate.json` in each repository. Key settings:
+* *renovateConfig* — inline Renovate config, applied as the self-hosted global config. Key settings:
 ** `hostRules` — credentials for your artifact manager's Maven registry. In this lab the password is inline for simplicity; in production you would store credentials in a secrets manager such as HashiCorp Vault or use the External Secrets Operator to sync them into Kubernetes Secrets, then reference them via environment variables using Renovate's https://docs.renovatebot.com/self-hosted-configuration/#detecthostrulesfromenv[`detectHostRulesFromEnv`^] feature
-** `customManagers` — redefines the Lightwell pom.xml manager so its `registryUrlTemplate` points at your artifact manager's `maven-public` group. The shared preset hardcodes the public Lightwell registry, which your tenant cannot reach, and a `packageRules` entry cannot displace a manager's own `registryUrlTemplate` — so the manager has to be redefined rather than patched
+** `force.customManagers` — redefines the Lightwell pom.xml manager so its `registryUrlTemplate` points at your artifact manager's `maven-public` group. The shared preset hardcodes the public Lightwell registry, which your tenant cannot reach, and a `packageRules` entry cannot displace a manager's own `registryUrlTemplate` — so the manager has to be redefined rather than patched. It sits under https://docs.renovatebot.com/self-hosted-configuration/#force[`force`^] because Renovate resolves each repository's own config *over* the global one: outside `force`, the preset's manager would win and every lookup would come back `no-result`
 ** `packageRules` — disables scanning of internal `com.acme.*` packages
 ** `dockerfile` / `github-actions` — disabled for this lab. Renovate supports https://docs.renovatebot.com/modules/manager/[over 100 package ecosystems^] including npm, pip, Go modules, Helm charts, Terraform providers, and container images. You enable or disable each manager independently — for example, `"npm": { "enabled": true }` would add JavaScript dependency scanning alongside the Java Lightwell preset. You can also configure https://docs.renovatebot.com/configuration-options/#automerge[auto-merge^] for low-risk dependency classes (e.g. test-only updates, patch-level bumps) so they land without human review.
 
