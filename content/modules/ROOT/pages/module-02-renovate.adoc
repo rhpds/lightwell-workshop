@@ -258,7 +258,15 @@ This is the Lightwell pattern: the upstream version stays the same (`2.13.5`), a
 +
 NOTE: In this lab, `jackson-databind` was explicitly pinned in `pom.xml` so Renovate's regex manager could detect it. In production, the https://github.com/lightwell-experience/renovate-config[Lightwell Renovate config^] includes a `pin-transitives` script that automatically discovers *all* transitive dependencies with available Lightwell remediations — including BOM-managed ones — and generates a pinning BOM you import into `dependencyManagement`. This means you do not need to manually pin every dependency; the script handles discovery across the full dependency tree.
 
-. Scroll down and click _Merge_ to approve the merge request and update the source.
+. Before you can merge, a Pipelines-as-Code pipeline must finish and report success. Scroll to the bottom of the merge request — if you see *Merge blocked: Pipeline must succeed*, the pipeline is still running. This is expected and usually takes about 90 seconds.
++
+While you wait, you can follow the pipeline: click *Pipeline #<n>* in the merge request widget, then click the *Pipelines as Code CI / build-pull-request* link to open the running pipeline in the OpenShift Console. This pipeline runs basic tests against the remediated dependency to make sure nothing is broken before you merge.
++
+image::m2-build-pull-request-pipeline.png["The build-pull-request PipelineRun in the OpenShift Console showing all test tasks succeeded",link=_images/m2-build-pull-request-pipeline.png,window=_images]
++
+IMPORTANT: You cannot merge until the pipeline passes. This is enforced by GitLab — the *Merge* button is disabled until all checks are green. This ensures that even a simple version bump is validated before it reaches your main branch.
+
+. Once the pipeline reports success and the *Merge* button is available, click _Merge_ to approve the merge request and update the source.
 
 === Watching the Pipeline
 
