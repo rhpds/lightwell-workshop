@@ -43,7 +43,31 @@ echo ""
 # Derived from the logged-in user, which is right in the Showroom terminal.
 # Overridable because anyone debugging as cluster-admin would otherwise get
 # GUID=admin and every namespace lookup would miss.
-GUID="${GUID:-$(oc whoami | sed 's/user-//')}"
+#
+# Without an `oc login` the terminal falls back to the Showroom pod's own
+# service account, which can read nothing outside its namespace. That used to
+# produce GUID=system:serviceaccount:... and a namespace lookup that failed
+# with its error on /dev/null, so the script died right after "Discovering
+# Nexus" with no explanation. Say what is wrong instead.
+if [ -z "${GUID:-}" ]; then
+  WHOAMI=$(oc whoami 2>/dev/null || true)
+  case "${WHOAMI}" in
+    user-*) GUID="${WHOAMI#user-}" ;;
+    "")
+      echo "ERROR: not logged in to OpenShift." >&2
+      echo "  Run the login command from Module 2 first:" >&2
+      echo "    oc login -u user-<GUID> -p <password> https://kubernetes.default.svc:443 --insecure-skip-tls-verify" >&2
+      exit 1 ;;
+    *)
+      echo "ERROR: logged in as '${WHOAMI}', not as your tenant user." >&2
+      echo "  That identity cannot reach your artifact manager. If this says" >&2
+      echo "  'system:serviceaccount:...' the terminal never logged in at all." >&2
+      echo "  Run the login command from Module 2:" >&2
+      echo "    oc login -u user-<GUID> -p <password> https://kubernetes.default.svc:443 --insecure-skip-tls-verify" >&2
+      echo "  (or set GUID=<your guid> if you are debugging as cluster-admin)" >&2
+      exit 1 ;;
+  esac
+fi
 USERNAME="user-${GUID}"
 
 # ---------------------------------------------------------------------------
@@ -51,7 +75,14 @@ USERNAME="user-${GUID}"
 # ---------------------------------------------------------------------------
 echo "--- Discovering Nexus ---"
 NEXUS_NS="lightwell-nexus-${GUID}"
-NEXUS_HOST=$(oc get route nexus -n "${NEXUS_NS}" -o jsonpath='{.spec.host}' 2>/dev/null || oc get route -n "${NEXUS_NS}" -o jsonpath='{.items[0].spec.host}' 2>/dev/null)
+NEXUS_HOST=$(oc get route nexus -n "${NEXUS_NS}" -o jsonpath='{.spec.host}' 2>/dev/null \
+  || oc get route -n "${NEXUS_NS}" -o jsonpath='{.items[0].spec.host}' 2>/dev/null \
+  || true)
+if [ -z "${NEXUS_HOST}" ]; then
+  echo "ERROR: no route found in namespace ${NEXUS_NS}." >&2
+  echo "  Check that you are logged in as user-${GUID} (oc whoami)." >&2
+  exit 1
+fi
 NEXUS_PASS=$(oc get secret nexus-admin-secret -n "${NEXUS_NS}" -o jsonpath='{.data.password}' | base64 -d)
 echo "  Nexus host: ${NEXUS_HOST}"
 echo "  Nexus namespace: ${NEXUS_NS}"

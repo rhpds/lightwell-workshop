@@ -191,7 +191,18 @@ Later in this module, after the merge request is merged and the build completes,
 
 Start with the easy one. Playing the Lightwell release engineer role once more, you will publish a remediated build of a dependency that `benefits-mgmt-app` declares directly in its `pom.xml`.
 
-Run the following command in the terminal on the right:
+First make sure the terminal is logged in as your tenant user. Run this even if
+you already did it in Module 2 — logging in twice is harmless, and the terminal
+loses its session if the Showroom pod restarts:
+
+[source,bash,role=execute,subs=attributes+]
+----
+oc login -u {user} -p {password} https://kubernetes.default.svc:443 --insecure-skip-tls-verify
+----
+
+NOTE: Without this, `oc` falls back to the Showroom pod's own service account, which cannot read your artifact manager. The script below stops with an error telling you to come back here.
+
+Then run the following command in the terminal on the right:
 
 [source,bash,role=execute,subs=attributes+]
 ----
