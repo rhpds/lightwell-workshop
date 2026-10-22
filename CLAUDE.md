@@ -7,6 +7,13 @@ Several people drive this repo with different agents. Update HANDOFF when you
 finish or discover something, and **update ADR.md in the same change** whenever
 that item is (or implies) an architectural decision.
 
+## Pushing
+
+Module 3 content may be pushed straight to `main`. **Module 2 content may not** —
+put it on a branch and open a PR, even for a one-line change. James owns the
+Renovate path and has to be able to reproduce a change before it lands on
+everyone's tenants.
+
 ## On every session start
 
 Read `publishing-house/spec.yaml`. Check the workflow stage by running `/rhdp-publishing-house`.
