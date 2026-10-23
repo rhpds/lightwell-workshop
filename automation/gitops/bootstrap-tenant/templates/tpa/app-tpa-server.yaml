@@ -140,6 +140,7 @@ spec:
                   disabled: true
               osv-github:
                 osv:
+                  transport: git
                   description: GitHub Advisory Database
                   period: 1d
                   source: https://github.com/github/advisory-database
