@@ -138,14 +138,7 @@ spec:
                   period: 1d
                   source: https://github.com/CVEProject/cvelistV5
                   disabled: true
-              osv-github:
-                osv:
-                  transport: git
-                  description: GitHub Advisory Database
-                  period: 1d
-                  source: https://github.com/github/advisory-database
-                  path: advisories
-                  disabled: true
+
         oidc:
           issuerUrl: https://{{ include "tpa.keycloakHost" . }}/realms/{{ .Values.keycloak.realm }}
           clients:
