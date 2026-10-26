@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-19 (ADR-039 Merged+Build poll PaC)
+Last synced with HANDOFF: 2026-10-24 (ADR-059 agent-sandbox alternative remediation drive)
 
 ---
 
@@ -633,6 +633,29 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-059 — Agent-sandbox alternative remediation drive
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-24 |
+| **Title** | Path 2 without AO, EDA, or AAP JTs — orchestrator + lane Claims on branch `agent-sandbox` |
+| **Context** | Default lab Path 2 is Nexus → EDA → AAP → AO canvases → long-lived OpenCode Deployment. That stack does not use kubernetes-sigs/agent-sandbox, splits one remediation across three AO workflows, and is hard to observe as “where are the agents.” We need an **alternative drive** developed on branch `agent-sandbox` that is not invasive to `main` until cutover. |
+| **Decision** | (1) Flag `sdlc.runtime=agent-sandbox` selects the alternative drive; `ao` keeps the legacy drive. (2) On the agent-sandbox drive, Path 2 **MUST NOT** use Automation Orchestrator, Event-Driven Ansible, or AAP Job Templates — webhooks hit a tenant orchestrator Sandbox; work runs in SandboxClaims; OpenCode Impact uses the existing LiteLLM contract inside Claims. (3) **AAP may remain** in cluster provisioning but is out of the remediation story. (4) **AO and EDA are not provisioned/used** for Path 2 on this drive. (5) **Showroom / Antora (`content/`) is out of scope** for this work — a separate content cycle owns Module 3 after the platform demo is delivered. Operator docs (`ao-trigger-helper`, ADR/HANDOFF) describe the agent-sandbox story. Full design: `openspec/changes/agent-sandbox-orchestrator/`. |
+| **Consequences** | Implementation lands on `agent-sandbox` without changing default demo on `main` and **without editing Showroom**. Platform cutover can precede content cutover; students may still see AO wording in Showroom until the content owner lands. Rollback of the platform flag is `sdlc.runtime=ao`. |
+
+## ADR-060 — Non-AO promote must not start AO Deploy
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-26 |
+| **Title** | Bridge skips Deploy when promote app is outside `AO_APP_PATHS` |
+| **Context** | ADR-049 scoped Deploy to the app in the PaC promote title, but when that app was **not** in `AO_APP_PATHS` (Renovate-owned `report-generator-app`) the bridge fell back to fan-out-all. Lab on `lmk2m`: Module 2 Renovate merge → promote → Argo Healthy → AO Deploy for wire-transfer + benefits. Merged correctly stayed quiet (no EDA MR hook on renovate apps). |
+| **Decision** | In `cicd-eda-bridge` `deploy_paths_for_revision`: if a promote app is parsed and matches no `AO_APP_PATHS` entry, return **`[]`** (no EDA POST). Keep full fan-out only when the commit title/token is unavailable or no promote app can be parsed. |
+| **Consequences** | Path 1 / Renovate no longer starts AO Deploy. Path 2 AO-owned promotes unchanged. Existing tenants need ConfigMap apply + `cicd-eda-bridge` rollout (ADR-051). Module 2 Nexus publish → Start remains a separate crosstalk (hosted-repo webhooks); out of scope for this ADR. |
+| **Amends** | [ADR-049](#adr-049--deploy-signals-only-the-promoted-app-finalize-soft-skips-orphans) |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
@@ -687,7 +710,8 @@ Copy and fill for each new decision:
 | Deploy SNOW comments link Argo / Route / console | ADR-046 |
 | Parent INC = top-level status + child links only | ADR-047 |
 | Deploy finalize parent from lifecycle artifacts | ADR-048 |
-| Deploy promote-scoped signal + finalize soft-skip | ADR-049 |
+| Deploy promote-scoped signal + finalize soft-skip | ADR-049 (amended by ADR-060) |
+| Non-AO / Renovate promote → no AO Deploy | ADR-060 |
 | Gate auto_approve on the PR check, inside the merge | ADR-050 |
 | Script ConfigMap edits skip existing tenants (accepted) | ADR-051 |
 | SNOW CVE titles ignore extra_var `unknown` | ADR-052 |
@@ -697,3 +721,4 @@ Copy and fill for each new decision:
 | Regression scan measured; green table is the gate | ADR-056 |
 | Showroom terminal has no identity until `oc login` | ADR-057 |
 | Tenant users see the agent's namespaces, read-only | ADR-058 |
+| Agent-sandbox alternative Path 2 (no AO/EDA/AAP in story) | ADR-059 |
