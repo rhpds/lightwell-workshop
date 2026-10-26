@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-19 (ADR-039 Merged+Build poll PaC)
+Last synced with HANDOFF: 2026-10-26 (ADR-061 Renovate promote must not start AO Deploy)
 
 ---
 
@@ -643,6 +643,27 @@ Copy and fill for each new decision:
 | **Decision** | Add a `dechunk()` helper and call it in the buffered HTML branch when upstream was chunked. On the streaming (non-HTML) branch do the opposite — **forward** `Transfer-Encoding: chunked` rather than stripping it — because buffering there would break the SSE stream the live session view runs on, and the client needs the header to decode the framing we are relaying. `dechunk()` returns the input untouched when it does not parse as chunked: silently blanking a body is a worse failure than passing a visible mess. |
 | **Consequences** | Two defects, not one. The HTML corruption is what was reported; stripping `Transfer-Encoding` on the streaming path has been wrong since 16 Oct independently of it, and would show as a session page that loads but never updates. Tested with `gate_itest.py`, which boots the real `proxy.py` against a stub upstream that chunks the way OpenCode does: unpatched it reproduces `body starts b'b44\r\n<!doctype h'`, patched all eight checks pass, plus seven unit cases on `dechunk()` itself. **Not yet exercised against the live OpenCode upstream** — that needs cluster-admin on the tenant's cluster to swap the ConfigMap and restart the gate. Existing tenants pick the fix up on an Argo sync; the gate Deployment carries `checksum/proxy`, so the pod rolls automatically when the ConfigMap content changes. |
 
+## ADR-060 — Agent-sandbox alternative remediation drive
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-24 |
+| **Title** | Path 2 without AO, EDA, or AAP JTs — orchestrator + lane Claims on branch `agent-sandbox` |
+| **Context** | Default lab Path 2 is Nexus → EDA → AAP → AO canvases → long-lived OpenCode Deployment. That stack does not use kubernetes-sigs/agent-sandbox, splits one remediation across three AO workflows, and is hard to observe as “where are the agents.” We need an **alternative drive** developed on branch `agent-sandbox` that is not invasive to `main` until cutover. |
+| **Decision** | (1) Flag `sdlc.runtime=agent-sandbox` selects the alternative drive; `ao` keeps the legacy drive. (2) On the agent-sandbox drive, Path 2 **MUST NOT** use Automation Orchestrator, Event-Driven Ansible, or AAP Job Templates — webhooks hit a tenant orchestrator Sandbox; work runs in SandboxClaims; OpenCode Impact uses the existing LiteLLM contract inside Claims. (3) **AAP may remain** in cluster provisioning but is out of the remediation story. (4) **AO and EDA are not provisioned/used** for Path 2 on this drive. (5) **Showroom / Antora (`content/`) is out of scope** for this work — a separate content cycle owns Module 3 after the platform demo is delivered. Operator docs (`ao-trigger-helper`, ADR/HANDOFF) describe the agent-sandbox story. Full design: `openspec/changes/agent-sandbox-orchestrator/`. |
+| **Consequences** | Implementation lands on `agent-sandbox` without changing default demo on `main` and **without editing Showroom**. Platform cutover can precede content cutover; students may still see AO wording in Showroom until the content owner lands. Rollback of the platform flag is `sdlc.runtime=ao`. |
+
+## ADR-061 — Non-AO promote must not start AO Deploy
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-26 |
+| **Title** | Bridge skips Deploy when promote app is outside `AO_APP_PATHS` |
+| **Context** | ADR-049 scoped Deploy to the app in the PaC promote title, but when that app was **not** in `AO_APP_PATHS` (Renovate-owned `report-generator-app`) the bridge fell back to fan-out-all. Lab on `lmk2m`: Module 2 Renovate merge → promote → Argo Healthy → AO Deploy for wire-transfer + benefits. Merged correctly stayed quiet (no EDA MR hook on renovate apps). |
+| **Decision** | In `cicd-eda-bridge` `deploy_paths_for_revision`: if a promote app is parsed and matches no `AO_APP_PATHS` entry, return **`[]`** (no EDA POST). Keep full fan-out only when the commit title/token is unavailable or no promote app can be parsed. |
+| **Consequences** | Path 1 / Renovate no longer starts AO Deploy. Path 2 AO-owned promotes unchanged. Existing tenants need ConfigMap apply + `cicd-eda-bridge` rollout (ADR-051). Module 2 Nexus publish → Start remains a separate crosstalk (hosted-repo webhooks); out of scope for this ADR. |
+| **Amends** | [ADR-049](#adr-049--deploy-signals-only-the-promoted-app-finalize-soft-skips-orphans) |
+
 ---
 
 ## Mapping to HANDOFF.md
@@ -699,7 +720,7 @@ Copy and fill for each new decision:
 | Deploy SNOW comments link Argo / Route / console | ADR-046 |
 | Parent INC = top-level status + child links only | ADR-047 |
 | Deploy finalize parent from lifecycle artifacts | ADR-048 |
-| Deploy promote-scoped signal + finalize soft-skip | ADR-049 |
+| Deploy promote-scoped signal + finalize soft-skip | ADR-049 (amended by ADR-061) |
 | Gate auto_approve on the PR check, inside the merge | ADR-050 |
 | Script ConfigMap edits skip existing tenants (accepted) | ADR-051 |
 | SNOW CVE titles ignore extra_var `unknown` | ADR-052 |
@@ -710,3 +731,5 @@ Copy and fill for each new decision:
 | Showroom terminal has no identity until `oc login` | ADR-057 |
 | Tenant users see the agent's namespaces, read-only | ADR-058 |
 | UI gate de-chunks responses ("b44" on the session page) | ADR-059 |
+| Agent-sandbox alternative Path 2 (no AO/EDA/AAP in story) | ADR-060 |
+| Non-AO / Renovate promote → no AO Deploy | ADR-061 |

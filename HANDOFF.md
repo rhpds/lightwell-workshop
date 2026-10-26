@@ -8,20 +8,26 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-26 (UI gate chunked-response fix)
+Last updated: 2026-10-26 (ADR-061 Renovate promote must not start AO Deploy)
 
 ## Where the pieces live
 
 | Piece | Repo |
 |---|---|
-| Helm charts, Showroom content, dashboard | this repo (`rhpds/lightwell-workshop`), pushes straight to `main` |
+| Helm charts, Showroom content, dashboard | this repo (`rhpds/lightwell-workshop`) — **default demo stays on `main`**; agent-sandbox work on branch **`agent-sandbox`** |
 | Catalog item `lb1815-lightwell-tenant` | `rhpds/agnosticv`, `rh1-2027/` — via PR |
-| OpenCode agent prompts, EDA rulebooks, AAP playbooks | `rhpds/lw-sdlc-opencode` — via PR |
+| OpenCode / orchestrator / lane image + skills | `rhpds/lw-sdlc-opencode` — branch **`agent-sandbox`** for this drive |
 | Acme sample apps (3) | `redhat-ads-tech/{wire-transfer-svc,benefits-mgmt-app,report-generator-app}` |
 | Acme deployment manifests | `redhat-ads-tech/acme-deployment` — Helm chart for ArgoCD app-of-apps |
-| AO Path 2 operator helper + docs | this repo — [`ao-trigger-helper/`](ao-trigger-helper/) (scripts + [`docs/`](ao-trigger-helper/docs/)) |
+| Path 2 operator helper + docs | this repo — [`ao-trigger-helper/`](ao-trigger-helper/) (rewritten for agent-sandbox on that branch) |
 
 ## Recently done
+
+- **Renovate promote no longer fans out AO Deploy (26 Oct).** Bridge
+  `deploy_paths_for_revision`: parsed promote not in `AO_APP_PATHS` → `[]`
+  (was fan-out all). Proven leak on `lmk2m` Module 2; fix in
+  `files/cicd-eda-bridge/bridge.py`. Live tenants need ConfigMap apply +
+  rollout (ADR-051). → [ADR-061](ADR.md#adr-061--non-ao-promote-must-not-start-ao-deploy)
 
 - **OpenCode session deep link rendered `b44` instead of the transcript
   (26 Oct).** `opencode-ui-gate/proxy.py` de-chunked on the request path but
@@ -42,6 +48,20 @@ Last updated: 2026-10-26 (UI gate chunked-response fix)
   chunks the same way) reproduces `b44` unpatched and passes patched, but
   nobody has swapped the ConfigMap on a tenant yet — that needs cluster-admin.
   → [ADR-059](ADR.md#adr-059--the-ui-gate-must-de-chunk-not-just-forward)
+
+- **Agent-sandbox alternative remediation drive (24 Oct, branch `agent-sandbox`).**
+  OpenSpec change `openspec/changes/agent-sandbox-orchestrator/` — Path 2 without
+  AO, EDA, or AAP JTs; AAP may stay in cluster provisioning. Operator/platform
+  docs updated (`ao-trigger-helper`, `docs/AGENT-SANDBOX-REMEDIATION.md`, ADR).
+  **IMPORTANT: do not edit Showroom (`content/`) on this branch** — student lab
+  content is a separate cycle after we deliver the demo platform.
+  **Implementation progress:** Group 1 (cluster agent-sandbox chart v1.0.8 +
+  lightwell-observability Tempo/OTel/COO/Perses skeleton) and Group 2 (tenant
+  `sdlc.runtime` flag + orchestrator Sandbox/Template/WarmPool templates +
+  `scripts/verify-runtime-matrix.sh`) are in-repo. Next: Group 3 orchestrator
+  service in `rhpds/lw-sdlc-opencode`. Lab-cluster verifies (CRD Available,
+  Claim Ready, Observe → Traces) still pending a kube context.
+  **Do not merge to `main` until e2e green.** → [ADR-060](ADR.md#adr-060--agent-sandbox-alternative-remediation-drive)
 - **The Showroom terminal has no identity until the attendee logs in
   (22 Oct).** `publish-remediation.sh` died silently after
   `--- Discovering Nexus ---` on a tenant that had skipped Module 2's

@@ -341,6 +341,11 @@ def deploy_paths_for_revision(revision: str) -> list[str]:
 
     Shared Argo app-of-apps goes Healthy on any promote. Signaling every AO
     path starts a Deploy run with no SNOW child for untouched apps (ADR-049).
+
+    When the promote names an app that is *not* AO-owned (e.g. Renovate's
+    report-generator-app), return [] — do not fan-out. Path 1 must not start
+    AO Deploy (ADR-061). Fan-out remains only when the title/token is missing
+    or no promote app can be parsed.
     """
     default = AO_APP_PATHS or [f"acme-{GUID}/wire-transfer-svc"]
     title = gitlab_commit_title(revision)
@@ -357,8 +362,12 @@ def deploy_paths_for_revision(revision: str) -> list[str]:
                 if path not in matched:
                     matched.append(path)
     if not matched:
-        print(f"promote parse: apps={apps} not in AO_APP_PATHS — fan-out all")
-        return default
+        # Known promote of a non-AO app (Renovate / Path 1) — stay silent.
+        print(
+            f"promote parse: apps={apps} not in AO_APP_PATHS — skip Deploy "
+            f"(no EDA POST)"
+        )
+        return []
     print(f"promote parse: title={title!r} → paths={matched}")
     return matched
 
