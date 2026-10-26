@@ -633,6 +633,18 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-059 — The UI gate must de-chunk, not just forward
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-10-26 |
+| **Title** | Decode `Transfer-Encoding: chunked` in `opencode-ui-gate/proxy.py` before rewriting HTML, and keep the header on the streaming path |
+| **Context** | The `OpenCode: agent session` deep link in a SNOW comment opened a page whose first visible text was **`b44`** and no transcript. `b44` is hex for 2884 — an HTTP chunk-size line rendered as content. The gate de-chunks on the *request* path but never did on the *response* path: OpenCode answers the SPA document with `Transfer-Encoding: chunked` and no `Content-Length`, so the HTML branch buffered the raw framing, dropped `transfer-encoding` as hop-by-hop, and set a `Content-Length` covering the framing. The document was malformed, so the SPA never booted. Confirmed first-hand on tenant `th7gl`: the gate's own 401 body is literally `0\r\n\r\n`, the chunked terminator delivered as content. **Why it was not seen earlier:** the bug is latent. The same code serves a `Content-Length` response perfectly — demonstrated by running the unpatched gate against both upstream shapes, clean page in one, `b44` in the other. `proxy.py` is unchanged since ADR-029 introduced it on 16 Oct, so nothing regressed on our side; what changed is the framing OpenCode chose, and establishing why would need a port-forward to `opencode:4096`. |
+| **Decision** | Add a `dechunk()` helper and call it in the buffered HTML branch when upstream was chunked. On the streaming (non-HTML) branch do the opposite — **forward** `Transfer-Encoding: chunked` rather than stripping it — because buffering there would break the SSE stream the live session view runs on, and the client needs the header to decode the framing we are relaying. `dechunk()` returns the input untouched when it does not parse as chunked: silently blanking a body is a worse failure than passing a visible mess. |
+| **Consequences** | Two defects, not one. The HTML corruption is what was reported; stripping `Transfer-Encoding` on the streaming path has been wrong since 16 Oct independently of it, and would show as a session page that loads but never updates. Tested with `gate_itest.py`, which boots the real `proxy.py` against a stub upstream that chunks the way OpenCode does: unpatched it reproduces `body starts b'b44\r\n<!doctype h'`, patched all eight checks pass, plus seven unit cases on `dechunk()` itself. **Not yet exercised against the live OpenCode upstream** — that needs cluster-admin on the tenant's cluster to swap the ConfigMap and restart the gate. Existing tenants pick the fix up on an Argo sync; the gate Deployment carries `checksum/proxy`, so the pod rolls automatically when the ConfigMap content changes. |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
@@ -697,3 +709,4 @@ Copy and fill for each new decision:
 | Regression scan measured; green table is the gate | ADR-056 |
 | Showroom terminal has no identity until `oc login` | ADR-057 |
 | Tenant users see the agent's namespaces, read-only | ADR-058 |
+| UI gate de-chunks responses ("b44" on the session page) | ADR-059 |

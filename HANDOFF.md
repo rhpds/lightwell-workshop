@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-22 (terminal login guard, agent namespaces visible to attendees)
+Last updated: 2026-10-26 (UI gate chunked-response fix)
 
 ## Where the pieces live
 
@@ -23,6 +23,25 @@ Last updated: 2026-10-22 (terminal login guard, agent namespaces visible to atte
 
 ## Recently done
 
+- **OpenCode session deep link rendered `b44` instead of the transcript
+  (26 Oct).** `opencode-ui-gate/proxy.py` de-chunked on the request path but
+  not on the response path. OpenCode serves the SPA document with
+  `Transfer-Encoding: chunked` and no `Content-Length`, so the gate buffered
+  the raw framing, dropped `transfer-encoding` as hop-by-hop, and declared a
+  `Content-Length` covering it — the browser rendered the first chunk-size
+  line (`b44` = 2884) as the first text on the page and the SPA never booted.
+  **It is latent, not a regression:** the same code serves a `Content-Length`
+  response perfectly, and `proxy.py` has not changed since Shaaf added it on
+  16 Oct; what changed is the framing OpenCode chose.
+  **Second, separate defect in the same file:** stripping `Transfer-Encoding`
+  on the streaming path has been wrong the whole time and would show as a
+  session page that loads but never updates — the fix forwards the header
+  there rather than buffering, which SSE cannot tolerate.
+  **Still to do:** verify against a live OpenCode upstream. The local test
+  (`/tmp/lwtest/gate_itest.py`, boots the real `proxy.py` against a stub that
+  chunks the same way) reproduces `b44` unpatched and passes patched, but
+  nobody has swapped the ConfigMap on a tenant yet — that needs cluster-admin.
+  → [ADR-059](ADR.md#adr-059--the-ui-gate-must-de-chunk-not-just-forward)
 - **The Showroom terminal has no identity until the attendee logs in
   (22 Oct).** `publish-remediation.sh` died silently after
   `--- Discovering Nexus ---` on a tenant that had skipped Module 2's
