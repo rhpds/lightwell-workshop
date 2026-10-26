@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-26 (ADR-060 Renovate promote must not start AO Deploy)
+Last updated: 2026-10-26 (ADR-061 Renovate promote must not start AO Deploy)
 
 ## Where the pieces live
 
@@ -27,7 +27,27 @@ Last updated: 2026-10-26 (ADR-060 Renovate promote must not start AO Deploy)
   `deploy_paths_for_revision`: parsed promote not in `AO_APP_PATHS` → `[]`
   (was fan-out all). Proven leak on `lmk2m` Module 2; fix in
   `files/cicd-eda-bridge/bridge.py`. Live tenants need ConfigMap apply +
-  rollout (ADR-051). → [ADR-060](ADR.md#adr-060--non-ao-promote-must-not-start-ao-deploy)
+  rollout (ADR-051). → [ADR-061](ADR.md#adr-061--non-ao-promote-must-not-start-ao-deploy)
+
+- **OpenCode session deep link rendered `b44` instead of the transcript
+  (26 Oct).** `opencode-ui-gate/proxy.py` de-chunked on the request path but
+  not on the response path. OpenCode serves the SPA document with
+  `Transfer-Encoding: chunked` and no `Content-Length`, so the gate buffered
+  the raw framing, dropped `transfer-encoding` as hop-by-hop, and declared a
+  `Content-Length` covering it — the browser rendered the first chunk-size
+  line (`b44` = 2884) as the first text on the page and the SPA never booted.
+  **It is latent, not a regression:** the same code serves a `Content-Length`
+  response perfectly, and `proxy.py` has not changed since Shaaf added it on
+  16 Oct; what changed is the framing OpenCode chose.
+  **Second, separate defect in the same file:** stripping `Transfer-Encoding`
+  on the streaming path has been wrong the whole time and would show as a
+  session page that loads but never updates — the fix forwards the header
+  there rather than buffering, which SSE cannot tolerate.
+  **Still to do:** verify against a live OpenCode upstream. The local test
+  (`/tmp/lwtest/gate_itest.py`, boots the real `proxy.py` against a stub that
+  chunks the same way) reproduces `b44` unpatched and passes patched, but
+  nobody has swapped the ConfigMap on a tenant yet — that needs cluster-admin.
+  → [ADR-059](ADR.md#adr-059--the-ui-gate-must-de-chunk-not-just-forward)
 
 - **Agent-sandbox alternative remediation drive (24 Oct, branch `agent-sandbox`).**
   OpenSpec change `openspec/changes/agent-sandbox-orchestrator/` — Path 2 without
@@ -41,8 +61,7 @@ Last updated: 2026-10-26 (ADR-060 Renovate promote must not start AO Deploy)
   `scripts/verify-runtime-matrix.sh`) are in-repo. Next: Group 3 orchestrator
   service in `rhpds/lw-sdlc-opencode`. Lab-cluster verifies (CRD Available,
   Claim Ready, Observe → Traces) still pending a kube context.
-  **Do not merge to `main` until e2e green.** → [ADR-059](ADR.md#adr-059--agent-sandbox-alternative-remediation-drive)
-
+  **Do not merge to `main` until e2e green.** → [ADR-060](ADR.md#adr-060--agent-sandbox-alternative-remediation-drive)
 - **The Showroom terminal has no identity until the attendee logs in
   (22 Oct).** `publish-remediation.sh` died silently after
   `--- Discovering Nexus ---` on a tenant that had skipped Module 2's

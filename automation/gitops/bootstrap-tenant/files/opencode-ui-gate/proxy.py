@@ -51,6 +51,43 @@ HOP_BY_HOP = {
 }
 
 
+def dechunk(raw: bytes) -> bytes:
+    """Decode an HTTP/1.1 chunked body.
+
+    The request path already does this inline; the response path did not, and
+    the framing then leaked into the page. OpenCode answers the SPA document
+    with Transfer-Encoding: chunked and no Content-Length, so the HTML branch
+    below buffered the *raw* framing, dropped the transfer-encoding header as
+    hop-by-hop, and declared a Content-Length covering it. The browser then
+    rendered the first chunk-size line as the first text on the page -- the
+    reported "b44" (0xb44 = 2884 bytes) -- and the document was malformed, so
+    the SPA never booted and no session transcript appeared.
+    """
+    out = bytearray()
+    pos = 0
+    while pos < len(raw):
+        eol = raw.find(b"\r\n", pos)
+        if eol < 0:
+            # Ran out of framing mid-body. Returning what we decoded so far
+            # would silently truncate the page, so prefer the untouched bytes:
+            # a visible mess beats a plausible-looking half-document.
+            return raw if not out else bytes(out)
+        # A chunk-size line may carry extensions after a ';'.
+        size_token = raw[pos:eol].split(b";", 1)[0].strip()
+        try:
+            size = int(size_token, 16)
+        except ValueError:
+            # Not chunked after all. Hand back what we were given rather than
+            # blanking a body we do not understand.
+            return raw if not out else bytes(out)
+        pos = eol + 2
+        if size == 0:
+            break
+        out += raw[pos:pos + size]
+        pos += size + 2
+    return bytes(out)
+
+
 def build_boot_js() -> str:
     dir_js = PROJECT_DIR.replace("\\", "\\\\").replace("'", "\\'")
     return (
@@ -213,6 +250,8 @@ async def _handle(client_reader: asyncio.StreamReader, client_writer: asyncio.St
                         break
                     chunks.append(chunk)
             raw = b"".join(chunks)
+            if not cl and resp_headers.get("transfer-encoding", "").lower() == "chunked":
+                raw = dechunk(raw)
             encoding = resp_headers.get("content-encoding", "").lower()
             if encoding in ("gzip", "br", "deflate"):
                 out = raw
@@ -242,9 +281,17 @@ async def _handle(client_reader: asyncio.StreamReader, client_writer: asyncio.St
             up_writer.close()
             return
 
+        # Everything that is not HTML is streamed through untouched, which is
+        # what SSE needs. The body therefore stays chunked if upstream sent it
+        # that way, so the Transfer-Encoding header has to travel with it --
+        # dropping it as hop-by-hop left the client reading chunk-size lines as
+        # content. Buffering and de-chunking here instead would break the event
+        # stream the session view lives on.
+        chunked_out = resp_headers.get("transfer-encoding", "").lower() == "chunked"
         client_writer.write((status_line + "\r\n").encode("latin1"))
         for k, v in resp_headers.items():
-            if k.lower() in HOP_BY_HOP:
+            lk = k.lower()
+            if lk in HOP_BY_HOP and not (lk == "transfer-encoding" and chunked_out):
                 continue
             client_writer.write(f"{k}: {v}\r\n".encode("latin1"))
         client_writer.write(b"Connection: close\r\n\r\n")

@@ -344,7 +344,7 @@ def deploy_paths_for_revision(revision: str) -> list[str]:
 
     When the promote names an app that is *not* AO-owned (e.g. Renovate's
     report-generator-app), return [] — do not fan-out. Path 1 must not start
-    AO Deploy (ADR-060). Fan-out remains only when the title/token is missing
+    AO Deploy (ADR-061). Fan-out remains only when the title/token is missing
     or no promote app can be parsed.
     """
     default = AO_APP_PATHS or [f"acme-{GUID}/wire-transfer-svc"]
