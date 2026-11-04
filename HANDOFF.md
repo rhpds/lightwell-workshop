@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-10-26 (ADR-061 Renovate promote must not start AO Deploy)
+Last updated: 2026-11-04 (ADR-062 ZT runner needs `runtime-automation/` in the content repo)
 
 ## Where the pieces live
 
@@ -22,6 +22,26 @@ Last updated: 2026-10-26 (ADR-061 Renovate promote must not start AO Deploy)
 | Path 2 operator helper + docs | this repo — [`ao-trigger-helper/`](ao-trigger-helper/) (rewritten for agent-sandbox on that branch) |
 
 ## Recently done
+
+- **Showroom ZT `runner` sidecar CrashLoopBackOff, fixed in the content repo
+  (4 Nov).** Seat `user-9wjsj-showroom` never went Ready — `runner` cycling
+  with `restartCount 6`, `exitCode 0 / Completed` after ~89 s, Showroom Route
+  503, Ansible wait giving up at `attempts: 60`. `zt-runner`'s `/health`
+  returns 503 when `/showroom/repo/runtime-automation` is missing; three failed
+  liveness probes (~70 s) SIGTERM it, gunicorn exits 0, `restartPolicy: Always`
+  makes that a crashloop. The directory was simply absent from this repo.
+  **Not an agnosticv change:** `rh1-2027/lb1815-lightwell-tenant` never sets
+  `ocp4_workload_showroom_runtime_automation_enable` on any branch, and the
+  role defaults it to `false` from v1.6.6 to HEAD. The role's floating chart
+  range `2.1.*` is the quiet part — 2.1.4 added the sidecar and hardcodes
+  `ZT_UI_ENABLED: "true"` for every lab, 2.1.6 moved it to
+  `zt-runner:v2.5.0`. Fix: [`runtime-automation/README.md`](runtime-automation/README.md)
+  so the health contract is met without an agnosticv PR — verified against the
+  real image: 503 without the directory, 200 with it.
+  **Still to do:** merge to `main`, then `oc rollout restart deploy/showroom`
+  on affected seats (the dir only arrives with the next pod's clone); find
+  where that seat's `runtime_automation.setup=true` came from before the next
+  event. → [ADR-062](ADR.md#adr-062--the-content-repo-must-ship-runtime-automation-even-when-unused)
 
 - **Renovate promote no longer fans out AO Deploy (26 Oct).** Bridge
   `deploy_paths_for_revision`: parsed promote not in `AO_APP_PATHS` → `[]`
