@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-10-26 (ADR-061 Renovate promote must not start AO Deploy)
+Last synced with HANDOFF: 2026-11-04 (ADR-062 ZT runner needs `runtime-automation/` in the content repo)
 
 ---
 
@@ -666,6 +666,18 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-062 — The content repo must ship `runtime-automation/`, even when unused
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-11-04 |
+| **Title** | Fix the ZT runner's CrashLoopBackOff in the content repo, not in agnosticv |
+| **Context** | A Lightwell seat (`user-9wjsj-showroom`, cluster `rnk8d`) came up with the Zero Touch `runner` sidecar in `CrashLoopBackOff`: `restartCount 6`, `lastState.terminated exitCode 0 reason Completed`, ~89 s per cycle, pod never Ready, so the showroom Route returned 503 while `nginx`, `content` and `terminal` were fine. Cause: `zt-runner`'s `/health` returns **503** when `$RUNTIME_DIR` is missing; with `showroom-single-pod` 2.1.x mounting only the cloned repo, that path is `/showroom/repo/runtime-automation`. Three failed liveness probes (~70 s) → SIGTERM → gunicorn exits **0** → `restartPolicy: Always` restarts it. `rhpds/lightwell-workshop` has no such directory. `rhpds/agnosticv` never enabled this: `rh1-2027/lb1815-lightwell-tenant` sets no `ocp4_workload_showroom_runtime_automation_enable` on any branch (`git log --all -S` is empty), the showroom role defaults it to `false` at every tag from v1.6.6 to HEAD, and chart `showroom-single-pod` defaults `runtime_automation.setup` to `"false"`. What did change quietly is the role's **floating `2.1.*` chart range**: chart 2.1.4 added the runner sidecar and hardcoded `ZT_UI_ENABLED: "true"` on the content container, and 2.1.6 moved the image to `zt-runner:v2.5.0` with `imagePullPolicy: Always` — the exact shape of the failing pod. So the sidecar was switched on out of band for that seat, and nothing in the repo could keep it healthy. |
+| **Decision** | Ship a tracked, documented `runtime-automation/` in this repo (README only, no playbooks), so the health contract is met and the pod becomes Ready regardless of how ZT got enabled. Do **not** open an agnosticv change for this, and do **not** invent solve/validate playbooks: the lab is tab-driven and does not grade itself. If a future seat should genuinely drop the sidecar, that lever is agnosticv-side (`ocp4_workload_showroom_runtime_automation_enable: false`, or a helm override on `runtime_automation.setup`), not this repo. |
+| **Consequences** | Any ZT-enabled seat self-heals on its next pod (`git-cloner` clones `main`; existing pods need `rollout restart deploy/showroom`). `/config` returns `{}`, so the Zero Touch panel renders empty rather than erroring. Verified against the real `quay.io/rhpds/zt-runner:v2.5.0` with only `/showroom/repo` mounted: no directory → `503 {"runtime_dir":"missing: /showroom/repo/runtime-automation"}`, directory present → `200 {"runtime_dir":"ok","status":"healthy"}`. The enablement itself remains untracked: a new seat provisioned with runtime automation on will run the sidecar, and that is only visible from the pod spec or the applied values. Chart 2.1.4+ also shows the ZT UI bundle for every lab regardless of the runner, which is why this looked like "zero touch was introduced". |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
@@ -733,3 +745,4 @@ Copy and fill for each new decision:
 | UI gate de-chunks responses ("b44" on the session page) | ADR-059 |
 | Agent-sandbox alternative Path 2 (no AO/EDA/AAP in story) | ADR-060 |
 | Non-AO / Renovate promote → no AO Deploy | ADR-061 |
+| ZT `runner` crashloop: content repo must ship `runtime-automation/` | ADR-062 |
