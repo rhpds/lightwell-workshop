@@ -44,6 +44,18 @@ cnpg:
   channel: stable-v1
   source: certified-operators
 
+# NooBaa object storage. Required on clusters without ODF (AWS pools):
+# the tenant TPA chart expects the openshift-storage.noobaa.io OBC
+# storage class and the s3-openshift-storage.<domain> route.
+# Leave disabled on CNV pools, which already provide NooBaa via external ODF.
+noobaa:
+  enabled: false
+  name: noobaa
+  namespace: openshift-storage
+  channel: stable-4.22
+  backingStore:
+    storageClass: ocs-external-storagecluster-ceph-rbd
+
 tpa:
   keycloak:
     realm: sso

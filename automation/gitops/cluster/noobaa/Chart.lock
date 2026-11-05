@@ -1,0 +1,9 @@
+dependencies:
+- name: noobaa-operator
+  repository: file://noobaa-operator
+  version: 0.1.0
+- name: noobaa
+  repository: file://noobaa
+  version: 0.1.0
+digest: sha256:89f5df2115507024526e9413d0195014a3ff06deaf9f038583cd3a6ca4d37779
+generated: "2026-11-05T15:34:06.270459+11:00"

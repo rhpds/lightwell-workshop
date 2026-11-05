@@ -1,0 +1,58 @@
+nameOverride: ""
+fullnameOverride: ""
+
+security:
+  kms: {}
+coreResources:
+  limits:
+    cpu: 999m
+    memory: 4Gi
+  requests:
+    cpu: 125m
+    memory: 1Gi
+dbResources:
+  limits:
+    cpu: 500m
+    memory: 4Gi
+  requests:
+    cpu: 125m
+    memory: 250Mi
+dbVolumeResources:
+  requests:
+    storage: 50Gi
+cleanupPolicy:
+  allowNoobaaDeletion: true
+dbType: postgres
+endpoints:
+  maxCount: 2
+  minCount: 1
+  resources:
+    limits:
+      cpu: 999m
+      memory: 2Gi
+    requests:
+      cpu: 125m
+      memory: 250Mi
+backingStore:
+  numVolumes: 3
+  storageClass: ocs-external-storagecluster-ceph-rbd
+  storageSize: 50Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 4Gi
+loadBalancerSourceSubnets: {}
+labels:
+  monitoring: {}
+
+readiness:
+  enabled: true
+  image: registry.redhat.io/openshift4/ose-cli:v4.15.0
+  timeoutSeconds: 1800
+
+argocd:
+  enabled: true
+  syncwave: "-1"
