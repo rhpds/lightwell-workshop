@@ -21,6 +21,6 @@ spec:
   resources:
     requests:
       storage: {{ ((.Values.snow | default dict).stateStorage) | default "1Gi" | quote }}
-{{- if .Values.deployer.storageClass }}
-  storageClassName: {{ .Values.deployer.storageClass | quote }}
+{{- with (.Values.storageClass | default .Values.deployer.storageClass) }}
+  storageClassName: {{ . | quote }}
 {{- end }}

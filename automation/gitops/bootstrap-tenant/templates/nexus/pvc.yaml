@@ -8,7 +8,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: {{ .Values.deployer.storageClass }}
+  storageClassName: {{ .Values.storageClass | default .Values.deployer.storageClass }}
   resources:
     requests:
       storage: {{ .Values.nexus.storageSize }}
