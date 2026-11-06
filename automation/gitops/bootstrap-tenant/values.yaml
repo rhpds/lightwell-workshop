@@ -5,6 +5,12 @@ password: changeme
 argocd:
   namespace: openshift-gitops
 
+# Storage class for chart PVCs. Takes precedence over deployer.storageClass:
+# core_workloads ocp4_workload_gitops_bootstrap shallow-merges its own
+# deployer block over the helm values, which drops deployer.storageClass.
+# Leave empty to fall back to deployer.storageClass (the CNV default).
+storageClass: ""
+
 deployer:
   domain: apps.example.com
   storageClass: ocs-external-storagecluster-ceph-rbd-immediate

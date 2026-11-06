@@ -14,7 +14,7 @@ spec:
       valuesObject:
         deployer:
           domain: {{ .Values.deployer.domain }}
-          storageClass: {{ .Values.deployer.storageClass }}
+          storageClass: {{ .Values.storageClass | default .Values.deployer.storageClass }}
         admin:
           password: {{ .Values.admin.password | quote }}
         gitlab:

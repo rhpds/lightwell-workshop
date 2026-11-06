@@ -1,0 +1,86 @@
+{{- if .Values.readiness.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "noobaa.name" . }}-readiness
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "noobaa.name" . }}-readiness
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+rules:
+  - apiGroups: [noobaa.io]
+    resources: [noobaas]
+    resourceNames: [{{ include "noobaa.name" . | quote }}]
+    verbs: [get]
+  - apiGroups: [noobaa.io]
+    resources: [backingstores]
+    resourceNames: [noobaa-default-backing-store]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "noobaa.name" . }}-readiness
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "noobaa.name" . }}-readiness
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "noobaa.name" . }}-readiness
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "noobaa.name" . }}-readiness
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.readiness.timeoutSeconds }}
+  template:
+    spec:
+      serviceAccountName: {{ include "noobaa.name" . }}-readiness
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wait-for-object-storage
+          image: {{ .Values.readiness.image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          command: [/bin/bash, -c]
+          args:
+            - |
+              set -eu
+              while true; do
+                phase=$(oc get noobaa {{ include "noobaa.name" . | quote }} -n {{ .Release.Namespace | quote }} --request-timeout=10s -o jsonpath='{.status.phase}' 2>/dev/null || true)
+                backing=$(oc get backingstore noobaa-default-backing-store -n {{ .Release.Namespace | quote }} --request-timeout=10s -o jsonpath='{.status.phase}:{.status.mode.modeCode}' 2>/dev/null || true)
+                if [[ "$phase" == Ready && "$backing" == Ready:OPTIMAL ]]; then
+                  echo "NooBaa Ready; backing store Ready/OPTIMAL."
+                  exit 0
+                fi
+                echo "Waiting for object storage: NooBaa=$phase backingStore=$backing"
+                sleep 10
+              done
+{{- end }}

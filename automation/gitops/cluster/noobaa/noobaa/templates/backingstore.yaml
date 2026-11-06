@@ -1,0 +1,23 @@
+apiVersion: noobaa.io/v1alpha1
+kind: BackingStore
+metadata:
+  name: noobaa-default-backing-store
+  labels:
+    {{- include "noobaa.labels" . | nindent 4 }}
+    app: noobaa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    {{- include "noobaa.argocd-syncwave" . | nindent 4 }}
+spec:
+  type: pv-pool
+  pvPool:
+    numVolumes: {{ .Values.backingStore.numVolumes }}
+    storageClass: {{ .Values.backingStore.storageClass }}
+    resources:
+      requests:
+        storage: {{ .Values.backingStore.storageSize }}
+        cpu: {{ .Values.backingStore.resources.requests.cpu }}
+        memory: {{ .Values.backingStore.resources.requests.memory }}
+      limits:
+        cpu: {{ .Values.backingStore.resources.limits.cpu }}
+        memory: {{ .Values.backingStore.resources.limits.memory }}
