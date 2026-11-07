@@ -1,15 +1,196 @@
 ---
-# HEALTHCHECK — Quick environment readiness check
-# Runs post-provisioning to verify the lab environment is functional.
-# Should complete in under 60 seconds.
+# HEALTHCHECK — Is this tenant ready for an event?
 #
-# Exit 0 = healthy, non-zero = unhealthy.
+# Scope: what this tenant's provisioning and its ArgoCD Application create.
+# Base infrastructure (cluster API/console/nodes) is out of scope — AgnosticD
+# and the cluster CI already validate it.
+#
+# Exit 0 = healthy, non-zero = unhealthy. Target: under 60 seconds.
+#
+# Stream it from a provisioned Showroom:
+#   curl -sk -N "$SHOWROOM/stream/qa/healthcheck"
 
-- name: "Environment Health Check"
+- name: Lightwell tenant health check
   hosts: localhost
   connection: local
   gather_facts: false
+  # Every kubernetes.core.k8s* call runs as the runtime-automation identity
+  # (cluster-admin, from the runtime-automation-kubeconfig Secret) rather than
+  # the pod's own service account, which cannot read openshift-gitops.
+  module_defaults:
+    group/kubernetes.core.k8s:
+      kubeconfig: "{{ k8s_kubeconfig | default(omit) }}"
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig | default(omit) }}"
+  vars:
+    repo_path: /showroom/repo
+    tenant_guid: "{{ guid | default(lookup('env', 'GUID'), true) }}"
+    user_data: "{{ lookup('file', '/user_data/user_data.yml') | from_yaml }}"
+    domain: "{{ user_data.openshift_cluster_ingress_domain }}"
+    tenant_user: "{{ user_data.lab_user | default('user-' ~ tenant_guid) }}"
+    tenant_password: "{{ user_data.lab_password | default('') }}"
+    showroom_ns: "{{ tenant_user }}-showroom"
+    argocd_app: "lightwell-tenant-{{ tenant_guid }}"
+    gitlab_url: "https://gitlab-gitlab.{{ domain }}"
+    nexus_host: "nexus-lightwell-nexus-{{ tenant_guid }}.{{ domain }}"
+    tenant_namespaces:
+      - "{{ tenant_user }}-enterprise"
+      - "{{ showroom_ns }}"
+      - "{{ tenant_user }}-app"
+      - "{{ tenant_user }}-renovate"
+      - "lightwell-tenant-{{ tenant_guid }}"
+      - "lightwell-nexus-{{ tenant_guid }}"
+      - "snow-{{ tenant_guid }}"
+      - "sdlc-sandboxes-{{ tenant_guid }}"
+    routes:
+      - name: Nexus
+        url: "https://nexus-lightwell-nexus-{{ tenant_guid }}.{{ domain }}"
+      - name: GitLab
+        url: "https://gitlab-gitlab.{{ domain }}/users/sign_in"
+      - name: Renovate
+        url: "https://renovate-operator-renovate-operator.{{ domain }}"
+      - name: ArgoCD
+        url: "https://openshift-gitops-server-openshift-gitops.{{ domain }}"
+      - name: TPA
+        url: "https://server-tpa-{{ tenant_guid }}.{{ domain }}"
+      - name: ServiceNow
+        url: "https://snow-mock-snow-{{ tenant_guid }}.{{ domain }}"
+      - name: Orchestrator
+        url: "https://ao.{{ domain }}"
+      - name: OpenShift console
+        url: "https://console-openshift-console.{{ domain }}"
   tasks:
-    - name: "TODO: Implement health checks"
-      ansible.builtin.debug:
-        msg: "Replace this task with checks that verify the environment is ready"
+    - name: Showroom content repository is checked out
+      ansible.builtin.stat:
+        path: "{{ repo_path }}/qa-automation/e2e.yml"
+      register: qa_stat
+      failed_when: not qa_stat.stat.exists
+      changed_when: false
+
+    - name: Cluster API is reachable
+      ansible.builtin.command:
+        cmd: oc whoami
+      register: oc_whoami
+      changed_when: false
+      failed_when: oc_whoami.rc != 0
+
+    - name: Tenant namespaces exist and are Active
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ item }}"
+      register: ns_info
+      changed_when: false
+      failed_when: >
+        ns_info.resources | length == 0 or
+        ns_info.resources[0].status.phase != 'Active'
+      loop: "{{ tenant_namespaces }}"
+
+    - name: Tenant ArgoCD Application is Synced and Healthy
+      kubernetes.core.k8s_info:
+        api_version: argoproj.io/v1alpha1
+        kind: Application
+        name: "{{ argocd_app }}"
+        namespace: openshift-gitops
+      register: argocd
+      changed_when: false
+      failed_when: >
+        argocd.resources | length == 0 or
+        argocd.resources[0].status.sync.status != 'Synced' or
+        argocd.resources[0].status.health.status != 'Healthy'
+
+    - name: Lab-user credentials are available to the runner
+      ansible.builtin.assert:
+        that:
+          - tenant_password | length > 0
+        fail_msg: >-
+          /user_data/user_data.yml has no lab_password. Check that the
+          AgnosticV tenant config sets _showroom_user_data.lab_password.
+        quiet: true
+
+    - name: Tenant user can log in to OpenShift
+      ansible.builtin.command:
+        cmd: >-
+          oc login -u {{ tenant_user }} -p {{ tenant_password }}
+          https://kubernetes.default.svc:443 --insecure-skip-tls-verify
+      environment:
+        # Separate kubeconfig so the cluster-admin kubeconfig used by the
+        # kubernetes.core tasks above is not overwritten.
+        KUBECONFIG: "/tmp/lw-healthcheck-{{ tenant_guid }}"
+      register: oc_login
+      changed_when: false
+      no_log: true
+
+    # Route checks only prove ingress + TLS terminate. The services behind
+    # them are covered by the seeded-resource checks and by e2e.
+    - name: Lab routes answer
+      ansible.builtin.uri:
+        url: "{{ item.url }}"
+        method: GET
+        status_code: [200, 301, 302, 303, 307, 401, 403]
+        follow_redirects: none
+        validate_certs: false
+        timeout: 15
+      register: route_check
+      changed_when: false
+      failed_when: route_check.status not in [200, 301, 302, 303, 307, 401, 403]
+      loop: "{{ routes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Read the GitLab root token
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        namespace: gitlab
+        name: root-user-personal-token
+      register: gitlab_token_secret
+      changed_when: false
+
+    - name: Tenant GitLab projects exist
+      ansible.builtin.uri:
+        url: >-
+          {{ gitlab_url }}/api/v4/projects/{{
+            (('acme-' ~ tenant_guid ~ '/' ~ item) | urlencode) | replace('/', '%2F')
+          }}
+        headers:
+          PRIVATE-TOKEN: "{{ gitlab_token_secret.resources[0].data.token | b64decode }}"
+        status_code: [200]
+        validate_certs: false
+        timeout: 20
+      register: gitlab_project
+      changed_when: false
+      loop:
+        - benefits-mgmt-app
+        - wire-transfer-svc
+        - report-generator-app
+
+    - name: Read the Nexus admin password
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        namespace: "lightwell-nexus-{{ tenant_guid }}"
+        name: nexus-admin-secret
+      register: nexus_secret
+      changed_when: false
+
+    - name: Nexus Lightwell repositories exist
+      ansible.builtin.uri:
+        url: "https://{{ nexus_host }}/service/rest/v1/repositories"
+        url_username: admin
+        url_password: "{{ nexus_secret.resources[0].data.password | b64decode }}"
+        force_basic_auth: true
+        status_code: [200]
+        validate_certs: false
+        timeout: 20
+      register: nexus_repos
+      changed_when: false
+
+    - name: Remediated Lightwell repository is present
+      ansible.builtin.assert:
+        that:
+          - nexus_repos.json | selectattr('name', 'equalto', 'lightwell-remediated') | list | length == 1
+        fail_msg: >-
+          lightwell-remediated is missing from Nexus; Module 2 cannot see a
+          published remediation.
+        quiet: true

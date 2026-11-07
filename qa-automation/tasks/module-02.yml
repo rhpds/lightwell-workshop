@@ -1,0 +1,195 @@
+---
+# Module 2 — "Quick Win: Automated Dependency Updates" (Path 1 — Renovate)
+#
+# Mirrors the attendee's documented steps: create the RenovateJob, publish a
+# Lightwell remediation, let Renovate open the MR, merge it, and wait for the
+# push build. Stops at the first step that breaks.
+
+- name: "M2 | The RenovateJob matches the lab's Lightwell Nexus configuration"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: renovate-operator.mogenius.com/v1alpha1
+      kind: RenovateJob
+      metadata:
+        name: "renovate-{{ tenant_guid }}"
+        namespace: "{{ renovate_ns }}"
+      spec:
+        schedule: "*/5 * * * *"
+        parallelism: 1
+        secretRef: renovate-token
+        serviceAccount:
+          name: renovate-runner
+        provider:
+          name: gitlab
+          endpoint: "{{ gitlab_url }}/api/v4"
+        discoveryFilters:
+          - "{{ gitlab_group }}/report-generator-app"
+        image: ghcr.io/renovatebot/renovate:44.145.1
+        access:
+          adminUsers:
+            - "{{ tenant_user }}@demo.redhat.com"
+        renovateConfig:
+          fileName: config.json
+          inline: "{{ renovate_inline | to_json }}"
+
+- name: "M2 | Read the current report-generator-app pom"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids['report-generator-app'] }}/repository/files/pom.xml/raw?ref=main
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: m2_pom
+  changed_when: false
+
+- name: "M2 | Read the Nexus metadata for jackson-databind"
+  ansible.builtin.uri:
+    url: >-
+      https://{{ nexus_host }}/repository/lightwell-remediated/com/fasterxml/jackson/core/jackson-databind/maven-metadata.xml
+    status_code: [200, 404]
+    validate_certs: false
+    timeout: 20
+  register: m2_metadata
+  changed_when: false
+  failed_when: false
+
+- name: "M2 | Compute the next rhlw suffix"
+  ansible.builtin.set_fact:
+    # Renovate discards a candidate whose major increment exceeds
+    # maxMajorIncrement (500), and a clock-derived suffix trips that. Nexus
+    # also ignores a re-upload of an existing coordinate, so the suffix must
+    # be strictly newer than both the pom and the repository.
+    m2_suffix: >-
+      rhlw-{{ '%05d' | format(
+        (
+          (m2_pom.content | regex_findall('rhlw-(\d+)') | map('int') | list or [0])
+          + (m2_metadata.content | default('', true) | regex_findall('rhlw-(\d+)') | map('int') | list or [0])
+        ) | max + 1
+      ) }}
+
+- name: "M2 | Publish the Lightwell remediation"
+  ansible.builtin.command:
+    cmd: >-
+      {{ repo_path }}/ao-trigger-helper/publish-remediation.sh
+      com.fasterxml.jackson.core:jackson-databind:2.13.5
+      {{ m2_suffix }} "Jackson Databind"
+  environment:
+    GUID: "{{ tenant_guid }}"
+    KUBECONFIG: "{{ k8s_kubeconfig | default(omit) }}"
+  register: m2_publish
+  changed_when: true
+
+- name: "M2 | Record the merge requests that already exist"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids['report-generator-app'] }}/merge_requests?state=all&per_page=100
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: m2_mrs_before
+  changed_when: false
+
+- name: "M2 | Remember existing merge request ids"
+  ansible.builtin.set_fact:
+    m2_seen_iids: "{{ m2_mrs_before.json | map(attribute='iid') | map('int') | list }}"
+
+- name: "M2 | Wait for Renovate to open a new Lightwell MR"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids['report-generator-app'] }}/merge_requests?state=opened&per_page=50
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: m2_mrs
+  changed_when: false
+  until: >-
+    (
+      m2_mrs.json
+      | selectattr('title', 'search', 'jackson-databind')
+      | rejectattr('iid', 'in', m2_seen_iids)
+      | list | length
+    ) > 0
+  retries: 80
+  delay: 15
+
+- name: "M2 | Record the MR Renovate opened"
+  ansible.builtin.set_fact:
+    m2_mr: >-
+      {{
+        m2_mrs.json
+        | selectattr('title', 'search', 'jackson-databind')
+        | rejectattr('iid', 'in', m2_seen_iids)
+        | first
+      }}
+
+- name: "M2 | The MR targets a .rhlw remediated build"
+  ansible.builtin.assert:
+    that:
+      - "'rhlw-' in m2_mr.title"
+    fail_msg: >-
+      Renovate opened "{{ m2_mr.title }}", which is not a Lightwell
+      remediation. The RenovateJob is probably still scanning upstream
+      packages instead of the tenant Nexus.
+    quiet: true
+
+- name: "M2 | Merge the MR (what the attendee clicks)"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids['report-generator-app'] }}/merge_requests/{{ m2_mr.iid }}/merge
+    method: PUT
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200, 201]
+    validate_certs: false
+    timeout: 30
+  register: m2_merge
+  changed_when: true
+  failed_when: m2_merge.json.state | default('') != 'merged'
+
+- name: "M2 | Wait for the push build triggered by the merge"
+  ansible.builtin.shell: |
+    oc get pipelinerun -n 'build-{{ tenant_guid }}' \
+      -l 'pipelinesascode.tekton.dev/repository=report-generator-app,pipelinesascode.tekton.dev/event-type=push' \
+      -o json | python3 -c '
+    import datetime, json, sys
+    since = int(sys.argv[1])
+    for pr in json.load(sys.stdin).get("items", []):
+        ts = pr["metadata"]["creationTimestamp"]
+        started = int(datetime.datetime.strptime(
+            ts, "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=datetime.timezone.utc).timestamp())
+        if started < since:
+            continue
+        for cond in pr.get("status", {}).get("conditions", []):
+            if cond.get("type") == "Succeeded" and cond.get("status") == "True":
+                sys.exit(0)
+    sys.exit(1)
+    ' {{ (lookup('pipe', 'date +%s') | int) - 120 }}
+  args:
+    executable: /bin/bash
+  register: m2_build
+  until: m2_build.rc == 0
+  retries: 60
+  delay: 15
+  changed_when: false
+
+- name: "M2 | TPA has an SBOM for report-generator-app"
+  ansible.builtin.uri:
+    url: "{{ tpa_url }}/api/v2/sbom?q=report-generator-app&limit=100"
+    headers:
+      Authorization: "Bearer {{ tpa_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 60
+  register: m2_sboms
+  changed_when: false
+  until: m2_sboms.json.items | default([]) | length > 0
+  retries: 12
+  delay: 15

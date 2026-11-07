@@ -1,0 +1,97 @@
+---
+# Module 1 — "The Environment"
+#
+# The attendee's steps here are read-only: open each component from the tab
+# bar, log in, and confirm the three Acme applications are already seeded.
+# This module therefore checks reachability and seed state, and never
+# creates or changes anything.
+
+- name: "M1 | Showroom content repository is checked out"
+  ansible.builtin.stat:
+    path: "{{ repo_path }}/content/modules/ROOT/pages/module-01-environment.adoc"
+  register: m1_page
+  failed_when: not m1_page.stat.exists
+  changed_when: false
+
+- name: "M1 | Cluster API is reachable"
+  ansible.builtin.command:
+    cmd: oc whoami
+  register: m1_whoami
+  changed_when: false
+  failed_when: m1_whoami.rc != 0
+
+- name: "M1 | Tenant ArgoCD Application is Synced and Healthy"
+  kubernetes.core.k8s_info:
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: "lightwell-tenant-{{ tenant_guid }}"
+    namespace: openshift-gitops
+  register: m1_argocd
+  changed_when: false
+  failed_when: >
+    m1_argocd.resources | length == 0 or
+    m1_argocd.resources[0].status.sync.status != 'Synced' or
+    m1_argocd.resources[0].status.health.status != 'Healthy'
+
+- name: "M1 | Tenant namespaces are Active"
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+  register: m1_ns
+  changed_when: false
+  failed_when: >
+    m1_ns.resources | length == 0 or
+    m1_ns.resources[0].status.phase != 'Active'
+  loop:
+    - "{{ tenant_user }}-enterprise"
+    - "{{ tenant_user }}-app"
+    - "{{ tenant_user }}-renovate"
+    - "{{ showroom_ns }}"
+
+- name: "M1 | Every component in the environment table answers"
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: [200, 301, 302, 303, 307, 401, 403]
+    follow_redirects: none
+    validate_certs: false
+    timeout: 20
+  register: m1_route
+  changed_when: false
+  failed_when: m1_route.status not in [200, 301, 302, 303, 307, 401, 403]
+  loop: "{{ routes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "M1 | The three Acme applications are seeded in GitLab"
+  ansible.builtin.assert:
+    that:
+      - project_ids | length == apps | length
+    fail_msg: >-
+      Expected a GitLab project for each of {{ apps | join(', ') }} in
+      acme-{{ tenant_guid }}; found {{ project_ids | dict2items | map(attribute='key') | list }}.
+    quiet: true
+
+- name: "M1 | Nexus exposes the Lightwell repositories"
+  ansible.builtin.uri:
+    url: "https://{{ nexus_host }}/service/rest/v1/repositories"
+    url_username: admin
+    url_password: "{{ nexus_password }}"
+    force_basic_auth: true
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: m1_nexus_repos
+  changed_when: false
+
+- name: "M1 | lightwell-remediated and lightwell-validated are present"
+  ansible.builtin.assert:
+    that:
+      - m1_nexus_repos.json | selectattr('name', 'equalto', 'lightwell-remediated') | list | length == 1
+      - m1_nexus_repos.json | selectattr('name', 'equalto', 'lightwell-validated') | list | length == 1
+    fail_msg: >-
+      Nexus is missing a Lightwell repository; Module 2 cannot publish or
+      resolve a remediated build. Got:
+      {{ m1_nexus_repos.json | map(attribute='name') | select('search', 'lightwell') | list }}
+    quiet: true

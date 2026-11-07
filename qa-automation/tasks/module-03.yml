@@ -1,0 +1,127 @@
+---
+# Module 3 — "Full Automation: AI-Assisted Remediation" (Path 2)
+#
+# Two applications, two policies: the low-risk one merges itself once the
+# pipeline's checks pass, the high-risk one stops for a person. Both are
+# driven through the same publish → MR → pipeline → deploy sequence the
+# attendee follows.
+
+- name: "M3 | The three applications carry the policies the module describes"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[item.app] }}/repository/files/.lightwell%2Fpolicy.json/raw?ref=main
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: m3_policies
+  changed_when: false
+  loop:
+    - app: benefits-mgmt-app
+      expects: [auto_approve, LOW]
+    - app: wire-transfer-svc
+      expects: [needs_approval, HIGH]
+    - app: report-generator-app
+      expects: [renovate]
+  loop_control:
+    label: "{{ item.app }}"
+
+- name: "M3 | Each policy matches its application's risk tier"
+  ansible.builtin.assert:
+    that:
+      - item.item.expects | reject('in', item.content) | list | length == 0
+    fail_msg: >-
+      {{ item.item.app }} policy is missing {{ item.item.expects | join(' / ') }}.
+      Module 3 ("Two Applications, Two Policies") no longer matches the
+      repository.
+    quiet: true
+  loop: "{{ m3_policies.results }}"
+  loop_control:
+    label: "{{ item.item.app }}"
+
+- name: "M3 | TPA has both advisory datasets ingested"
+  ansible.builtin.uri:
+    url: "{{ tpa_url }}/api/v3/advisory?limit=1000"
+    headers:
+      Authorization: "Bearer {{ tpa_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 90
+  register: m3_advisories
+  changed_when: false
+
+- name: "M3 | Without both datasets every MR reads 'CVE: not referenced'"
+  ansible.builtin.assert:
+    that:
+      - >-
+        m3_advisories.json.items | default([])
+        | map(attribute='labels.importer', default='')
+        | select('equalto', 'CVElist-v5') | list | length > 0
+      - >-
+        m3_advisories.json.items | default([])
+        | map(attribute='labels.importer', default='')
+        | select('equalto', 'GHSA-OSV') | list | length > 0
+    fail_msg: >-
+      TPA is missing the CVElist-v5 or GHSA-OSV dataset; the agent's Summary
+      will render no CVE.
+    quiet: true
+
+- name: "M3 | Low-risk path — auto_approve / LOW"
+  ansible.builtin.include_tasks: remediation-path.yml
+  vars:
+    path_kind: auto
+    path_gav: "org.apache.commons:commons-text:1.9"
+    path_desc: "Apache Commons Text"
+    path_app: benefits-mgmt-app
+    path_marker: "🟢"
+
+- name: "M3 | High-risk path — needs_approval / HIGH"
+  ansible.builtin.include_tasks: remediation-path.yml
+  vars:
+    path_kind: human
+    path_gav: "com.h2database:h2:1.4.200"
+    path_desc: "H2 Database Engine"
+    path_app: wire-transfer-svc
+    path_marker: "🔴"
+
+- name: "M3 | ServiceNow raised the incidents"
+  ansible.builtin.shell: |
+    curl -sk --max-time 40 '{{ snow_url }}/api/v1/incidents' | python3 -c '
+    import json, sys
+    d = json.load(sys.stdin)
+    r = d.get("result", d)
+    items = r if isinstance(r, list) else r.get("incidents", [])
+    lw = [i for i in items if (i.get("created_by") or "") == "Lightwell AO"]
+    print("COUNT", len(lw))
+    for i in lw:
+        text = (i.get("short_description") or "") + " " + (i.get("description") or "")
+        print("ROW", i.get("number"), i.get("state"), text[:200].replace("\n", " "))
+    '
+  register: m3_snow
+  changed_when: false
+
+- name: "M3 | The incident descriptions carry the CVE, not [unknown]"
+  ansible.builtin.assert:
+    that:
+      - m3_snow.stdout is search('COUNT [1-9]')
+      - "'[unknown]' not in m3_snow.stdout"
+    fail_msg: >-
+      No Lightwell AO incident was raised, or its description says [unknown]
+      — the CVE did not reach ServiceNow.
+    quiet: true
+
+- name: "M3 | TPA holds SBOMs for both remediated applications"
+  ansible.builtin.uri:
+    url: "{{ tpa_url }}/api/v2/sbom?q={{ item }}&limit=100"
+    headers:
+      Authorization: "Bearer {{ tpa_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 60
+  register: m3_sboms
+  changed_when: false
+  failed_when: m3_sboms.json.items | default([]) | length == 0
+  loop:
+    - benefits-mgmt-app
+    - wire-transfer-svc
