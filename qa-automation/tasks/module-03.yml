@@ -55,11 +55,11 @@
   ansible.builtin.assert:
     that:
       - >-
-        m3_advisories.json['items'] | default([])
+        ((m3_advisories.json | default({}, true)).get('items') or [])
         | map(attribute='labels.importer', default='')
         | select('equalto', 'CVElist-v5') | list | length > 0
       - >-
-        m3_advisories.json['items'] | default([])
+        ((m3_advisories.json | default({}, true)).get('items') or [])
         | map(attribute='labels.importer', default='')
         | select('equalto', 'GHSA-OSV') | list | length > 0
     fail_msg: >-
@@ -121,7 +121,7 @@
     timeout: 60
   register: m3_sboms
   changed_when: false
-  failed_when: m3_sboms.json['items'] | default([]) | length == 0
+  failed_when: ((m3_sboms.json | default({}, true)).get('items') or []) | length == 0
   loop:
     - benefits-mgmt-app
     - wire-transfer-svc

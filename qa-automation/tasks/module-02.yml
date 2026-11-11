@@ -221,6 +221,6 @@
     timeout: 60
   register: m2_sboms
   changed_when: false
-  until: m2_sboms.json['items'] | default([]) | length > 0
+  until: ((m2_sboms.json | default({}, true)).get('items') or []) | length > 0
   retries: 12
   delay: 15
