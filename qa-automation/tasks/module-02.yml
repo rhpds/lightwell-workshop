@@ -141,6 +141,35 @@
       packages instead of the tenant Nexus.
     quiet: true
 
+- name: "M2 | Wait for the MR pipeline to pass (the green check the attendee waits for)"
+  # The project sets only_allow_merge_if_pipeline_succeeds, so merging while
+  # the MR pipeline runs returns 405 Method Not Allowed.
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids['report-generator-app'] }}/merge_requests/{{ m2_mr.iid }}
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: m2_mr_now
+  changed_when: false
+  until: >-
+    m2_mr_now.json.detailed_merge_status | default('') == 'mergeable'
+    or (m2_mr_now.json.head_pipeline.status | default('')) in ['failed', 'canceled']
+  retries: 80
+  delay: 15
+
+- name: "M2 | The MR is mergeable"
+  ansible.builtin.assert:
+    that:
+      - m2_mr_now.json.detailed_merge_status == 'mergeable'
+    fail_msg: >-
+      MR !{{ m2_mr.iid }} is not mergeable:
+      detailed_merge_status={{ m2_mr_now.json.detailed_merge_status | default('?') }},
+      pipeline={{ m2_mr_now.json.head_pipeline.status | default('none') }}.
+    quiet: true
+
 - name: "M2 | Merge the MR (what the attendee clicks)"
   ansible.builtin.uri:
     url: >-

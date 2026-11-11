@@ -201,6 +201,37 @@
           demands review; needs_approval / HIGH did not hold.
         quiet: true
 
+    - name: "[{{ path_kind }}] Wait for GitLab to report the MR mergeable"
+      # The validation table can read Passed before GitLab finishes its
+      # mergeability check; merging earlier returns 405 Method Not Allowed.
+      ansible.builtin.uri:
+        url: >-
+          {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests/{{
+            path_mr.iid
+          }}
+        headers:
+          PRIVATE-TOKEN: "{{ gitlab_token }}"
+        status_code: [200]
+        validate_certs: false
+        timeout: 20
+      register: path_human_ready
+      changed_when: false
+      until: >-
+        path_human_ready.json.detailed_merge_status | default('') == 'mergeable'
+        or (path_human_ready.json.head_pipeline.status | default('')) in ['failed', 'canceled']
+      retries: 40
+      delay: 15
+
+    - name: "[{{ path_kind }}] The MR is mergeable"
+      ansible.builtin.assert:
+        that:
+          - path_human_ready.json.detailed_merge_status == 'mergeable'
+        fail_msg: >-
+          MR !{{ path_mr.iid }} is not mergeable:
+          detailed_merge_status={{ path_human_ready.json.detailed_merge_status | default('?') }},
+          pipeline={{ path_human_ready.json.head_pipeline.status | default('none') }}.
+        quiet: true
+
     - name: "[{{ path_kind }}] Merge the MR (what the attendee clicks)"
       ansible.builtin.uri:
         url: >-
