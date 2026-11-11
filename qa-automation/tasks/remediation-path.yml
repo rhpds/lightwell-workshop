@@ -36,6 +36,7 @@
     status_code: [200]
     validate_certs: false
     timeout: 20
+    return_content: true
   register: path_pom
   changed_when: false
 
@@ -48,6 +49,7 @@
     status_code: [200, 404]
     validate_certs: false
     timeout: 20
+    return_content: true
   register: path_metadata
   changed_when: false
   failed_when: false
