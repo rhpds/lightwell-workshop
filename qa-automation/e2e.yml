@@ -35,8 +35,10 @@
       }}
     domain: >-
       {{ user_data.openshift_cluster_ingress_domain | default(lookup('env', 'DOMAIN'), true) }}
-    tenant_user: "{{ user_data.lab_user | default('user-' ~ tenant_guid) }}"
-    tenant_password: "{{ user_data.lab_password | default('') }}"
+    # user/password are reported by ocp4_workload_tenant_keycloak_user via
+    # agnosticd_user_info and merged into the Showroom user data by the role.
+    tenant_user: "{{ user_data.user | default('user-' ~ tenant_guid, true) }}"
+    tenant_password: "{{ user_data.password | default('') }}"
     showroom_ns: "{{ tenant_user }}-showroom"
     renovate_ns: "{{ tenant_user }}-renovate"
     gitlab_url: "https://gitlab-gitlab.{{ domain }}"

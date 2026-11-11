@@ -25,10 +25,17 @@
   vars:
     repo_path: /showroom/repo
     tenant_guid: "{{ guid | default(lookup('env', 'GUID'), true) }}"
-    user_data: "{{ lookup('file', '/user_data/user_data.yml') | from_yaml }}"
-    domain: "{{ user_data.openshift_cluster_ingress_domain }}"
-    tenant_user: "{{ user_data.lab_user | default('user-' ~ tenant_guid) }}"
-    tenant_password: "{{ user_data.lab_password | default('') }}"
+    user_data: >-
+      {{
+        (lookup('file', '/user_data/user_data.yml', errors='ignore') | default('', true) | from_yaml)
+        or {}
+      }}
+    domain: >-
+      {{ user_data.openshift_cluster_ingress_domain | default(lookup('env', 'DOMAIN'), true) }}
+    # user/password are reported by ocp4_workload_tenant_keycloak_user via
+    # agnosticd_user_info and merged into the Showroom user data by the role.
+    tenant_user: "{{ user_data.user | default('user-' ~ tenant_guid, true) }}"
+    tenant_password: "{{ user_data.password | default('') }}"
     showroom_ns: "{{ tenant_user }}-showroom"
     argocd_app: "lightwell-tenant-{{ tenant_guid }}"
     gitlab_url: "https://gitlab-gitlab.{{ domain }}"
@@ -104,8 +111,9 @@
         that:
           - tenant_password | length > 0
         fail_msg: >-
-          /user_data/user_data.yml has no lab_password. Check that the
-          AgnosticV tenant config sets _showroom_user_data.lab_password.
+          /user_data/user_data.yml has no password. The tenant keycloak_user
+          role reports it via agnosticd_user_info; it goes missing if the
+          AgnosticV config overrides _showroom_user_data.
         quiet: true
 
     - name: Tenant user can log in to OpenShift
