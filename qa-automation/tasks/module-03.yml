@@ -40,6 +40,9 @@
   loop_control:
     label: "{{ item.item.app }}"
 
+- name: "M3 | Refresh the TPA token"
+  ansible.builtin.include_tasks: tpa-token.yml
+
 - name: "M3 | TPA has both advisory datasets ingested"
   ansible.builtin.uri:
     url: "{{ tpa_url }}/api/v3/advisory?limit=1000"
@@ -110,6 +113,9 @@
       No Lightwell AO incident was raised, or its description says [unknown]
       — the CVE did not reach ServiceNow.
     quiet: true
+
+- name: "M3 | Refresh the TPA token"
+  ansible.builtin.include_tasks: tpa-token.yml
 
 - name: "M3 | TPA holds SBOMs for both remediated applications"
   ansible.builtin.uri:

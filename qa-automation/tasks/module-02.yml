@@ -211,6 +211,9 @@
   delay: 15
   changed_when: false
 
+- name: "M2 | Refresh the TPA token"
+  ansible.builtin.include_tasks: tpa-token.yml
+
 - name: "M2 | TPA has an SBOM for report-generator-app"
   ansible.builtin.uri:
     url: "{{ tpa_url }}/api/v2/sbom?q=report-generator-app&limit=100"

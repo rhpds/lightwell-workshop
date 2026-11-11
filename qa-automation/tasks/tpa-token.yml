@@ -1,0 +1,26 @@
+---
+# Mint a fresh TPA API token. Keycloak issues client_credentials tokens that
+# expire after 300 seconds, and Module 2 alone runs longer than that, so
+# include this right before each TPA call rather than once in bootstrap.
+# Needs tpa_client_secret and domain (set by bootstrap.yml).
+
+- name: Mint a TPA API token
+  ansible.builtin.uri:
+    url: "https://sso.{{ domain }}/realms/sso/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      grant_type: client_credentials
+      client_id: tpa-cli
+      client_secret: "{{ tpa_client_secret }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 40
+  register: tpa_token_response
+  changed_when: false
+  no_log: true
+
+- name: Set the TPA token
+  ansible.builtin.set_fact:
+    tpa_token: "{{ tpa_token_response.json.access_token }}"
+  no_log: true
