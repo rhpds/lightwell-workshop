@@ -15,6 +15,7 @@
     status_code: [200]
     validate_certs: false
     timeout: 20
+    return_content: true
   register: m3_policies
   changed_when: false
   loop:
