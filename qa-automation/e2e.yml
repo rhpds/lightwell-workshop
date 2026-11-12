@@ -6,8 +6,9 @@
 #
 # This is a mutating test: it publishes remediations, opens and merges MRs,
 # and triggers builds. Run it against a disposable tenant, not one an attendee
-# is using. It is safe to re-run on the same tenant — each run publishes a
-# strictly newer rhlw suffix.
+# is using. It is safe to re-run on the same tenant: tasks/reset.yml closes
+# the "[LW]"/"[Lightwell]" MRs earlier runs left open, and each run publishes
+# a strictly newer rhlw suffix.
 #
 # Stream it from a provisioned Showroom:
 #   curl -sk -N "$SHOWROOM/stream/qa/e2e"
@@ -105,6 +106,9 @@
   tasks:
     - name: Shared facts (credentials, project ids, TPA token)
       ansible.builtin.include_tasks: tasks/bootstrap.yml
+
+    - name: Close lab MRs left by earlier runs, so every run starts like a fresh seat
+      ansible.builtin.include_tasks: tasks/reset.yml
 
     - name: "Module 1 — The Environment"
       ansible.builtin.include_tasks: tasks/module-01.yml
