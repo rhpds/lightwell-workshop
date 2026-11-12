@@ -1,13 +1,120 @@
 ---
-# E2E — End-to-end test
-# Runs all module solve + validate sequences to verify the full lab
-# works from start to finish without manual intervention.
+# E2E — Drive the Lightwell lab the way a learner drives it.
+#
+# One play, one task include per module, in module order, so a failure names
+# the module and section that stopped working. Modules 0 and 4 are prose.
+#
+# This is a mutating test: it publishes remediations, opens and merges MRs,
+# and triggers builds. Run it against a disposable tenant, not one an attendee
+# is using. It is safe to re-run on the same tenant: tasks/reset.yml closes
+# the "[LW]"/"[Lightwell]" MRs earlier runs left open, and each run publishes
+# a strictly newer rhlw suffix.
+#
+# Stream it from a provisioned Showroom:
+#   curl -sk -N "$SHOWROOM/stream/qa/e2e"
 
-- name: "End-to-End Test"
+- name: Lightwell end-to-end test
   hosts: localhost
   connection: local
   gather_facts: false
+  module_defaults:
+    group/kubernetes.core.k8s:
+      kubeconfig: "{{ k8s_kubeconfig | default(omit) }}"
+  # KUBECONFIG covers `oc` calls inside the play; K8S_AUTH_KUBECONFIG is what
+  # kubernetes.core.k8s honours when a task overrides module_defaults (e.g.
+  # the RenovateJob apply), and nested ansible-playbook calls read it too.
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig | default(omit) }}"
+    K8S_AUTH_KUBECONFIG: "{{ k8s_kubeconfig | default(omit) }}"
+  vars:
+    repo_path: /showroom/repo
+    tenant_guid: "{{ guid | default(lookup('env', 'GUID'), true) }}"
+    user_data: >-
+      {{
+        (lookup('file', '/user_data/user_data.yml', errors='ignore') | default('', true) | from_yaml)
+        or {}
+      }}
+    domain: >-
+      {{ user_data.openshift_cluster_ingress_domain | default(lookup('env', 'DOMAIN'), true) }}
+    # user/password are reported by ocp4_workload_tenant_keycloak_user via
+    # agnosticd_user_info and merged into the Showroom user data by the role.
+    tenant_user: "{{ user_data.user | default('user-' ~ tenant_guid, true) }}"
+    tenant_password: "{{ user_data.password | default('') }}"
+    showroom_ns: "{{ tenant_user }}-showroom"
+    renovate_ns: "{{ tenant_user }}-renovate"
+    gitlab_url: "https://gitlab-gitlab.{{ domain }}"
+    gitlab_group: "acme-{{ tenant_guid }}"
+    nexus_host: "nexus-lightwell-nexus-{{ tenant_guid }}.{{ domain }}"
+    tpa_url: "https://server-tpa-{{ tenant_guid }}.{{ domain }}"
+    snow_url: "https://snow-mock-snow-{{ tenant_guid }}.{{ domain }}"
+    apps:
+      - benefits-mgmt-app
+      - wire-transfer-svc
+      - report-generator-app
+    routes:
+      - name: Nexus
+        url: "https://nexus-lightwell-nexus-{{ tenant_guid }}.{{ domain }}"
+      - name: GitLab
+        url: "https://gitlab-gitlab.{{ domain }}/users/sign_in"
+      - name: Renovate
+        url: "https://renovate-operator-renovate-operator.{{ domain }}"
+      - name: ArgoCD
+        url: "https://openshift-gitops-server-openshift-gitops.{{ domain }}"
+      - name: TPA
+        url: "https://server-tpa-{{ tenant_guid }}.{{ domain }}"
+      - name: ServiceNow
+        url: "https://snow-mock-snow-{{ tenant_guid }}.{{ domain }}"
+      - name: Orchestrator
+        url: "https://ao.{{ domain }}"
+      - name: OpenShift console
+        url: "https://console-openshift-console.{{ domain }}"
+    # The RenovateJob inline config from module-02-renovate.adoc. Built as a
+    # dict and serialised with to_json so Renovate's own {{{newVersion}}}
+    # templates are not mistaken for Jinja expressions (hence !unsafe).
+    renovate_inline:
+      onboarding: false
+      requireConfig: optional
+      branchConcurrentLimit: 0
+      prConcurrentLimit: 0
+      prHourlyLimit: 0
+      commitMessagePrefix: "[Lightwell]"
+      commitMessageExtra: !unsafe "({{{newVersion}}})"
+      hostRules:
+        - matchHost: "{{ nexus_host }}"
+          hostType: maven
+          username: admin
+          password: "{{ tenant_password }}"
+      customManagers:
+        - customType: regex
+          managerFilePatterns:
+            - '/(^|/)pom\.xml$/'
+          matchStringsStrategy: any
+          matchStrings:
+            - '<groupId>(?<groupId>[^<]+)</groupId>\s*<artifactId>(?<artifactId>[^<]+)</artifactId>\s*<version>(?<currentValue>[^<${}]+)</version>'
+          depNameTemplate: !unsafe "{{{groupId}}}:{{{artifactId}}}"
+          datasourceTemplate: maven
+          registryUrlTemplate: "https://{{ nexus_host }}/repository/maven-public"
+          versioningTemplate: 'regex:^(?<compatibility>.*?)([.-]rhlw-(?<major>\d+)(\.n(?<minor>\d+))?)?$'
+      packageRules:
+        - matchPackageNames:
+            - "com.acme.*:*"
+          enabled: false
+      dockerfile:
+        enabled: false
+      github-actions:
+        enabled: false
   tasks:
-    - name: "TODO: Implement end-to-end test sequence"
-      ansible.builtin.debug:
-        msg: "Replace this task with your e2e test implementation"
+    - name: Shared facts (credentials, project ids, TPA token)
+      ansible.builtin.include_tasks: tasks/bootstrap.yml
+
+    - name: Close lab MRs left by earlier runs, so every run starts like a fresh seat
+      ansible.builtin.include_tasks: tasks/reset.yml
+
+    - name: "Module 1 — The Environment"
+      ansible.builtin.include_tasks: tasks/module-01.yml
+
+    - name: "Module 2 — Quick Win: Automated Dependency Updates"
+      ansible.builtin.include_tasks: tasks/module-02.yml
+
+    - name: "Module 3 — Full Automation: AI-Assisted Remediation"
+      ansible.builtin.include_tasks: tasks/module-03.yml

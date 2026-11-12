@@ -1,0 +1,83 @@
+---
+# Shared facts for the module checks. Everything read here is cluster state
+# the tenant provisioning created; nothing is modified.
+
+- name: Assert the lab-user credentials reached the runner
+  ansible.builtin.assert:
+    that:
+      - tenant_password | length > 0
+    fail_msg: >-
+      /user_data/user_data.yml has no password. The tenant keycloak_user role
+      reports it via agnosticd_user_info; it goes missing if the AgnosticV
+      config overrides _showroom_user_data.
+    quiet: true
+
+- name: Assert the cluster ingress domain is known
+  ansible.builtin.assert:
+    that:
+      - domain | length > 0
+    fail_msg: >-
+      Could not determine the cluster ingress domain from user_data or the
+      DOMAIN environment variable.
+    quiet: true
+
+- name: Read the GitLab root token
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    namespace: gitlab
+    name: root-user-personal-token
+  register: gitlab_token_secret
+  changed_when: false
+
+- name: Read the Nexus admin password
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    namespace: "lightwell-nexus-{{ tenant_guid }}"
+    name: nexus-admin-secret
+  register: nexus_secret
+  changed_when: false
+
+- name: Read the TPA CLI client secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    namespace: keycloak
+    name: tpa-oidc-client-secret
+  register: tpa_secret_resource
+  changed_when: false
+
+- name: Set credentials for the checks
+  ansible.builtin.set_fact:
+    gitlab_token: "{{ gitlab_token_secret.resources[0].data.token | b64decode }}"
+    nexus_password: "{{ nexus_secret.resources[0].data.password | b64decode }}"
+    tpa_client_secret: "{{ tpa_secret_resource.resources[0].data['client-secret'] | b64decode }}"
+  no_log: true
+
+- name: Mint a TPA API token
+  ansible.builtin.include_tasks: tpa-token.yml
+
+- name: Look up the GitLab project id for each Acme app
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{
+        (('acme-' ~ tenant_guid ~ '/' ~ item) | urlencode) | replace('/', '%2F')
+      }}
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: gitlab_projects
+  changed_when: false
+  loop: "{{ apps }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Index GitLab project ids by application name
+  ansible.builtin.set_fact:
+    project_ids: >-
+      {{
+        dict(apps | zip(gitlab_projects.results | map(attribute='json.id') | list))
+      }}

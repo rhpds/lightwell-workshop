@@ -1,0 +1,286 @@
+---
+# One remediation path of Module 3, driven exactly as the attendee drives it:
+# publish a Lightwell remediation, wait for the agent's MR, watch the pipeline
+# fill the validation table, then either let the policy merge it (low risk) or
+# merge it by hand (high risk), and wait for the build.
+#
+# Included twice by module-03.yml with:
+#   path_kind    auto | human
+#   path_gav     groupId:artifactId:version of the base artifact
+#   path_desc    human name used by publish-remediation.sh
+#   path_app     Acme application the policy routes the work to
+#   path_marker  risk marker the agent puts in the MR title
+
+- name: "[{{ path_kind }}] Record the merge requests that already exist"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests?state=all&per_page=100
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: path_mrs_before
+  changed_when: false
+
+- name: "[{{ path_kind }}] Remember existing merge request ids"
+  ansible.builtin.set_fact:
+    path_seen_iids: "{{ path_mrs_before.json | map(attribute='iid') | map('int') | list }}"
+
+- name: "[{{ path_kind }}] Read the current pom"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/repository/files/pom.xml/raw?ref=main
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+    return_content: true
+  register: path_pom
+  changed_when: false
+
+- name: "[{{ path_kind }}] Read the Nexus metadata for the artifact"
+  ansible.builtin.uri:
+    url: >-
+      https://{{ nexus_host }}/repository/lightwell-remediated/{{
+        path_gav.split(':')[0] | replace('.', '/')
+      }}/{{ path_gav.split(':')[1] }}/maven-metadata.xml
+    status_code: [200, 404]
+    validate_certs: false
+    timeout: 20
+    return_content: true
+  register: path_metadata
+  changed_when: false
+  failed_when: false
+
+- name: "[{{ path_kind }}] Compute the next rhlw suffix"
+  ansible.builtin.set_fact:
+    path_suffix: >-
+      rhlw-{{ '%05d' | format(
+        (
+          (path_pom.content | regex_findall('rhlw-(\d+)') | map('int') | list or [0])
+          + (path_metadata.content | default('', true) | regex_findall('rhlw-(\d+)') | map('int') | list or [0])
+        ) | max + 1
+      ) }}
+
+- name: "[{{ path_kind }}] Publish the remediation"
+  ansible.builtin.command:
+    cmd: >-
+      {{ repo_path }}/ao-trigger-helper/publish-remediation.sh
+      {{ path_gav }}
+      {{ path_suffix }}
+      "{{ path_desc }}"
+  environment:
+    GUID: "{{ tenant_guid }}"
+    KUBECONFIG: "{{ k8s_kubeconfig | default(omit) }}"
+  register: path_publish
+  changed_when: true
+
+- name: "[{{ path_kind }}] Wait for the agent to open an MR"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests?state=opened&per_page=50
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: path_mrs
+  changed_when: false
+  until: >-
+    (
+      path_mrs.json
+      | map(attribute='iid') | map('int')
+      | reject('in', path_seen_iids)
+      | list | length
+    ) > 0
+  retries: 28
+  delay: 15
+
+- name: "[{{ path_kind }}] Record the MR"
+  ansible.builtin.set_fact:
+    path_mr: >-
+      {{
+        path_mrs.json
+        | rejectattr('iid', 'in', path_seen_iids)
+        | first
+      }}
+
+- name: "[{{ path_kind }}] The MR title carries the risk marker"
+  ansible.builtin.assert:
+    that:
+      - path_marker in path_mr.title
+    fail_msg: >-
+      MR title "{{ path_mr.title }}" does not
+      carry {{ path_marker }}; the policy routing in Module 3
+      ("Two Applications, Two Policies") no longer matches.
+    quiet: true
+
+- name: "[{{ path_kind }}] The Summary names a real CVE"
+  ansible.builtin.assert:
+    that:
+      - "'CVE-' in path_mr.description"
+    fail_msg: >-
+      The MR description has no CVE. Usually the TPA advisory lookup or the
+      ingested dataset, not the agent.
+    quiet: true
+
+- name: "[{{ path_kind }}] The validation table starts Pending"
+  ansible.builtin.assert:
+    that:
+      - path_mr.description is search('Pending')
+    fail_msg: >-
+      The agent pre-filled the validation table; the module says it must wait
+      for the pipeline. The Pending window is short — a re-run may miss it.
+    quiet: true
+
+- name: "[{{ path_kind }}] Wait for the pipeline to fill the validation table"
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests/{{
+        path_mr.iid
+      }}
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: path_mr_now
+  changed_when: false
+  until: path_mr_now.json.description is search('Passed')
+  retries: 40
+  delay: 15
+
+- name: "[{{ path_kind }}] The low-risk MR merges itself"
+  when: path_kind == 'auto'
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests/{{
+        path_mr.iid
+      }}
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: path_merged
+  changed_when: false
+  until: path_merged.json.state == 'merged'
+  retries: 60
+  delay: 15
+
+- name: "[{{ path_kind }}] The high-risk MR waits for a person"
+  when: path_kind == 'human'
+  block:
+    - name: "[{{ path_kind }}] Give the policy time to (not) merge it"
+      ansible.builtin.pause:
+        seconds: 20
+
+    - name: "[{{ path_kind }}] Read the MR state"
+      ansible.builtin.uri:
+        url: >-
+          {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests/{{
+            path_mr.iid
+          }}
+        headers:
+          PRIVATE-TOKEN: "{{ gitlab_token }}"
+        status_code: [200]
+        validate_certs: false
+        timeout: 20
+      register: path_human_mr
+      changed_when: false
+
+    - name: "[{{ path_kind }}] The MR is still open and demands human review"
+      ansible.builtin.assert:
+        that:
+          - path_human_mr.json.state == 'opened'
+          - "'Requires human review before merge' in path_human_mr.json.description"
+        fail_msg: >-
+          The high-risk MR is {{ path_human_mr.json.state }} or no longer
+          demands review; needs_approval / HIGH did not hold.
+        quiet: true
+
+    - name: "[{{ path_kind }}] Wait for GitLab to report the MR mergeable"
+      # The validation table can read Passed before GitLab finishes its
+      # mergeability check; merging earlier returns 405 Method Not Allowed.
+      ansible.builtin.uri:
+        url: >-
+          {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests/{{
+            path_mr.iid
+          }}
+        headers:
+          PRIVATE-TOKEN: "{{ gitlab_token }}"
+        status_code: [200]
+        validate_certs: false
+        timeout: 20
+      register: path_human_ready
+      changed_when: false
+      until: >-
+        path_human_ready.json.detailed_merge_status | default('') == 'mergeable'
+        or (path_human_ready.json.head_pipeline.status | default('')) in ['failed', 'canceled']
+      retries: 40
+      delay: 15
+
+    - name: "[{{ path_kind }}] The MR is mergeable"
+      ansible.builtin.assert:
+        that:
+          - path_human_ready.json.detailed_merge_status == 'mergeable'
+        fail_msg: >-
+          MR !{{ path_mr.iid }} is not mergeable:
+          detailed_merge_status={{ path_human_ready.json.detailed_merge_status | default('?') }},
+          pipeline={{ path_human_ready.json.head_pipeline.status | default('none') }}.
+        quiet: true
+
+    - name: "[{{ path_kind }}] Merge the MR (what the attendee clicks)"
+      ansible.builtin.uri:
+        url: >-
+          {{ gitlab_url }}/api/v4/projects/{{ project_ids[path_app] }}/merge_requests/{{
+            path_mr.iid
+          }}/merge
+        method: PUT
+        headers:
+          PRIVATE-TOKEN: "{{ gitlab_token }}"
+        status_code: [200, 201]
+        validate_certs: false
+        timeout: 30
+      register: path_human_merge
+      changed_when: true
+      failed_when: path_human_merge.json.state | default('') != 'merged'
+
+- name: "[{{ path_kind }}] Wait for the push build triggered by the merge"
+  ansible.builtin.shell: |
+    oc get pipelinerun -n 'build-{{ tenant_guid }}' \
+      -l 'pipelinesascode.tekton.dev/repository={{ path_app }},pipelinesascode.tekton.dev/event-type=push' \
+      -o json | python3 -c '
+    import datetime, json, sys
+    since = int(sys.argv[1])
+    failed = []
+    for pr in json.load(sys.stdin).get("items", []):
+        ts = pr["metadata"]["creationTimestamp"]
+        started = int(datetime.datetime.strptime(
+            ts, "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=datetime.timezone.utc).timestamp())
+        if started < since:
+            continue
+        for cond in pr.get("status", {}).get("conditions", []):
+            if cond.get("type") != "Succeeded":
+                continue
+            if cond.get("status") == "True":
+                sys.exit(0)
+            if cond.get("status") == "False":
+                failed.append(" ".join(str(x) for x in (pr["metadata"]["name"], cond.get("reason"), cond.get("message"))))
+    if failed:
+        print("\n".join(failed))
+        sys.exit(2)
+    sys.exit(1)
+    ' {{ (lookup('pipe', 'date +%s') | int) - 120 }}
+  args:
+    executable: /bin/bash
+  register: path_build
+  # rc 0 = a new push build succeeded, 2 = it failed (stop waiting), 1 = not yet.
+  until: path_build.rc in [0, 2]
+  retries: 60
+  delay: 15
+  changed_when: false
+  failed_when: path_build.rc != 0

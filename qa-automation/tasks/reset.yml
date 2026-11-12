@@ -1,0 +1,50 @@
+---
+# Start every run from the state a fresh seat has: no open MRs from the lab's
+# own automation. A previous run (or a run that died part way) leaves some
+# behind:
+#   - "[Lightwell] ..." Renovate MRs on report-generator-app. Renovate updates
+#     an open one in place on the next publish, so "wait for a new MR" never
+#     sees a new iid.
+#   - "[LW] ..." agent MRs. Every Module 2 publish of jackson-databind also
+#     makes the agent open one on wire-transfer-svc, and nothing merges it.
+#     With several stacked up, the Module 3 needs_approval impact analysis
+#     hung (OpenCode session never went idle) and no MR was opened.
+# On a fresh seat there is nothing to close, so the first run behaves exactly
+# like an attendee's.
+
+- name: List open merge requests on the Acme apps
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ project_ids[item] }}/merge_requests?state=opened&per_page=100
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  register: reset_open_mrs
+  changed_when: false
+  loop: "{{ apps }}"
+
+- name: Close MRs left by earlier runs
+  ansible.builtin.uri:
+    url: >-
+      {{ gitlab_url }}/api/v4/projects/{{ item.project_id }}/merge_requests/{{ item.iid }}
+    method: PUT
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_token }}"
+    body_format: json
+    body:
+      state_event: close
+    status_code: [200]
+    validate_certs: false
+    timeout: 20
+  changed_when: true
+  loop: >-
+    {{
+      reset_open_mrs.results
+      | map(attribute='json') | flatten
+      | selectattr('title', 'match', '^\[(LW|Lightwell)\] ')
+      | list
+    }}
+  loop_control:
+    label: "!{{ item.iid }} {{ item.title }}"
