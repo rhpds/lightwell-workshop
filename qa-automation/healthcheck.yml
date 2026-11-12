@@ -88,9 +88,14 @@
         name: "{{ item }}"
       register: ns_info
       changed_when: false
-      failed_when: >
-        ns_info.resources | length == 0 or
-        ns_info.resources[0].status.phase != 'Active'
+      # Retry instead of failed_when: a transient API error leaves no
+      # .resources (failed_when then raises), and right after provisioning
+      # ArgoCD may still be creating namespaces.
+      until: >-
+        (ns_info.resources | default([]) | length > 0)
+        and (ns_info.resources[0].status.phase | default('')) == 'Active'
+      retries: 6
+      delay: 10
       loop: "{{ tenant_namespaces }}"
 
     - name: Tenant ArgoCD Application is Synced and Healthy
@@ -101,10 +106,12 @@
         namespace: openshift-gitops
       register: argocd
       changed_when: false
-      failed_when: >
-        argocd.resources | length == 0 or
-        argocd.resources[0].status.sync.status != 'Synced' or
-        argocd.resources[0].status.health.status != 'Healthy'
+      until: >-
+        (argocd.resources | default([]) | length > 0)
+        and (argocd.resources[0].status.sync.status | default('')) == 'Synced'
+        and (argocd.resources[0].status.health.status | default('')) == 'Healthy'
+      retries: 6
+      delay: 10
 
     - name: Lab-user credentials are available to the runner
       ansible.builtin.assert:
