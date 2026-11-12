@@ -255,6 +255,7 @@
       -o json | python3 -c '
     import datetime, json, sys
     since = int(sys.argv[1])
+    failed = []
     for pr in json.load(sys.stdin).get("items", []):
         ts = pr["metadata"]["creationTimestamp"]
         started = int(datetime.datetime.strptime(
@@ -263,14 +264,23 @@
         if started < since:
             continue
         for cond in pr.get("status", {}).get("conditions", []):
-            if cond.get("type") == "Succeeded" and cond.get("status") == "True":
+            if cond.get("type") != "Succeeded":
+                continue
+            if cond.get("status") == "True":
                 sys.exit(0)
+            if cond.get("status") == "False":
+                failed.append(" ".join(str(x) for x in (pr["metadata"]["name"], cond.get("reason"), cond.get("message"))))
+    if failed:
+        print("\n".join(failed))
+        sys.exit(2)
     sys.exit(1)
     ' {{ (lookup('pipe', 'date +%s') | int) - 120 }}
   args:
     executable: /bin/bash
   register: path_build
-  until: path_build.rc == 0
+  # rc 0 = a new push build succeeded, 2 = it failed (stop waiting), 1 = not yet.
+  until: path_build.rc in [0, 2]
   retries: 60
   delay: 15
   changed_when: false
+  failed_when: path_build.rc != 0
