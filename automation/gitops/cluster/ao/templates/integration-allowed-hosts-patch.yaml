@@ -56,7 +56,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: patch
-          image: {{ .Values.jobImage | default "quay.io/openshift/origin-cli:4.16" }}
+          image: {{ .Values.jobImage | default .Values.cliImage }}
           command:
             - /bin/bash
             - -c

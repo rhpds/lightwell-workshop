@@ -45,7 +45,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: patch-rbac
-          image: registry.redhat.io/openshift4/ose-cli:latest
+          image: {{ .Values.cliImage }}
           command: ["/bin/bash", "-c"]
           args:
             - |

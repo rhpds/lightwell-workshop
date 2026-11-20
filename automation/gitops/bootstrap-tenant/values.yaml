@@ -15,6 +15,8 @@ deployer:
   domain: apps.example.com
   storageClass: ocs-external-storagecluster-ceph-rbd-immediate
 
+cliImage: registry.redhat.io/openshift5/ose-cli-rhel9:v5.0
+
 jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
 
 # Watches PipelineRuns (build-{guid}) + acme-apps Argo Application and POSTs

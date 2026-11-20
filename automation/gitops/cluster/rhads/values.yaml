@@ -1,3 +1,5 @@
+cliImage: registry.redhat.io/openshift5/ose-cli-rhel9:v5.0
+
 deployer:
   domain: apps.example.com
   storageClass: ocs-external-storagecluster-ceph-rbd-immediate
@@ -16,6 +18,7 @@ tpa:
 rhtas:
   namespace: trusted-artifact-signer
   channel: stable-v1.4
+  source: redhat-operators-snapshot-v5
   instance: securesign
   oidc:
     clientId: trusted-artifact-signer
@@ -32,6 +35,7 @@ rhtas:
 
 pipelines:
   channel: pipelines-1.24
+  source: redhat-operators-snapshot-v5
   chains:
     fulcioAddress: http://fulcio-server.trusted-artifact-signer.svc
     rekorAddress: http://rekor-server.trusted-artifact-signer.svc

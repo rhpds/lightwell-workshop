@@ -4,4 +4,4 @@ orchestrator:
 cnpg:
   namespace: cloudnative-pg
   channel: stable-v1
-  source: certified-operators
+  source: certified-operators-snapshot-v4

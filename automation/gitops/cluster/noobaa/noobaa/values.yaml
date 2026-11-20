@@ -50,7 +50,7 @@ labels:
 
 readiness:
   enabled: true
-  image: registry.redhat.io/openshift4/ose-cli:v4.15.0
+  image: registry.redhat.io/openshift5/ose-cli-rhel9:v5.0
   timeoutSeconds: 1800
 
 argocd:

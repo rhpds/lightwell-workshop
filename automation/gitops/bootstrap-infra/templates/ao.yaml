@@ -18,10 +18,12 @@ spec:
           storageClass: {{ .Values.storageClass | default .Values.deployer.storageClass }}
         admin:
           password: {{ .Values.admin.password | quote }}
+        cliImage: {{ .Values.cliImage }}
         orchestrator:
           enabled: {{ .Values.orchestrator.enabled }}
           namespace: {{ .Values.orchestrator.namespace }}
           channel: {{ .Values.orchestrator.channel }}
+          source: {{ .Values.orchestrator.source }}
           postgres:
             instances: {{ .Values.orchestrator.postgres.instances }}
             image: {{ .Values.orchestrator.postgres.image }}

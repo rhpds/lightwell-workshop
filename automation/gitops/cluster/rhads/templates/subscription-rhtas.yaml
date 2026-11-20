@@ -9,5 +9,5 @@ spec:
   channel: {{ .Values.rhtas.channel }}
   installPlanApproval: Automatic
   name: rhtas-operator
-  source: redhat-operators
+  source: {{ .Values.rhtas.source }}
   sourceNamespace: openshift-marketplace

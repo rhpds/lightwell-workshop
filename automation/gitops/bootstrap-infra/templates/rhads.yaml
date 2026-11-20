@@ -25,6 +25,7 @@ spec:
         rhtas:
           namespace: {{ .Values.rhtas.namespace }}
           channel: {{ .Values.rhtas.channel }}
+          source: {{ .Values.rhtas.source }}
           instance: {{ .Values.rhtas.instance }}
           oidc:
             clientId: {{ .Values.rhtas.oidc.clientId }}
@@ -40,7 +41,9 @@ spec:
             securesign: {{ .Values.rhtas.syncwave.securesign | quote }}
         pipelines:
           channel: {{ .Values.pipelines.channel }}
+          source: {{ .Values.pipelines.source }}
           chains:
             audience: {{ .Values.pipelines.chains.audience }}
+        cliImage: {{ .Values.cliImage }}
         jobAnsibleImage: {{ .Values.jobAnsibleImage }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}

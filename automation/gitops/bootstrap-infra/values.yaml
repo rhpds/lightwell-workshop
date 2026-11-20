@@ -9,6 +9,28 @@ gitops:
 argocd:
   namespace: openshift-gitops
 
+# OLM catalog snapshots for operator version pinning on OCP 5.
+# Operators not yet in the v5.0 catalog fall back to v4.22 snapshots.
+catalogSources:
+  - name: redhat-operators-snapshot-v5
+    image: quay.io/rhpds/olm_snapshot_redhat_catalog
+    tag: v5.0_2026_11_16
+    namespace: openshift-marketplace
+    displayName: "Red Hat Operators v5.0 (Snapshot)"
+    publisher: "Red Hat Demo Platform"
+  - name: redhat-operators-snapshot-v4
+    image: quay.io/rhpds/olm_snapshot_redhat_catalog
+    tag: v4.22_2026_11_16
+    namespace: openshift-marketplace
+    displayName: "Red Hat Operators v4.22 (Snapshot)"
+    publisher: "Red Hat Demo Platform"
+  - name: certified-operators-snapshot-v4
+    image: quay.io/rhpds/olm_snapshot_certified_catalog
+    tag: v4.22_2026_11_16
+    namespace: openshift-marketplace
+    displayName: "Certified Operators v4.22 (Snapshot)"
+    publisher: "Red Hat Demo Platform"
+
 # Storage class for chart PVCs. Takes precedence over deployer.storageClass:
 # core_workloads ocp4_workload_gitops_bootstrap shallow-merges its own
 # deployer block over the helm values, which drops deployer.storageClass.
@@ -33,12 +55,14 @@ gitlab:
 aap:
   namespace: aap
   channel: stable-2.7
+  source: redhat-operators-snapshot-v5
   manifestUrl: https://d3s3zqyaz8cp2d.cloudfront.net/aap/manifest.zip
 
 orchestrator:
   enabled: true
   namespace: automation-orchestrator
   channel: stable
+  source: redhat-operators-snapshot-v4
   postgres:
     instances: 1
     image: ghcr.io/cloudnative-pg/postgresql:15
@@ -48,7 +72,7 @@ orchestrator:
 cnpg:
   namespace: cloudnative-pg
   channel: stable-v1
-  source: certified-operators
+  source: certified-operators-snapshot-v4
 
 # NooBaa object storage. Required on clusters without ODF (AWS pools):
 # the tenant TPA chart expects the openshift-storage.noobaa.io OBC
@@ -59,6 +83,7 @@ noobaa:
   name: noobaa
   namespace: openshift-storage
   channel: stable-4.22
+  source: redhat-operators-snapshot-v5
   backingStore:
     storageClass: ocs-external-storagecluster-ceph-rbd
 
@@ -71,6 +96,7 @@ tpa:
 rhtas:
   namespace: trusted-artifact-signer
   channel: stable-v1.4
+  source: redhat-operators-snapshot-v5
   instance: securesign
   oidc:
     clientId: trusted-artifact-signer
@@ -87,6 +113,7 @@ rhtas:
 
 pipelines:
   channel: pipelines-1.24
+  source: redhat-operators-snapshot-v5
   chains:
     audience: trusted-artifact-signer
 
@@ -99,5 +126,7 @@ opencodeImage:
   tag: sha-7971cad
   dockerfilePath: container/Dockerfile
   contextDir: ""
+
+cliImage: registry.redhat.io/openshift5/ose-cli-rhel9:v5.0
 
 jobAnsibleImage: quay.io/agnosticd/ee-multicloud:chained-2026-08-05
