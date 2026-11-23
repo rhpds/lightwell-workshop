@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: trigger
-          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          image: {{ .Values.cliImage }}
           env:
             - name: GITLAB_TOKEN
               valueFrom:

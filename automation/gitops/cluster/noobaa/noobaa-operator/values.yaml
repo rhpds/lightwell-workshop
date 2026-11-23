@@ -8,7 +8,7 @@ noobaa:
     channel: stable-4.22
     installPlanApproval: Automatic
     name: mcg-operator
-    source: redhat-operators
+    source: redhat-operators-snapshot-v5
     sourceNamespace: openshift-marketplace
 
 argocd:

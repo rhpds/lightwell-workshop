@@ -1,0 +1,19 @@
+catalogSources:
+  - name: redhat-operators-snapshot-v5
+    image: quay.io/rhpds/olm_snapshot_redhat_catalog
+    tag: v5.0_2026_11_16
+    namespace: openshift-marketplace
+    displayName: "Red Hat Operators v5.0 (Snapshot)"
+    publisher: "Red Hat Demo Platform"
+  - name: redhat-operators-snapshot-v4
+    image: quay.io/rhpds/olm_snapshot_redhat_catalog
+    tag: v4.22_2026_11_16
+    namespace: openshift-marketplace
+    displayName: "Red Hat Operators v4.22 (Snapshot)"
+    publisher: "Red Hat Demo Platform"
+  - name: certified-operators-snapshot-v4
+    image: quay.io/rhpds/olm_snapshot_certified_catalog
+    tag: v4.22_2026_11_16
+    namespace: openshift-marketplace
+    displayName: "Certified Operators v4.22 (Snapshot)"
+    publisher: "Red Hat Demo Platform"

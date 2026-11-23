@@ -9,10 +9,8 @@ that item is (or implies) an architectural decision.
 
 ## Pushing
 
-Module 3 content may be pushed straight to `main`. **Module 2 content may not** —
-put it on a branch and open a PR, even for a one-line change. James owns the
-Renovate path and has to be able to reproduce a change before it lands on
-everyone's tenants.
+Module 2 and Module 3 content may be pushed straight to `main`. Use a branch
+and PR only for major changes or AgnosticV changes.
 
 ## On every session start
 

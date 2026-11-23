@@ -8,6 +8,6 @@ metadata:
 spec:
   channel: {{ .Values.aap.channel }}
   name: ansible-automation-platform-operator
-  source: redhat-operators
+  source: {{ .Values.aap.source }}
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic

@@ -24,9 +24,11 @@ spec:
         noobaa-operator:
           noobaa:
             subscription:
-              source: redhat-operators
+              source: {{ .Values.noobaa.source }}
               channel: {{ .Values.noobaa.channel | quote }}
         noobaa:
+          readiness:
+            image: {{ .Values.cliImage }}
           nameOverride: {{ .Values.noobaa.name }}
           backingStore:
             storageClass: {{ .Values.noobaa.backingStore.storageClass | quote }}

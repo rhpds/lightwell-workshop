@@ -9,5 +9,5 @@ spec:
   channel: {{ .Values.pipelines.channel }}
   installPlanApproval: Automatic
   name: openshift-pipelines-operator-rh
-  source: redhat-operators
+  source: {{ .Values.pipelines.source }}
   sourceNamespace: openshift-marketplace

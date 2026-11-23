@@ -9,7 +9,7 @@ metadata:
 spec:
   channel: {{ .Values.orchestrator.channel }}
   name: automation-orchestrator-operator
-  source: redhat-operators
+  source: {{ .Values.orchestrator.source }}
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic
 {{- end }}

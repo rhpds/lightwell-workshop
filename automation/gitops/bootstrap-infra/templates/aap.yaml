@@ -17,6 +17,7 @@ spec:
         aap:
           namespace: {{ .Values.aap.namespace }}
           channel: {{ .Values.aap.channel }}
+          source: {{ .Values.aap.source }}
           manifestUrl: {{ .Values.aap.manifestUrl }}
         jobAnsibleImage: {{ .Values.jobAnsibleImage }}
 {{ include "app-of-apps.syncPolicy" . | indent 2 }}

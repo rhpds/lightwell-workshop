@@ -1,3 +1,5 @@
+cliImage: registry.redhat.io/openshift5/ose-cli-rhel9:v5.0
+
 deployer:
   domain: apps.example.com
   storageClass: ocs-external-storagecluster-ceph-rbd-immediate
@@ -9,6 +11,7 @@ orchestrator:
   enabled: true
   namespace: automation-orchestrator
   channel: stable
+  source: redhat-operators-snapshot-v4
   postgres:
     instances: 1
     image: ghcr.io/cloudnative-pg/postgresql:15
