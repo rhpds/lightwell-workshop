@@ -397,6 +397,21 @@ def scan_argo_app() -> None:
         _deploy_signaled.add(signal_key)
         return
 
+    # First-ever deploy (no annotation) is treated as a cold-start prime:
+    # the app just came up during provisioning, not from a real promote.
+    if not anns.get(ANN_DEPLOY):
+        print(
+            f"argo {ACME_APP}: first Healthy — priming without POST "
+            f"(rev={revision[:12]}…)"
+        )
+        _deploy_signaled.add(signal_key)
+        patch_annotation(
+            f"/apis/argoproj.io/v1alpha1/namespaces/{ARGO_NS}/applications/{ACME_APP}",
+            ANN_DEPLOY,
+            signal_key,
+        )
+        return
+
     paths = deploy_paths_for_revision(revision)
     print(
         f"argo {ACME_APP}: {sync}/{health} rev={revision[:12]}… → "
