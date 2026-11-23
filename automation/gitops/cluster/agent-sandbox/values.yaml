@@ -4,7 +4,7 @@ enabled: true
 name: agent-sandbox-operator
 channel: preview-0.9
 startingCSV: agent-sandbox-operator.v0.9.0
-source: redhat-operators
+source: redhat-operators-snapshot-v5
 sourceNamespace: openshift-marketplace
 namespace: openshift-operators
 
