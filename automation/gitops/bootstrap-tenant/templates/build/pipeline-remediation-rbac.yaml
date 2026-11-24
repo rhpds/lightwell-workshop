@@ -1,0 +1,67 @@
+{{- if .Values.build.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pipeline-argo-reader-{{ .Values.guid }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    resourceNames: ["acme-apps-{{ .Values.guid }}"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-argo-reader-{{ .Values.guid }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pipeline-argo-reader-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: pipeline
+    namespace: build-{{ .Values.guid }}
+{{- if .Values.sdlc.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pipeline-opencode-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["opencode-server"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-opencode-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.sdlcNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pipeline-opencode-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: pipeline
+    namespace: build-{{ .Values.guid }}
+{{- end }}
+{{- end }}

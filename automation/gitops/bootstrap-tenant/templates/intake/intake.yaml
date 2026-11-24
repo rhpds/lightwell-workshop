@@ -1,0 +1,299 @@
+{{- if and (eq (include "bootstrap-tenant.drive" .) "tekton") .Values.sdlc.enabled .Values.build.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lightwell-intake-el
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lightwell-intake-runner
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lightwell-intake-el
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-triggers-eventlistener-roles
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-intake-el
+    namespace: build-{{ .Values.guid }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lightwell-intake-el-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tekton-triggers-eventlistener-clusterroles
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-intake-el
+    namespace: build-{{ .Values.guid }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lightwell-intake-runner-edit
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-intake-runner
+    namespace: build-{{ .Values.guid }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: intake-nexus-reader-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["nexus-admin-secret"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: intake-nexus-reader-{{ .Values.guid }}
+  namespace: {{ include "bootstrap-tenant.nexusNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: intake-nexus-reader-{{ .Values.guid }}
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-intake-runner
+    namespace: build-{{ .Values.guid }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lightwell-intake-renovate
+  namespace: {{ include "bootstrap-tenant.renovateNamespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: renovatejob-manager
+subjects:
+  - kind: ServiceAccount
+    name: lightwell-intake-runner
+    namespace: build-{{ .Values.guid }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lightwell-intake-script
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  lightwell_intake.py: |
+{{ .Files.Get "files/lightwell_intake.py" | indent 4 }}
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: lightwell-intake
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  params:
+    - name: group
+    - name: artifact
+    - name: version
+  tasks:
+    - name: intake
+      params:
+        - name: group
+          value: $(params.group)
+        - name: artifact
+          value: $(params.artifact)
+        - name: version
+          value: $(params.version)
+      taskSpec:
+        params:
+          - name: group
+          - name: artifact
+          - name: version
+        steps:
+          - name: intake
+            image: python:3.12-alpine
+            env:
+              - name: GUID
+                value: {{ .Values.guid | quote }}
+              - name: GROUP
+                value: $(params.group)
+              - name: ARTIFACT
+                value: $(params.artifact)
+              - name: VERSION
+                value: $(params.version)
+              - name: APP_NAMES
+                value: {{ include "bootstrap-tenant.intakeAppNames" . | quote }}
+              - name: GITLAB_GROUP
+                value: {{ include "bootstrap-tenant.gitlabGroup" . | quote }}
+              - name: GITLAB_URL
+                value: {{ include "bootstrap-tenant.gitlabHost" . | quote }}
+              - name: GITLAB_ENDPOINT
+                value: {{ printf "%s/api/v4" (include "bootstrap-tenant.gitlabHost" .) | quote }}
+              - name: GITLAB_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: gitlab-pac-token
+                    key: token
+              - name: TPA_URL
+                value: {{ include "bootstrap-tenant.tpaUrl" . | quote }}
+              - name: TPA_CLIENT_ID
+                value: {{ .Values.tpa.oidc.cliClientId | quote }}
+              - name: TPA_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: oidc-cli
+                    key: client-secret
+              - name: KC_TOKEN_URL
+                value: {{ printf "%s/realms/%s/protocol/openid-connect/token" (include "bootstrap-tenant.keycloakUrl" .) .Values.keycloak.realm | quote }}
+              - name: SNOW_URL
+                value: {{ include "bootstrap-tenant.snowSvcUrl" . | quote }}
+              - name: RENOVATE_NAMESPACE
+                value: {{ include "bootstrap-tenant.renovateNamespace" . | quote }}
+              - name: NEXUS_HOST
+                value: {{ include "bootstrap-tenant.nexusRouteUrl" . | trimPrefix "https://" | quote }}
+              - name: NEXUS_SECRET_NAMESPACE
+                value: {{ include "bootstrap-tenant.nexusNamespace" . | quote }}
+            script: |
+              #!/bin/sh
+              set -eu
+              python3 /scripts/lightwell_intake.py
+            volumeMounts:
+              - name: script
+                mountPath: /scripts
+        volumes:
+          - name: script
+            configMap:
+              name: lightwell-intake-script
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: lightwell-intake
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  params:
+    - name: group
+      value: $(body.component.group)
+    - name: artifact
+      value: $(body.component.name)
+    - name: version
+      value: $(body.component.version)
+    - name: runName
+      value: $(extensions.runName)
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: lightwell-intake
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  params:
+    - name: group
+    - name: artifact
+    - name: version
+    - name: runName
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        # Same slug as lightwell_intake.pipeline_run_name(). A second event
+        # for this artifact and version collides and does not start a run.
+        name: $(tt.params.runName)
+        namespace: build-{{ .Values.guid }}
+      spec:
+        pipelineRef:
+          name: lightwell-intake
+        taskRunTemplate:
+          serviceAccountName: lightwell-intake-runner
+        params:
+          - name: group
+            value: $(tt.params.group)
+          - name: artifact
+            value: $(tt.params.artifact)
+          - name: version
+            value: $(tt.params.version)
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: lightwell-intake
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  serviceAccountName: lightwell-intake-el
+  triggers:
+    - name: rhlw
+      interceptors:
+        - ref:
+            name: cel
+          params:
+            - name: filter
+              value: "body.action == 'CREATED' && body.component.version.contains('rhlw-')"
+            - name: overlays
+              value:
+                # Keep aligned with pipeline_run_name() in files/lightwell_intake.py.
+                - key: runName
+                  expression: "'lw-' + body.component.name.replace('.','-').truncate(22) + '-' + body.component.version.replace('.','-').truncate(30)"
+      bindings:
+        - ref: lightwell-intake
+      template:
+        ref: lightwell-intake
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: lightwell-intake
+  namespace: build-{{ .Values.guid }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  host: lightwell-intake-{{ .Values.guid }}.{{ .Values.deployer.domain }}
+  to:
+    kind: Service
+    name: el-lightwell-intake
+  port:
+    targetPort: http-listener
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

@@ -1,4 +1,4 @@
-{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.drive" .) "ao") (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
 {{- $aoPaths := list -}}
 {{- range .Values.gitlab.appSeeds }}
 {{- if and .policy (eq (index .policy "remediation_owner") "ao") }}

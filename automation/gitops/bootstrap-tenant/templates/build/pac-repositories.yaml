@@ -35,5 +35,17 @@ spec:
       value: https://server.tpa-{{ $guid }}.svc:443
     - name: maven-mirror-url
       value: http://nexus.lightwell-nexus-{{ $guid }}.svc:8081/repository/maven-public
+    - name: opencode-base-url
+      value: {{ include "bootstrap-tenant.opencodeBaseUrl" $ | quote }}
+    - name: sdlc-namespace
+      value: {{ include "bootstrap-tenant.sdlcNamespace" $ | quote }}
+    - name: snow-url
+      value: {{ include "bootstrap-tenant.snowSvcUrl" $ | quote }}
+    - name: guid
+      value: {{ $guid | quote }}
+    - name: argo-namespace
+      value: openshift-gitops
+    - name: argo-app
+      value: acme-apps-{{ $guid }}
 {{- end }}
 {{- end }}

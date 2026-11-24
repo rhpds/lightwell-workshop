@@ -1,4 +1,4 @@
-{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") }}
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.drive" .) "ao") (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

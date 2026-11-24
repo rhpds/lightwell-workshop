@@ -1,4 +1,4 @@
-{{- if .Values.sdlc.enabled }}
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.drive" .) "ao") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

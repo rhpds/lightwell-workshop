@@ -19,6 +19,7 @@ metadata:
     # CVElist-v5 at 0 while GHSA-OSV loaded fine. Observed on both tenants of
     # cluster-klrql; re-POSTing the same zip by hand ingested it in 7s.
     argocd.argoproj.io/sync-wave: {{ $wave | quote }}
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 10
   ttlSecondsAfterFinished: 86400

@@ -247,6 +247,7 @@ spec:
                   echo "ERROR: GitLab webhook create failed for ${path} (HTTP ${code})"; cat /tmp/hook.json; exit 1
                 fi
               }
+              {{- if eq (include "bootstrap-tenant.drive" .) "ao" }}
               if [ -n "${GITLAB_WEBHOOK_URL}" ]; then
                 {{- range .Values.gitlab.appSeeds }}
                 {{- if and .policy (eq (index .policy "remediation_owner") "ao") }}
@@ -254,5 +255,6 @@ spec:
                 {{- end }}
                 {{- end }}
               fi
+              {{- end }}
 
               echo "GitLab tenant provisioning complete"

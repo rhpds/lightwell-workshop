@@ -46,18 +46,17 @@ spec:
                 configMapKeyRef:
                   name: tenant-integration
                   key: NEXUS_WEBHOOK_REPOSITORIES
+            - name: SDLC_DRIVE
+              value: {{ include "bootstrap-tenant.drive" . | quote }}
             - name: EDA_WEBHOOK_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: tenant-integration
-                  key: EDA_WEBHOOK_URL
-            # Fallback when Nexus rejects EDA_WEBHOOK_URL (see nexus-reconcile.py).
+              value: {{ include "bootstrap-tenant.edaWebhookUrl" . | quote }}
+            # Fallback when Nexus rejects the in-cluster URL (see nexus-reconcile.py).
             - name: EDA_WEBHOOK_ROUTE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: tenant-integration
-                  key: EDA_WEBHOOK_ROUTE_URL
-                  optional: true
+              value: {{ include "bootstrap-tenant.edaWebhookRouteUrl" . | quote }}
+            - name: INTAKE_WEBHOOK_URL
+              value: {{ include "bootstrap-tenant.intakeWebhookUrl" . | quote }}
+            - name: INTAKE_WEBHOOK_ROUTE_URL
+              value: {{ include "bootstrap-tenant.intakeWebhookRouteUrl" . | quote }}
             - name: SKIP_WEBHOOK_SETUP
               valueFrom:
                 configMapKeyRef:

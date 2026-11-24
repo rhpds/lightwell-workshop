@@ -1,4 +1,4 @@
-{{- if and .Values.apps.enabled .Values.sdlc.orchestrator.enabled }}
+{{- if and .Values.apps.enabled .Values.sdlc.orchestrator.enabled (eq (include "bootstrap-tenant.drive" .) "ao") }}
 # Stamp the tenant EDA webhook onto Acme Applications for operator visibility.
 # Live deploy signals are posted by Deployment cicd-eda-bridge (ADR-036).
 apiVersion: rbac.authorization.k8s.io/v1

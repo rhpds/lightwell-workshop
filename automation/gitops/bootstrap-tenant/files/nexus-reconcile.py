@@ -387,14 +387,33 @@ def verify_webhooks(caps: list, repos: list[str]) -> bool:
     return all_ok
 
 
+def webhook_targets(
+    drive: str,
+    eda_url: str,
+    eda_route: str,
+    listener_url: str,
+    listener_route: str,
+) -> list[str]:
+    """ao posts to Event-Driven Ansible. tekton posts to the intake EventListener."""
+    if drive == "tekton":
+        chosen = (listener_url, listener_route)
+    else:
+        chosen = (eda_url, eda_route)
+    return [url for url in chosen if url]
+
+
 def main() -> None:
     nexus_url = env("NEXUS_URL", required=True)
     nexus_user = env("NEXUS_USER", "admin")
     nexus_pass = env("NEXUS_ADMIN_PASSWORD", required=True)
     lw_user = env("LIGHTWELL_NETWORK_USERNAME", "")
     lw_pass = env("LIGHTWELL_NETWORK_PASSWORD", "")
+    drive = env("SDLC_DRIVE", "ao")
     eda_url = env("EDA_WEBHOOK_URL", "")
     eda_route_url = env("EDA_WEBHOOK_ROUTE_URL", "")
+    listener_url = env("INTAKE_WEBHOOK_URL", "")
+    listener_route = env("INTAKE_WEBHOOK_ROUTE_URL", "")
+    webhook_urls = webhook_targets(drive, eda_url, eda_route_url, listener_url, listener_route)
     webhook_repos = env(
         "NEXUS_WEBHOOK_REPOSITORIES",
         "redhat-packages-validated,redhat-packages-remediated",
@@ -454,9 +473,9 @@ def main() -> None:
             + ". Populate the credentials Secret and re-run this Job."
         )
 
-    if skip_webhooks or not eda_url:
-        if not eda_url:
-            print("SKIP webhooks: EDA_WEBHOOK_URL not set")
+    if skip_webhooks or not webhook_urls:
+        if not webhook_urls:
+            print(f"SKIP webhooks: no target for sdlc.drive={drive}")
         sys.exit(0)
 
     caps = list_capabilities(nexus_url, nexus_user, nexus_pass)
@@ -471,31 +490,30 @@ def main() -> None:
     # address ("Host resolves to private/local IP address(es)"), which is what
     # the in-cluster Service URL is; seen on AWS clusters. The activation's
     # Route resolves to the ingress load balancer, so fall back to it.
-    eda_urls = [u for u in (eda_url, eda_route_url) if u]
     tid = 1
     for repo in repo_list:
-        if webhook_exists(caps, repo, eda_urls):
+        if webhook_exists(caps, repo, webhook_urls):
             print(f"Skip webhook (exists): {repo}")
             continue
-        for url in eda_urls:
+        for url in webhook_urls:
             created = create_webhook_extdirect(
                 nexus_url,
                 nexus_user,
                 nexus_pass,
                 repo,
                 url,
-                f"SDLC EDA webhook — GitOps ({repo})",
+                f"SDLC webhook — GitOps ({repo})",
                 tid,
             )
             tid += 1
             if created:
                 break
-            if url != eda_urls[-1]:
-                print(f"Retrying webhook for {repo} with the EDA Route URL")
+            if url != webhook_urls[-1]:
+                print(f"Retrying webhook for {repo} with the Route URL")
 
     caps = list_capabilities(nexus_url, nexus_user, nexus_pass)
     if not verify_webhooks(caps, repo_list):
-        print("ERROR: EDA webhooks are not in place — SDLC flow will not fire", file=sys.stderr)
+        print("ERROR: webhooks are not in place — SDLC flow will not fire", file=sys.stderr)
         sys.exit(1)
     print("Nexus reconcile complete.")
 

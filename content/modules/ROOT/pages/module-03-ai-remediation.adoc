@@ -5,26 +5,24 @@
 
 include::partial$lab-access.adoc[]
 
-Module 2 ended with a deliberate limitation: Renovate found one dependency in one repository and asked you to merge it. That works until the day Lightwell publishes forty remediations across sixty repositories, and "ask a human to merge it" stops being a strategy.
+Module 2 ended with a deliberate limitation: Renovate found one dependency in one repository and asked you to merge it. That works until Lightwell publishes a rebuild that several applications depend on, and someone still has to know which repositories are affected.
 
-This module walks through the same remediation event, handled by services running on your OpenShift cluster instead of by you. The platform opens a Snow incident, asks Trusted Profile Analyzer which applications are actually affected, applies each application's own approval policy, and dispatches an AI agent to write the merge request. The pipeline then tests the change and writes the results back into the merge request body, so that when a human *is* asked to decide, they are reading evidence rather than guessing.
+This module walks through that event on your OpenShift cluster. Publishing a `.rhlw` artifact starts one Tekton run, `lightwell-intake`. That run opens a Snow incident, asks Trusted Profile Analyzer which applications contain the component, and reads each application's `.lightwell/policy.json`. For every application the platform owns, it creates a Renovate job. Renovate opens the merge request and changes only the dependency version. `build-pull-request` tests that change. You merge it. `build-push-to-main` builds the image, and the incident closes when Argo CD is healthy.
 
-You will remediate two of your three applications:
+You will remediate two applications:
 
-* `benefits-mgmt-app` — internal HR application, risk class `LOW`, policy `auto_approve`. The platform merges it without you.
-* `wire-transfer-svc` — payment-critical and PCI-scoped, risk class `HIGH`, policy `needs_approval`. The platform does everything *except* the last step, and then waits for you.
+* `benefits-mgmt-app` — internal HR application, risk class `LOW`, approval `auto_approve`. The policy is recorded on the merge request. It does not merge the request.
+* `wire-transfer-svc` — payment-critical and PCI-scoped, risk class `HIGH`, approval `needs_approval`. The merge request says a person should review it. You merge this one too.
 
-The difference is the approval policy. Automation handles the low-risk change end to end; the high-risk change stops and waits for your review.
+`report-generator-app` stays on the Module 2 path. Its policy owner is `renovate`, so intake names it in a comment and does not create a job for it.
 
 == Foundations
 
 Three ideas run through this module:
 
-* *Evidence before decision* — the pipeline fills in the validation table before anything is allowed to merge. The business benefit is faster, more defensible reviews: a reviewer reads measured results instead of gathering evidence by hand.
-* *Risk-based approvals* — `benefits-mgmt-app` merges automatically; `wire-transfer-svc` waits for a person. The business benefit is focus: reviewer time goes to high-risk changes, and low-risk fixes ship without waiting in a review queue.
-* *Verify the artifact, not the dashboard* — the SBOM contents are the fact; vulnerability counts depend on what the scanner knows. The business benefit is accurate reporting: teams avoid both false confidence and unnecessary escalations.
-
-Everything in this flow runs on OpenShift: the artifact manager, GitLab, Trusted Profile Analyzer, the event and workflow services, the AI agent, the Tekton pipelines, Argo CD, and the Acme applications themselves.
+* *Evidence before decision* — the pipeline fills in the validation table before GitLab enables Merge. You read measured results.
+* *The policy classifies the change* — `auto_approve` and `needs_approval` change the recommended action on the merge request. Neither value merges it.
+* *Verify the artifact, not the dashboard* — the SBOM contents are the fact. Vulnerability counts depend on what the scanner knows.
 
 [cols="1,2,2",options="header"]
 |===
@@ -32,119 +30,72 @@ Everything in this flow runs on OpenShift: the artifact manager, GitLab, Trusted
 
 | Trigger
 | Renovate polls the artifact manager on a schedule
-| The artifact manager fires a `component CREATED` webhook as soon as the artifact is published
+| The artifact manager fires a `component CREATED` webhook when the artifact is published
 
 | Who finds the affected apps
 | Renovate reads one repository's `pom.xml`
-| TPA is queried for every SBOM containing the component
+| `lightwell-intake` asks TPA which SBOMs contain the component
 
 | Who writes the fix
 | Renovate's regex manager
-| The `impact-analyzer` AI agent (OpenCode)
+| Renovate bumps `pom.xml`. OpenCode edits application code only when the regression scan shows a difference
 
 | What the merge request says
 | A one-line version bump
-| CVE, CVSS, risk class, and a validation table filled in by the pipeline
+| The bumped coordinate, the application's risk class, and a validation table filled in by the pipeline
 
 | Who approves
 | Always you
-| Per-app policy — `auto_approve` or `needs_approval`
+| Always you. The policy says how carefully to read the request
 
 | Audit trail
 | Git history only
-| A Snow incident, commented at every stage
+| A Snow incident, commented when the rollout is healthy or when it fails
 
 | Build, sign, deploy
 | Shared — Tekton, OCI registry, Argo CD, TPA
-| Same tools and same steps
+| The same `build-push-to-main` pipeline, plus a wait until Argo CD is healthy
 |===
-
-Both paths use the same build, sign, and deploy steps. Full automation changes who decides what to change and who approves it.
 
 == How the Pipeline Is Organized
 
-Every service in this flow runs on OpenShift, and each does the job it is best at. Event-Driven Ansible listens for the `.rhlw` artifact event and starts the workflow. Ansible Orchestrator coordinates the stages, while TPA, GitLab, OpenCode, Tekton, and Argo CD handle analysis, source control, the fix, builds, and deployment. Each stage runs and is recorded as it completes.
-
-Your project contains *three* workflows, not one, and the split is the first thing worth understanding:
+Three Tekton runs do the work. They are separate because they start from different events.
 
 [cols="1,3",options="header"]
 |===
-| Workflow | Runs when
+| Run | Runs when
 
-| *Lightwell Remediation — Start*
-| A remediated artifact is published. Ends when the merge requests are ready.
+| `lightwell-intake`
+| Nexus reports a component whose version contains `rhlw-`. One run per published coordinate. It does not clone an application repository.
 
-| *— Merged*
-| A merge request is merged — by you or by automation. Follows the build through.
+| `build-pull-request`
+| Renovate opens or updates a merge request. It tests the bump and, only when test outcomes differ from the base branch, asks OpenCode to adapt application code.
 
-| *— Deploy*
-| Argo CD reports the application healthy. Closes the incident out.
+| `build-push-to-main`
+| You merge to `main`. It builds the image, uploads the SBOM, commits the image tag, and waits until `acme-apps-{guid}` is Synced and Healthy.
 |===
 
-They are separate so that each workflow can be re-used in different contexts — for example, the Merged workflow runs the same way whether a person or the automation merges the request. Each stage is a short execution started by a webhook. The Snow incident ties the stages back into one story.
-
-.Start: from artifact to reviewable merge request
+.From a published artifact to a running pod
 [mermaid, width="100%"]
 ----
 flowchart TD
-  NX["Nexus<br/>component CREATED"]
-  EDA["Event-Driven Ansible<br/>(sensor only)"]
-  PREP["Prepare Remediation<br/>SNOW parent · query TPA · classify · child incidents"]
-  LOOP{{"For each affected app"}}
-  IMP["Impact Analyzer<br/>AI agent opens the MR"]
-  VER["MR Verifier"]
-  APPR{"Auto-approve?"}
-  AUTO["Merge MR<br/>(auto-approved)"]
-  WAIT["SNOW — awaiting<br/>GitLab merge"]
-  HUMAN(["Human merges<br/>in GitLab"])
-  NX --> EDA --> PREP --> LOOP
-  LOOP --> IMP --> VER --> APPR
-  APPR -->|auto_approve| AUTO
-  APPR -->|needs_approval| WAIT -.-> HUMAN
-  style HUMAN fill:#f8d7da,stroke:#b02a37,stroke-width:2px
-  style AUTO fill:#d1e7dd,stroke:#146c43
-  style IMP fill:#cfe2ff,stroke:#0d6efd,stroke-width:2px
+  NX["Nexus component CREATED"]
+  IN["lightwell-intake<br/>Snow parent, TPA, policy, RenovateJob"]
+  MR["Renovate merge request<br/>pom.xml only"]
+  PR["build-pull-request<br/>tests, adapt only on a difference"]
+  YOU(["You merge in GitLab"])
+  MAIN["build-push-to-main<br/>image, SBOM, promote"]
+  ARGO["Argo CD Synced and Healthy"]
+  SNOW["Snow child resolved<br/>parent resolved when every child is"]
+  NX --> IN --> MR --> PR --> YOU --> MAIN --> ARGO --> SNOW
+  style YOU fill:#f8d7da,stroke:#b02a37,stroke-width:2px
 ----
 
-All the preparation — opening the parent incident (ticket), asking TPA which applications contain the component, classifying each against its policy, raising a child incident per application — is a single *Prepare Remediation* step in the workflow. It is one Ansible job running several plays, so the canvas shows you the decision points rather than the plumbing.
-
-The merge — by automation or by you — is where the full automation path rejoins the quick win path:
-
-.Merged and Deploy: two more short runs
-[mermaid, width="100%"]
-----
-flowchart LR
-  MG(["MR merged<br/>(AO or human)"])
-  LC1["Merged: SNOW — MR merged"]
-  POLL["Poll Build Status<br/>watches PaC commit status"]
-  PIPE["Tekton build-push-to-main<br/>build · SBOM · sign · push · promote"]
-  LC2["SNOW — build succeeded"]
-  ARGO["Argo CD syncs<br/>new imageTag"]
-  LC3["Deploy: SNOW — deploy Healthy"]
-  FIN["SNOW finalize<br/>parent Resolved"]
-  MG --> LC1 --> POLL
-  MG --> PIPE
-  PIPE -.commit status.-> POLL
-  POLL --> LC2
-  PIPE --> ARGO --> LC3 --> FIN
-  style FIN fill:#d1e7dd,stroke:#146c43
-----
-
-The *Merged* workflow does not run when the build finishes — Tekton does not send a completion event. Instead, it polls the GitLab commit status that Pipelines-as-Code already mirrors from the PipelineRun. That is why one Merged execution can run for several minutes: it is watching your build.
-
-NOTE: The `report-generator-app` you remediated in Module 2 never enters this loop. Its policy marks Renovate as the remediation owner, so the classify step records it and skips it. Two tools, one portfolio, no collisions.
-
-// UNBLOCKED (19 Oct): this section was blocked because query-tpa.yml built
-// affected_repos from REMEDIATION_APP_GITLAB_PATH, so every event classified
-// onto wire-transfer-svc and the auto_approve branch was never taken. Fixed
-// upstream in lw-sdlc-opencode: query-tpa.yml now computes the blast radius
-// from real Acme SBOM package matches via files/tpa_blast_radius.py and says
-// so explicitly ("Does NOT invent apps via REMEDIATION_APP_GITLAB_PATH").
-// Confirmed on 8gmp5: a commons-text event lands on benefits-mgmt-app alone.
+`report-generator-app` does not enter this flow. Intake records the skip on the parent incident and leaves that repository to the Renovate schedule you configured in Module 2.
 
 == Two Applications, Two Policies
 
-Each application repository carries a `.lightwell/policy.json` file. It is the primary control that decides whether a human is interrupted — but it is not the only one. If any step in the merge request pipeline fails (unit tests, regression scan, license compliance), the merge is blocked regardless of policy, and the change requires human review:
+Each application repository carries a `.lightwell/policy.json`. The `remediation_owner` value `ao` means this Tekton path. The `approval` value is recorded on the merge request and does not merge it. A failed `build-pull-request` keeps the Merge button disabled either way.
 
 [cols="2,1,1,3",options="header"]
 |===
@@ -166,51 +117,46 @@ Each application repository carries a `.lightwell/policy.json` file. It is the p
 | `LOW` — internal reporting tool, no regulated data
 |===
 
-For this workshop, the policy travels with the code, in the repository, reviewed like any other change. In practice, other, external policy engines could be used to evaluate whether a change is allowed to merge. The workflow does not care where the policy comes from, only that it is machine-readable and can be evaluated.
-
-TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] before you start. It is a single JSON object with four fields, and it is the entire governance model for this lab.
+TIP: Open `.lightwell/policy.json` in `acme-{guid}/wire-transfer-svc` in https://gitlab-gitlab.{openshift_cluster_ingress_domain}[GitLab^] before you start. It is a single JSON object, and it is the governance record for that repository.
 
 === Check the Running Applications
 
 . Switch to the *OpenShift Console* tab on the right (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]) and sign in with `{user}` / `{password}` if needed.
 . In the left-hand menu choose *Workloads* → *Topology*, then set *Project* to `{user}-app`.
 +
-You should see three application deployments, each with a complete ring — every pod it expects is running. The icon in the middle is the runtime: the two Tomcat cats are the WAR applications, `benefits-mgmt-app-prod` and `wire-transfer-svc-prod`, and the Spring Boot leaf is `report-generator-app-prod`, a JAR. These are the same three applications whose policies you just read.
+You should see three application deployments, each with a complete ring. The two Tomcat applications are `benefits-mgmt-app-prod` and `wire-transfer-svc-prod`. The Spring Boot application is `report-generator-app-prod`.
 +
 image::m3-ocp-topology.png["The OpenShift Topology view for the user-app project showing three application nodes",link=_images/m3-ocp-topology.png,window=_images]
 
-. Click the ring for `benefits-mgmt-app-prod`. A panel opens on the right.
-. Under *Resources*, confirm three things: the *Pod* is `Running`, the *Service* routes to it, and the *Route* it is reachable on is listed. *View logs* is next to the pod if you want to watch it start.
+. Click the ring for `benefits-mgmt-app-prod`. Under *Resources*, confirm the *Pod* is `Running`, the *Service* routes to it, and the *Route* is listed.
 +
 image::m3-ocp-topology-pod.png["The Topology side panel for benefits-mgmt-app-prod showing its pod, service and route",link=_images/m3-ocp-topology-pod.png,window=_images]
 
 [NOTE]
 ====
-Leave this view as it is — you will come back to it. Nothing here changes while the remediation runs — the agent is working in GitLab, not in the cluster. The pod you are looking at now is the *old* one, still running the vulnerable dependency.
-
-Later in this module, after the merge request is merged and the build completes, Argo CD will replace it. Come back to this view then: the deployment name is unchanged, but the pod name will be different, because it is a different pod running a different image. That substitution — with nobody touching the cluster — is the whole point of the exercise.
+Leave this view as it is. The pod you are looking at is still running the current dependency. After you merge and Argo CD syncs, the deployment name is unchanged and the pod name is new.
 ====
 
 == Logging In to OpenShift
 
-The commands in this module use `oc` (the OpenShift CLI) to interact with your cluster.
+The commands in this module use `oc`.
 
-. If you already logged in during Module 2 and the terminal still shows your user name for `oc whoami`, skip this section. Otherwise, run the following command in the terminal on the right:
+. If you already logged in during Module 2 and `oc whoami` shows your user, skip this section. Otherwise run:
 +
 [source,bash,role=execute,subs=attributes+]
 ----
 oc login -u {user} -p {password} https://kubernetes.default.svc:443 --insecure-skip-tls-verify
 ----
-+
-. Confirm you see `Login successful` followed by your user name.
 
-NOTE: Without a login, `oc` falls back to the Showroom pod's own service account, which cannot read your artifact manager. The script below stops with an error telling you to come back here. The session is also lost if the Showroom pod restarts, so come back here if that error appears later in the module.
+. Confirm you see `Login successful`.
 
-== Remediating a Low-Risk Application
+NOTE: Without a login, `oc` falls back to the Showroom pod's service account, which cannot read your artifact manager. Come back to this section if a later command stops with `ERROR: not logged in to OpenShift`.
 
-Start with the easy one. Playing the Lightwell release engineer role once more, you will publish a remediated build of a dependency that `benefits-mgmt-app` declares directly in its `pom.xml`.
+== Publish a Low-Risk Rebuild
 
-. Run the following command in the terminal on the right:
+Publish a remediated build of a dependency that `benefits-mgmt-app` declares in its `pom.xml`.
+
+. Run:
 +
 [source,bash,role=execute,subs=attributes+]
 ----
@@ -221,292 +167,139 @@ curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/mo
   "Apache Commons Text"
 ----
 
-. Watch the script output. It should end with:
-+
-[source,text]
-----
-=== Remediation published ===
+. The script should end with `=== Remediation published ===` and the coordinate `org.apache.commons:commons-text:1.9.rhlw-00001`.
 
-  Nexus:  org.apache.commons:commons-text:1.9.rhlw-00001
-          https://<nexus-host>/repository/lightwell-remediated
+Publishing the coordinate once is what fires the webhook. Publishing the same group, artifact, and version again does not. If you need to run this module twice, increment the suffix (`rhlw-00002`).
 
-  TPA:    <N> advisories published
-          https://<tpa-host>
-----
-+
-If it stops with `ERROR: not logged in to OpenShift`, return to xref:module-03-ai-remediation.adoc#_logging_in_to_openshift[Logging In to OpenShift] and run the login command.
+== Watch the Intake Run
 
-This is the same script you used in Module 2. It publishes the remediated JAR to the `lightwell-remediated` repository in your artifact manager and pushes the matching OSV advisories to TPA.
+. In the OpenShift Console, open *Pipelines* → *PipelineRuns* and select the project `build-{guid}`.
+. Open the new `lightwell-intake` run. It has one task, `intake`.
+. When it succeeds, the log names the parent incident and the Renovate job for each platform-owned application TPA returned. A `renovate` owner is listed as skipped and has no job.
 
-IMPORTANT: The webhook fires when the Lightwell remediation is first published. Re-publishing the same group, artifact and version does nothing at all — the artifact manager has already seen it. If you need to run this module twice, increment the suffix (`rhlw-00002`) so a genuinely new component is created.
+That run does not clone a repository, call OpenCode, or merge anything.
 
-// VERIFIED (8gmp5): commons-text 1.9 classifies onto benefits-mgmt-app
-// alone and auto-merges. Chosen over flyway-core, which has no advisory in
-// OSV.dev at all, and over h2, which is declared test-scoped by
-// benefits-mgmt-app so it is absent from the runtime SBOM and only ever
-// matches wire-transfer-svc. CVE-2022-42889 (Text4Shell) is already in the
-// seeded dataset, so no dataset change was needed.
+== Review the Incident
 
-== Watch the Workflow Run
+Snow is the ITSM stand-in for this lab.
 
-The workflow is visible in the Ansible Orchestrator console, but the work itself is distributed across services on OpenShift. You will use the console to see the order of events.
+. Open https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[Snow^].
+. Find the incident whose short description is `[Lightwell] org.apache.commons:commons-text:1.9.rhlw-00001`. That is the parent. It was opened before the TPA query, so a failed query still leaves a ticket.
+. Read the comment. It names the platform applications and any application intake skipped.
+. Open the child whose configuration item is `benefits-mgmt-app`. It stays open until the rollout is healthy.
 
-. Switch to the *Ansible Orchestrator* tab on the right (or https://ao.{openshift_cluster_ingress_domain}[open it in a new tab^]) and log in with `{user}` / `{password}`.
-. Navigate to _Workflows_ on the left (you may need to expand the menu using the control in the upper left to see the navigation), and confirm your project is `lightwell-{guid}`, and that it holds the three workflows listed earlier.
-+
-image::m3-ao-workflows-start.png["The Ansible Orchestrator workflow list, with Lightwell Remediation — Start highlighted",link=_images/m3-ao-workflows-start.png,window=_images]
+== Review the Merge Request
 
-. Click *Lightwell Remediation — Start*, then click _Workflow Runs_ in the left navigation to open the *Runs* view. This shows all Runs for this workflow.
-. By now, since the new artifact was published a new Run should have started. Confirm a new execution has appeared and is progressing. At this point in the lab only the *Start* workflow should have a new run — *Merged* and *Deploy* arrive later, after each merge and rollout. (The screenshot below is from a completed module, so it shows all three.)
-+
-image::m3-ao-three-executions.png["Workflow Runs showing separate Start, Merged and Deploy executions, all Completed",link=_images/m3-ao-three-executions.png,window=_images]
+Renovate opens the merge request. The title starts with `[Lightwell]` and names the dependency.
 
-. Click the Run ID link (e.g. `d174413c-26a4-4d9e-80...`) to open the new *Start* run and watch the workflow steps light up in order:
-+
-.. *Prepare Remediation* — one job that opens the parent incident, queries TPA, classifies each returned repository against its `.lightwell/policy.json`, and raises a child incident per affected application
-.. *For each affected app* — a loop over the applications in scope for automation
-.. *Impact Analyzer* — the agent opens the merge request
-.. *MR Verifier* — the merge request is checked and the validation table filled in
-.. *Auto-approve?* — the branch that decides whether a human is involved at all
-+
-image::m3-ao-start-canvas.png["The Lightwell Remediation — Start canvas for a completed run, with the Run details table listing each node",link=_images/m3-ao-start-canvas.png,window=_images]
-+
-TIP: The canvas is fit to the window, so step labels are small. Use the zoom control at the bottom left to read them — zoomed in, each step shows which AAP job template it runs.
+. In GitLab, open `acme-{guid}/benefits-mgmt-app` → *Merge requests*.
+. Open the request. The description records the old and new versions and the risk class from `.lightwell/policy.json`. `auto_approve` is in that row. It is not an instruction to merge.
+. Open *Changes*. The diff is the `pom.xml` version bump. Renovate does not edit application source.
 
-. Check the *Run details* table underneath the canvas: each row should name a workflow step and its job template as it completes.
-+
-image::m3-ao-canvas-detail.png["A zoomed section of an Orchestrator canvas showing node names, the job template each one runs, and green success markers",link=_images/m3-ao-canvas-detail.png,window=_images]
-+
-The candidate list (the list of apps affected by the remediation) comes from TPA and nowhere else. If TPA has no SBOM containing the component, the loop has nothing to iterate over — the workflow will not invent an application to remediate.
+== Watch the Validation Checks
 
-== Review the ITSM Tickets
+`build-pull-request` runs on the merge request.
 
-The workflow opens the parent incident before it queries TPA or changes any code. In this lab, *Snow* is a lightweight ServiceNow-like app that plays the role of your ITSM system.
-
-. Switch to the *Snow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]) — no login required.
-. Click *Incidents Opened Today* to open a list of recent incidents.
-. At the top of the incident list, find the incident raised by *Lightwell AO* whose description starts with `[CVE-xxxx-xxxx] MEDIUM — remediate`. That is the parent.
-+
-image::m3-snow-incident-list.png["The Snow incident list with the parent remediation incident highlighted",link=_images/m3-snow-incident-list.png,window=_images]
-
-. Open the parent. Confirm it shows the blast-radius classification and links to the child tickets it opened.
-+
-image::m3-snow-parent-incident.png["The parent incident, showing the blast-radius classification and the child tickets it opened",link=_images/m3-snow-parent-incident.png,window=_images]
-
-. Scroll down the ticket to find and open the *Child ticket(s)* link to open the child ticket for `benefits-mgmt-app` (this will open in a separate tab). Confirm it shows the policy that applied (`auto_approve`), the merge request, and what the agent reported.
-+
-image::m3-snow-child-incident.png["The child incident for benefits-mgmt-app, showing approval policy auto_approve and the expected remediation flow",link=_images/m3-snow-child-incident.png,window=_images]
-
-The tickets form a simple hierarchy:
-
-* A *parent* incident represents the remediation event — one artifact, one publication, one thread to follow.
-* A *child* incident is created for each affected application once the workflow knows which applications are in scope.
-
-Each application's workflow comments on its own child as it progresses — merge request opened, verifier passed, awaiting merge. The parent only gets short milestone notes with links to the children. Use the parent to see overall status; open a child for the details.
-
-The comments include working links to the merge request, the pipeline run, and later the Argo CD application and route. The audit trail is written while the work happens, not reconstructed from git history afterwards.
-
-Leave this tab open — you will return to it at the end of the module.
-
-== Review the Agent's Merge Request
-
-In the loop, the workflow dispatches the `impact-analyzer` agent to create the fix. The agent reads the application's `pom.xml`, bumps the dependency to the remediated `.rhlw` version, pushes a branch, and opens a merge request.
-
-. Switch to the *GitLab* tab on the right (or https://gitlab-gitlab.{openshift_cluster_ingress_domain}[open it in a new tab^]) and go to `acme-{guid}/benefits-mgmt-app` → *Merge requests* (you may need to expand the left nav menu due to the width of the window)
-. Find the merge request. If the list is empty, the automation has already merged it — click the *Merged* tab to find it. The title follows a fixed shape:
-+
-[source,text]
-----
-[LW] 🟢 Bump commons-text to 1.9.rhlw-00001 to fix CVE-2022-42889
-----
-+
-Yours will name the dependency you just published, with its own `.rhlw` number.
-
-. Confirm the colored dot is the *application's* Acme Inc. risk class, not the severity of the CVE. That distinction is easy to miss and worth pausing on: `CVE-2022-42889` is a critical-severity flaw, yet this merge request is green, because `benefits-mgmt-app` is a low-risk application and the fix is therefore allowed to merge itself. The `wire-transfer-svc` merge request later in this module carries a 🔴 for the opposite reason. A reviewer scanning twenty merge requests is triaging by *what the change can break*, not by how frightening the CVE sounds.
-
-. Open the *Changes* tab and inspect the diff. It should be the same single-line `pom.xml` change Renovate made in Module 2. The _Overview_ tab is the part a human is expected to read:
-+
-[cols="1,3",options="header"]
-|===
-| Section | What it carries
-
-| Summary
-| Package, current version, remediated version, a link to the CVE, CVSS score, Lightwell risk score, and the SBOM impact
-
-| Vulnerability Details
-| What the CVE is and how the remediated build addresses it
-
-| Automated Validation
-| A table of checks — seven measured checks plus the application's risk class. At this point every check row reads `Pending` — nothing has been tested yet
-
-| Risk Assessment
-| The application's Acme Inc. risk class and the rationale from its policy file
-
-| Recommended Action
-| Derived, not guessed: a failed check means do not merge; a `HIGH` or `CRITICAL` risk class means human review even when everything passes
-|===
-
-. Return to the *Overview* tab and read the Summary and Vulnerability Details.
-+
-image::m3-mr-summary.png["The agent's merge request: title, Summary table and Vulnerability Details",link=_images/m3-mr-summary.png,window=_images]
-
-. Scroll to *Automated Validation*. When the agent first opens the merge request, every check row says `Pending` — the agent proposed the change but did not test it. If the pipeline has already started or finished by the time you look, some or all rows will show real results instead (for example, `4/4 tests passed`). Either way, the point is the same: the table is filled by the pipeline, not by the agent:
-+
-image::m3-mr-validation-pending.png["The Automated Validation table with every check Pending, as the agent wrote it",link=_images/m3-mr-validation-pending.png,window=_images]
-
-NOTE: The advisory data comes from a TPA lookup, not from the agent's memory. If your TPA has no advisory for the component, the Summary reads "not referenced" and "not scored" rather than a plausible-looking number. The agent is explicitly instructed not to invent security data — a fabricated CVSS score in an audit trail is worse than a blank one.
-
-== Watch the Validation Checks Run
-
-The merge request is created before any testing has happened, so every check row in the *Automated Validation* table starts as `Pending` (yours might be all "green" already if you waited long enough.) A Tekton pipeline, `build-pull-request`, runs against the open merge request, executes `mvn verify` together with the CycloneDX SBOM plugin, and then rewrites that one section of the description with real results.
-
-. Scroll to the bottom of the merge request. For the next minute or two, you should see the widget below:
+. At the bottom of the merge request, GitLab shows *Merge blocked* while the pipeline is running. That is the gate. The button stays disabled until the pipeline succeeds.
 +
 image::m3-mr-merge-blocked.png["The merge request widget showing a running pipeline and Merge blocked: Pipeline must succeed",link=_images/m3-mr-merge-blocked.png,window=_images]
-+
-*Merge blocked: 1 check failed — Pipeline must succeed.* Nothing has gone wrong. The pipeline is still running, and GitLab will not let anyone merge — you, a colleague, or the automation — until it reports success. The wording is unfortunate: "1 check failed" here means "the required check has not passed yet", not "a test broke".
 
-. Click the *Pipeline #<n>* link. You should see one stage, named *external*, running `Pipelines as Code CI / build-pull-request`.
+. Open the pipeline link. The stage is *external*: `Pipelines as Code CI / build-pull-request`. There is no `.gitlab-ci.yml` and no GitLab runner.
 +
 image::m3-gitlab-pipeline-running.png["The GitLab pipeline page showing a single external stage running Pipelines as Code CI / build-pull-request",link=_images/m3-gitlab-pipeline-running.png,window=_images]
-+
-"External" means it is an external (to GitLab) pipeline, in this case a Tekton Pipeline running on OpenShift. There is no `.gitlab-ci.yml` in this repository and no GitLab runner involved. Tekton is mirroring its status back here so that GitLab has something to gate on.
 
-. To see the actual pipeline, switch to the *OpenShift Console* tab, navigate to *Pipelines* → *Pipelines* → *PipelineRuns*, and select the `build-{guid}` project.
-. Open the running `build-pull-request` PipelineRun. Confirm you can see these four tasks:
+. In the OpenShift Console, project `build-{guid}`, open that PipelineRun. A clean comparison shows:
 +
 .. `fetch-source` — clones the merge request branch
-.. `run-tests` — `mvn verify` plus the CycloneDX SBOM, against the *remediated* dependency
-.. `baseline-tests` — the same tests again against the dependency version you are replacing. This is what makes *Regression scan* a comparison rather than an assumption, and it is why the pipeline takes roughly twice as long as a plain build
-.. `report-validation` — writes the results into the merge request, and fails the pipeline if any check row is not green
-+
-image::m3-tekton-pipelinerun.png["The PipelineRun details view in the OpenShift console showing fetch-source, run-tests, baseline-tests and report-validation",link=_images/m3-tekton-pipelinerun.png,window=_images]
-+
-That last task is the one holding your Merge button. Once it passes, the gate opens.
+.. `run-tests` — `mvn verify` and the CycloneDX SBOM against the bumped dependency
+.. `baseline-tests` — the same tests against the base branch's `pom.xml`, and a count of outcomes that differ
+.. `adapt` — present in the pipeline, and skipped when that count is zero
+.. `report-validation` — writes the table and fails the run unless every measured row passed
 
-. Return to the GitLab merge request and refresh it. The table should now have filled in. Confirm you can find each row and understand what it measures:
+`adapt` runs only when at least one test outcome differs. It calls the OpenCode server in `sdlc-{guid}`, waits until the session is idle, and pushes a commit with the pipeline token. That commit may contain only `src/main/`, `src/test/`, and `REMEDIATION.md`. A `pom.xml` change is refused and the task fails. This commons-text rebuild is a compatible bump, so expect `adapt` to be skipped.
+
+. Refresh the merge request. The validation table should be filled in.
 +
 [cols="2,3",options="header"]
 |===
-| Check | What it actually measures
+| Check | What it measures
 
 | Acme Inc. Risk Class
-| The `riskClass` from the application's policy file — a classification, not a measured check
+| `riskClass` from the policy file. A classification, not a measured check
 
 | Binary signature verification
-| An *integrity* check — the published JAR is compared against the checksum the artifact manager recorded for it. The lab mirror ships no detached GPG signature, so this is not a cryptographic signature check and is labelled accordingly.
+| The published JAR matches the checksum the artifact manager recorded
 
 | SBOM integrity
-| A CycloneDX SBOM is generated in the same build and asserted to list the new remediation version (the bumped _coordinate_, e.g. `org.apache.commons:commons-text:1.9.rhlw-00001`) and the CVE that triggered it
+| The generated CycloneDX SBOM lists the bumped coordinate
 
 | Unit tests
-| `surefire` results from `mvn verify`
+| Surefire results from `mvn verify`
 
 | Integration tests
-| `failsafe` results from the same run
+| Failsafe results from the same run
 
 | Dependency compatibility
-| Asserts that what the `pom.xml` declares is what the build actually resolved
+| `pom.xml` declares the version the build resolved
 
 | Regression scan
-| Re-runs the whole suite against the target branch's `pom.xml` and compares the result test by test, so a test that was already failing before the bump is not blamed on it
+| Per-test comparison against the base branch's dependency
 
 | License compliance
-| Compares the license declared by the base POM against the remediated POM, normalized so that equivalent phrasings do not raise a false alarm
+| The remediated POM's license compared with the base POM
 |===
 
-image::m3-mr-validation-filled.png["The same table after build-pull-request has run, with every check Passed",link=_images/m3-mr-validation-filled.png,window=_images]
+image::m3-mr-validation-filled.png["The validation table after build-pull-request, with every check Passed",link=_images/m3-mr-validation-filled.png,window=_images]
 
-IMPORTANT: Every one of those check rows is measured. Nothing is ever reported green without having been measured, which is the only reason the table is worth putting in front of a reviewer at all — and a row that *could not* be established says so, rather than quietly reading `Passed`.
+A row that is pending, warning, or failed keeps the pipeline red. GitLab will not enable Merge.
 
-The regression scan is why this pipeline takes about twice as long as you might expect: it builds the application a second time against the dependency version you are replacing, so that "no behavioral change" is a comparison rather than an assumption. Roughly ninety seconds in total.
+== Merge the Low-Risk Request
 
-== The Low-Risk Application Merges Automatically
+The table is green and the policy says `auto_approve`. The request is still open. Merge it yourself.
 
-At this point, the merge request is ready to merge. The pipeline has run, the validation table is filled in, and the application's own policy says it can merge itself. The automation takes over. Let's check!
-
-. Switch back to the Ansible Orchestrator canvas. In the same _Start_ workflow run, the *MR Verifier* step confirms the merge request is healthy and every check reported, then the *Auto-approve?* condition reads the approval value that travelled with the application's own policy.
+. Scroll to the bottom of the merge request and click *Merge*.
 +
-For `benefits-mgmt-app` that value is `auto_approve`, so the workflow takes the green branch to *Merge MR (auto-approved)*. The automation marks the merge request ready and merges it. No human is asked, and no human is notified. The child incident gets a comment recording the merge, and the loop moves on to the next application.
+image::m3-hr-merge-button.png["The Merge button at the bottom of the merge request",link=_images/m3-hr-merge-button.png,window=_images]
+
+If the button is disabled, the pipeline has not succeeded or a measured row is not passed. Read the table. It names the check that is holding the button.
+
+== Build and Deploy
+
+Merging to `main` starts `build-push-to-main`.
+
+. In *PipelineRuns* for `build-{guid}`, open the new run for `benefits-mgmt-app`. Confirm these tasks:
 +
-image::m3-mr-auto-merged-ao.png["The orchestrator taking the green path",link=_images/m3-mr-auto-merged-ao.png,window=_images]
-
-. Switch back to the *GitLab* tab and open the merge request again. The block you watched earlier has cleared and the merge has already happened — performed by the automation account, with you never touching it:
+.. `maven-build` — compiles against the remediated dependency
+.. `build-image` — pushes the image. Tekton Chains signs it after the run; the signature is the shield on the PipelineRun, not a task in the graph
+.. `generate-upload-sbom` — uploads the CycloneDX SBOM to TPA
+.. `promote-to-deployment-repo` — commits the image tag in `acme-deployment`
+.. `wait-for-argo` — waits until `acme-apps-{guid}` is Synced and Healthy on that commit
 +
-image::m3-mr-auto-merged.png["The merge request showing the branch pipeline passed, then Merged by Administrator, then the pipeline on main",link=_images/m3-mr-auto-merged.png,window=_images]
+image::m3-pipeline-run.png["The PipelineRun for build-push-to-main through promote-to-deployment-repo",link=_images/m3-pipeline-run.png,window=_images]
 
-. Read the three panels top to bottom, because they are in causal order:
+The pipeline does not deploy the pod itself. The promote task commits a file. Argo CD reconciles the cluster. `wait-for-argo` is what tells the incident the rollout finished. A failed wait leaves the child incident open and comments on it.
+
+. Open Argo CD at https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[the GitOps console^] and choose *Log in via OpenShift*. Allow the `user:info` permission the first time.
 +
-.. *Pipeline #60 passed* on `update-artifact-1.9…` — the branch build finished and every row of the table went green. Only now is merging possible at all.
-.. *Merged by Administrator* — the automation took the gate the moment it opened.
-.. *Pipeline #61 passed* on `main` — merging started a second, different build: the one that produces the image you will deploy.
+image::m3-argocd-authorize.png["The OpenShift Authorize Access screen for the Argo CD login",link=_images/m3-argocd-authorize.png,window=_images]
 
-. Check the timestamps while you are there. The merge happened roughly two minutes after the request was opened, not seconds — the automation was waiting for `build-pull-request` to report before it merged. It could not have jumped that queue even if it had tried.
-
-This is the scale case. An internal HR application, a compatible rebuild, and every automated check green — there is no decision that needs a person. At forty remediations a week, the saving is not the merge click; it is the review time and context switching around it.
-
-[NOTE]
-====
-The decision is made from `.lightwell/policy.json` in the application's own repository, and it fails closed. If that file is missing, unreadable or malformed, the workflow treats the application as `needs_approval` and routes it to a human. Nothing merges itself by accident.
-====
-
-== Build and Deploy the Update
-
-Merging to `main` starts the build pipeline.
-
-. Switch to the *OpenShift Console* tab (or https://console-openshift-console.{openshift_cluster_ingress_domain}[open it in a new tab^]), navigate to *Pipelines* → *Pipelines*, select the *PipelineRuns* tab, and make sure the `build-{guid}` namespace is selected.
-. Open the new run for `benefits-mgmt-app`. Confirm you can follow these stages (along with the clone).
+. Open `acme-apps-{guid}`. *Sync Status* should be `Synced` and *Health* should be `Healthy`. The commit message names `benefits-mgmt-app`.
 +
-.. `maven-build` — compiles the application against the remediated dependency
-.. `build-image` — builds the container image and pushes it to the artifact registry; Tekton Chains signs it after the run completes
-.. `generate-upload-sbom` — generates CycloneDX SBOM and uploads it to TPA
-.. `promote-to-deployment-repo` — bumps the application's `imageTag` in the `acme-deployment` repository, triggering Argo CD to roll the new image into the cluster
+image::argocd-acme-apps-synced.png["The Argo CD application for acme-apps, Synced, with the promote commit",link=_images/argocd-acme-apps-synced.png,window=_images]
+
+If the application has not synced yet, click *Sync*. The poll in the pipeline waits for the same status.
+
+. Return to *Topology* in `{user}-app`. The deployment is still `benefits-mgmt-app-prod`. The pod name is new. Open the *Route* and confirm the application responds.
 +
-image::m3-pipeline-run.png["The PipelineRun details view for build-push-to-main, Succeeded, with every task green through promote-to-deployment-repo",link=_images/m3-pipeline-run.png,window=_images]
+image::argocd-acme-apps-synced-app.png["The application page, with the running build identified in the footer",link=_images/argocd-acme-apps-synced-app.png,window=_images]
 
-. Check the task graph against the list above. It has one more box: `run-tests` and `maven-build` are separate tasks, and there is no explicit `sign` task at all. Signing happens automatically during the Tekton build — Tekton Chains observes the completed run and signs the image afterwards, which is why the signature shows up as the small shield badge next to the PipelineRun name rather than as a step you can watch.
+This publication affected one application, so resolving that child also resolves the parent. You will see a second parent when you publish the next coordinate.
 
-That last step is what closes the loop. The pipeline does not deploy anything — it makes a git commit in the deployment repository, and Argo CD does the rest.
+== Publish the High-Risk Rebuild
 
-. Switch to the *Argo CD* tab on the right (or https://openshift-gitops-server-openshift-gitops.{openshift_cluster_ingress_domain}[open it in a new tab^]). Choose *Log in via OpenShift*. The first time you do this, OpenShift asks you to approve the connection:
-+
-image::m3-argocd-authorize.png["The OpenShift Authorize Access screen requesting user:info for the Argo CD dex server",link=_images/m3-argocd-authorize.png,window=_images]
-+
-[NOTE]
-====
-This screen appears *once*, on your first Argo CD login, and it is expected. Argo CD is asking OpenShift to confirm who you are — `user:info` is read-only access to your username and group membership, nothing more. Click *Allow selected permissions*. If you click *Deny* you will simply be returned to the login page.
-====
+Publish a dependency that `wire-transfer-svc` declares.
 
-. Find the `acme-apps-{guid}` application and look at the two panels at the top:
-+
-image::argocd-acme-apps-synced.png["The Argo CD application for acme-apps with the Sync Status and Last Sync panels highlighted, showing the promote commit",link=_images/argocd-acme-apps-synced.png,window=_images]
-+
-*Sync Status* should read `Synced` and *Last Sync* should read `Sync OK`, but the useful part is the commit quoted under both: *promote benefits-mgmt-app to 5598d3ade…*, authored minutes ago. That is the pipeline's `promote-to-deployment-repo` task writing the new image digest into the deployment repository, and the sync beside it is Argo CD noticing and rolling the deployment in your `{user}-app` namespace.
-+
-[NOTE]
-====
-Argo CD by default syncs every 3 minutes (it's configurable), so if it hasn't sync'ed yet, just click _Sync_.
-====
-
-Nothing here was triggered by a person, and the pipeline deployed nothing. It changed a file in git; Argo CD reconciled the cluster to match. The answer to "what is running, and why" is a commit.
-
-. Switch back to the OpenShift Console and then back to the *Topology* view from earlier. The deployment is still called `benefits-mgmt-app-prod` and the ring is still complete — but click it and compare the pod name with the one you noted earlier. It should be different. The old pod is gone and a new one is serving traffic, built from the remediated dependency.
-. In the topology side panel, click the *Route* link to open the running application and confirm it serves traffic. You can also confirm the application has been updated by looking at the footer, which we've added for this workshop to confirm the version of the dependency it is running on.
-+
-image::argocd-acme-apps-synced-app.png["The app frontend, with verified commit in the footer",link=_images/argocd-acme-apps-synced-app.png,window=_images]
-
-The application keeps serving traffic throughout. That is not a staging trick: the remediated dependency is the real upstream library with the fix applied, so the application genuinely runs on it.
-
-== Remediating a High-Risk Application
-
-Now that we've seen the low-risk, auto-approved application, let's see what happens when the same automation runs against a high-risk application. We will publish a remediation for a dependency that the `wire-transfer-svc` application declares — the payment-critical, PCI-scoped service.
-
-// VERIFIED (19 Oct, tenant 8djv7): wire-transfer-svc declares h2 1.4.200.
-// The module previously said 2.2.224, which matches nothing in the pom, so
-// the agent would have had no dependency to bump. The low-risk trigger uses
-// commons-text 1.9, which benefits-mgmt-app declares.
-
-. Run the following command in the terminal on the right:
+. Run:
 +
 [source,bash,role=execute,subs=attributes+]
 ----
@@ -517,94 +310,48 @@ curl -sSL https://showroom-{user}-showroom.{openshift_cluster_ingress_domain}/mo
   "H2 Database Engine"
 ----
 
-. Confirm the script ends with the same `=== Remediation published ===` block, this time for `com.h2database:h2:1.4.200.rhlw-00001`.
+. Confirm the coordinate `com.h2database:h2:1.4.200.rhlw-00001`.
 
-Everything you just watched happens again, identically: incident opened, TPA queried, application classified, agent dispatched, merge request opened, pipeline runs, validation table filled in. Follow it on the canvas if you like — it is the same shape.
+Intake runs again. The new parent incident is `[Lightwell] com.h2database:h2:1.4.200.rhlw-00001`, with a child for `wire-transfer-svc`. The merge request is in `acme-{guid}/wire-transfer-svc`.
 
-== Review and Merge the High-Risk Change
+== Review and Merge the High-Risk Request
 
-On the canvas, the *Auto-approve?* condition does not see `auto_approve`, so it takes the other branch: a comment on the child incident recording that the merge request is ready and *awaiting a GitLab merge*. Then the execution ends.
+Wait until `build-pull-request` is green. The validation table uses the same checks as the low-risk request. The risk class row reads `HIGH`, and the recommended action asks for a review before merge.
 
-This is not a failure. The automation has finished everything it is allowed to do. The merge request is open in GitLab, and nothing else happens until a person merges it.
-
-[IMPORTANT]
-====
-*The pause lives in GitLab, not in a workflow tool.* There is no approve button on the canvas and no task in a queue waiting for you to tick it. The human gate is the merge request itself — the artifact that carries the evidence.
-====
-
-. Switch to the *Ansible Orchestrator* tab and open the newest *Lightwell Remediation — Start* run for this remediation.
-. Zoom in on the right-hand side of the canvas.
-. Confirm the `False` branch of *Auto-approve?* carries the green tick, and the path onward to *Merge GitLab MR (auto_approve)* is dashed, meaning it was never taken:
+. Read the Summary, the validation table, and the recommended action.
 +
-image::m3-hr-auto-approve-false.png["The Auto-approve? condition on the Orchestrator canvas with its False branch ticked and highlighted; the auto-merge path is dashed and the solid path leads to SNOW — MR ready",link=_images/m3-hr-auto-approve-false.png,window=_images]
-+
-Compare that with the low-risk run earlier, where the same condition ticked `True` and ran straight into *Merge GitLab MR*. The green tick marks the branch that was taken — it is a record of a decision, not an error.
+image::m3-hr-mr-summary.png["The high-risk merge request summary",link=_images/m3-hr-mr-summary.png,window=_images]
+image::m3-hr-mr-validation.png["The validation table for wire-transfer-svc",link=_images/m3-hr-mr-validation.png,window=_images]
+image::m3-hr-recommended-action.png["The recommended action stating that HIGH risk requires review",link=_images/m3-hr-recommended-action.png,window=_images]
 
-. Switch to the *Snow* tab and open the new child incident for `wire-transfer-svc`. Confirm it records that the merge request is ready and provides a link to it.
-+
-image::m3-hr-snow-awaiting-merge.png["The wire-transfer-svc child incident showing the remediation is ready for review under the needs_approval policy",link=_images/m3-hr-snow-awaiting-merge.png,window=_images]
-
-. Go to GitLab and open the merge request in `acme-{guid}/wire-transfer-svc`. Work through the page in order:
-+
-.. *Read the Summary.* The CVE is a real one, linked to the Red Hat advisory, with its severity — not a number the model made up:
-+
-image::m3-hr-mr-summary.png["The high-risk merge request Summary, showing a linked CVE, its CVSS severity and a HIGH Lightwell risk score",link=_images/m3-hr-mr-summary.png,window=_images]
-
-.. *Check the evidence.* Every check passed, measured on this exact change:
-+
-image::m3-hr-mr-validation.png["The Automated Validation table for wire-transfer-svc with every check Passed",link=_images/m3-hr-mr-validation.png,window=_images]
-
-.. *Read the verdict.* The Risk Assessment explains the exposure in plain language, and the Recommended Action states the policy outright:
-+
-image::m3-hr-recommended-action.png["Risk Assessment and Recommended Action, stating that HIGH risk requires review regardless of automated results",link=_images/m3-hr-recommended-action.png,window=_images]
-
-. Confirm the *Recommended Action* block reads:
+. The recommended action reads:
 +
 [quote]
 ____
 🔍 *Requires human review before merge.* A security or DevSecOps engineer should review the patch diff. Risk class *HIGH* requires review regardless of automated results.
 ____
 
-. Make the call, then merge it yourself. Scroll to the bottom of the merge request and click *Merge*:
-+
-image::m3-hr-merge-button.png["The Merge button at the bottom of the merge request, highlighted",link=_images/m3-hr-merge-button.png,window=_images]
-+
-[IMPORTANT]
-====
-*If the Merge button is grayed out, the checks have not finished.* You cannot merge until the pipeline succeeds and every check row of the validation table reads `Passed` — enforced by GitLab, not by convention. Merging through the API is blocked too, which is why the automation could not jump the queue for the low-risk application either.
+. Click *Merge*.
 
-Allow roughly *90 seconds* from when the merge request appeared. A row still reading `Pending`, `Warning` or `Failed` keeps the pipeline red and the button disabled. If it still looks stuck after a couple of minutes, read the *table* rather than the button — it names the check that is holding things up.
+The policy difference is the sentence you just read, not a second button. Both requests waited for you.
 
-This is the only place in the lab where you are the gate. You are not approving that the tests passed — GitLab already enforced that. You are approving that this change is acceptable for this system.
-====
+. Watch `build-push-to-main` for `wire-transfer-svc` in project `build-{guid}`. The promote commit in Argo CD names `wire-transfer-svc`.
+. In *Topology*, confirm the new `wire-transfer-svc-prod` pod is running and the route responds.
 +
-Every check passed, but the policy still requires human review.
-+
-Merging the MR is the only manual step in the module. Everything before it gathered evidence for your decision; everything after it is automated again.
-+
-From here it is the same process as the low-risk application: merging fires the GitLab webhook, the event service relays it, and a short workflow run records the merge on the child incident. `build-push-to-main` builds, generates the SBOM, signs via Tekton Chains, pushes to the OCI registry and promotes the `imageTag` into `acme-deployment`; Argo CD syncs and the new pod rolls out in `{user}-app`. Each stage reports back as it completes.
-
-. It will take a minute or two to complete the deployment. You can watch the pipeline run via the OpenShift Console -> Pipelines -> Pipelines -> PipelineRuns (be sure to select the `build-{guid}` namespace in the dropdown).
-
-. Once the pipeline completes, switch back to Argo CD and confirm the sync occurs (or manually click _Sync_ to force it). The updated `wire-transfer-svc` app will be rolled out by Argo CD. This time the promote commit in Argo CD should name `wire-transfer-svc`, and the new pod should roll out in `{user}-app`.
-
-. Return to the OpenShift Console, back to the *Topology* view, and confirm the new pod is running. Click the *Route* link to open the application and confirm it serves traffic, and that the new remediation is present in the footer:
-+
-image::m3-hr-merge-app.png["The new application is running with the fix",link=_images/m3-hr-merge-app.png,window=_images]
+image::m3-hr-merge-app.png["The wire-transfer application running after the merge",link=_images/m3-hr-merge-app.png,window=_images]
 
 == Verify the Fix in TPA
 
-. Switch to the *TPA* tab on the right (or https://tpa-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]). Sign in through SSO with `{user}` / `{password}` if needed.
-. On the dashboard, confirm the total SBOM count and the *last SBOM ingested* time — the most recent one should be the build you just watched:
+. Open https://tpa-{guid}.{openshift_cluster_ingress_domain}[Trusted Profile Analyzer^] and sign in with `{user}` / `{password}` if asked.
+. The newest ingested SBOM should be the build you just watched.
 +
-image::m3-tpa-dashboard.png["The Trusted Profile Analyzer dashboard showing total SBOMs, total advisories and the most recently ingested SBOM",link=_images/m3-tpa-dashboard.png,window=_images]
+image::m3-tpa-dashboard.png["The Trusted Profile Analyzer dashboard showing the most recently ingested SBOM",link=_images/m3-tpa-dashboard.png,window=_images]
 
-. In the left-hand navigation, expand *SBOMs* and choose *All SBOMs*:
+. Under *SBOMs* → *All SBOMs*, find `benefits-mgmt-app` and `wire-transfer-svc`. Each application you remediated appears as the original build and as the build from the merge.
 +
-image::m3-tpa-sboms-nav.png["The TPA left-hand navigation with All SBOMs highlighted",link=_images/m3-tpa-sboms-nav.png,window=_images]
+image::m3-tpa-sboms-nav.png["The TPA navigation with All SBOMs highlighted",link=_images/m3-tpa-sboms-nav.png,window=_images]
 
-. Find the builds for `benefits-mgmt-app` and `wire-transfer-svc`. Each application you remediated should appear twice — once as shipped, once as rebuilt. `v1.0-build` is the application as it shipped; `chore(deps)…` is the build produced after remediation.
-. Compare the vulnerability counts for each pair. The exact numbers depend on your tenant's dataset — the table below is from a reference tenant, so treat it as the shape of the result, not the numbers you must match:
+. Compare the vulnerability counts. The numbers below are from a reference tenant. Yours can differ. The shape is what matters:
 +
 [cols="2,2,1,2",options="header"]
 |===
@@ -629,72 +376,40 @@ image::m3-tpa-sboms-nav.png["The TPA left-hand navigation with All SBOMs highlig
 | *90* — 17 critical
 |===
 
-. Open the remediated SBOM and search the component list for the coordinate you published. Confirm the vulnerable version is absent and the `.rhlw` build is present.
+. Open the remediated SBOM and search for the coordinate you published. The vulnerable version is absent and the `.rhlw` build is present.
 +
-image::m3-tpa-vuln-before-after.png["The TPA SBOM list with the original and remediated builds of both applications, their vulnerability counts highlighted",link=_images/m3-tpa-vuln-before-after.png,window=_images]
-
-The two applications show different results, and the difference is expected.
-
-For `benefits-mgmt-app` the headline number moves: two vulnerabilities fewer, one of them critical, and one dependency fewer. The vulnerable `commons-text` is gone and the `.rhlw` build stands in its place.
-
-For `wire-transfer-svc` the total may not change. The application has 238 dependencies and a long tail of known issues that this one fix does not address. The build changed; the backlog did not.
+image::m3-tpa-vuln-before-after.png["The SBOM list with the original and remediated builds",link=_images/m3-tpa-vuln-before-after.png,window=_images]
 
 [IMPORTANT]
 ====
-*A count is not proof, and this is the clearest place in the lab to see why.* TPA can only subtract advisories it actually holds. If a component has no advisory in this tenant's dataset, the number is unchanged even though the dependency genuinely changed — and on an application with 90 findings, a single remediation barely registers.
-
-The reliable evidence is the SBOM *contents*: open either build and search the component list for the coordinate. The vulnerable version is absent and the `.rhlw` build is present. That is a fact about the software. The count is a summary of what the scanner happens to know, which is a different thing — and worth remembering the next time a dashboard is offered as evidence.
+A count is not proof. TPA can only subtract advisories it holds. The reliable evidence is the SBOM contents: the vulnerable coordinate is gone and the `.rhlw` coordinate is there.
 ====
 
-Nobody wrote a report or updated a spreadsheet. The pipeline uploaded the SBOM as part of the build, so the evidence for the next remediation is already in place.
+The pipeline uploaded that SBOM. Nobody wrote a separate report.
 
-== Confirm the Incident Is Resolved
+== Confirm the Incidents Are Resolved
 
-. Switch back to the *Snow* tab on the right (or https://snow-mock-snow-{guid}.{openshift_cluster_ingress_domain}[open it in a new tab^]).
-. Confirm the parent incident is now *Resolved*.
-. Read the parent thread from the top. It is deliberately short — a sequence of milestones with links down into the children:
-+
-.. The incident was raised the moment the artifact manager announced the artifact — before anything was known about who was affected
-.. Child tickets were opened, one per application TPA said was genuinely affected
-.. Each application reached a reviewable merge request
-.. Merge, build and deploy were each noted as they landed
-.. The parent moved to *Resolved* once Argo CD reported the application Healthy
+. Return to Snow.
+. Open each parent from this module. A parent is *Resolved* only after every one of its children is resolved.
+. Open a child. A healthy rollout resolved it. A failed `build-push-to-main` or a rollout that never became healthy left it open and added a comment.
 
-. Open a child. Confirm it carries the per-application detail: the merge request link, the CVE, the verifier outcome, the pipeline run, the Argo CD application and the route the fixed code is now serving on. The parent tells an operator where things stand; the child tells them what happened.
-
-The incident is marked _Resolved_ when the app is deployed, not when it is merged or shows a green pipeline. The `SNOW finalize` step only runs in the Deploy workflow, so the ticket stays open until the remediated code is running. A build that passes but never ships does not close anything.
-
-That is also why three workflows rather than one long-running job. The Start run ends when the merge requests are ready; merge and deploy arrive later as webhooks and start their own short executions. The incident is what stitches them back into a single story — which is precisely the job a ticket is supposed to do.
-
-[NOTE]
-====
-For a risk or compliance audience, this is the key point: the incident was open before the change existed, accumulated every decision and measurement as the work happened, and closed when the fix was live.
-====
+The incident closes when the application is running, not when the merge request is green.
 
 == Summary
 
-You have just run the *Full Automation* path end to end:
-
-. You published a remediated artifact; the artifact manager raised a `component CREATED` event
-. The artifact event started the remediation workflow in Ansible
-. The workflow opened a Snow incident ticket before proposing any change
-. TPA answered which applications were genuinely affected, from SBOM data
-. Each application was classified against its own `.lightwell/policy.json`
-. The `impact-analyzer` agent opened a merge request carrying CVE data, risk class and a validation table
-. The `build-pull-request` pipeline tested the change and wrote the real results back into that table
-. `benefits-mgmt-app` was auto-approved and merged automatically, without you
-. `wire-transfer-svc` passed every check, and its merge request still said human review was required, so it waited for you to merge it in GitLab
-. Both were built, signed, promoted and deployed by the same pipeline and Argo CD
-. The parent incident resolved once Argo CD reported the deployment Healthy, carrying a complete, timestamped trail
+. You published a remediated artifact and Nexus raised `component CREATED`.
+. `lightwell-intake` opened a Snow parent, queried TPA, read `.lightwell/policy.json`, and created a Renovate job for each platform-owned application.
+. Renovate opened a merge request that changes `pom.xml`.
+. `build-pull-request` tested the change, skipped `adapt` when the regression scan found no difference, and failed the run unless every measured row passed.
+. You merged `benefits-mgmt-app` and `wire-transfer-svc` yourself. `auto_approve` did not merge either request.
+. `build-push-to-main` built, signed, promoted, and waited until Argo CD was Synced and Healthy.
+. The child incident resolved on that healthy rollout. The parent resolved when it had no open children.
 
 === Key Takeaways
 
-Compared with the quick win path, there are important differences:
-
-* *Scope* — the system knows which applications contain the component, because it asked TPA rather than scanning a single repository.
-* *Evidence* — by the time a human looks at the change, the tests have run and the results are in the merge request. The reviewer reads measurements, not promises.
-* *Proportionality* — attention is spent where it changes the outcome. An internal HR application merges itself. A PCI-scoped payment service does not, and no amount of green ticks changes that.
-
-Scale is what makes this necessary. One remediation a week is a Renovate problem. Forty a week across sixty repositories, each needing a risk decision and an audit trail, is an orchestration problem — and the human can only stay in the loop if low-risk changes like `benefits-mgmt-app` stop asking for review.
+* *Scope* — intake asks TPA which applications contain the component.
+* *Evidence* — the validation table is filled by the pipeline before Merge is enabled.
+* *A person merges* — the policy changes the recommended action. It does not click Merge.
+* *The ticket follows the rollout* — a green pipeline that never becomes a healthy deployment leaves the incident open.
 
 Continue to xref:conclusion.adoc[Module 4: Wrap-Up].

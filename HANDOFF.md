@@ -8,7 +8,7 @@ Architectural decisions that back these items live in [ADR.md](ADR.md). **Always
 update ADR.md in the same change** when you add, change, or close a Handoff item
 that implies a decision (Handoff = list; ADR = context / decision / consequences).
 
-Last updated: 2026-11-18 (TPA package search in tenant provisioning)
+Last updated: 2026-11-24 (Tekton remediation control plane, tenant `6wprg`)
 Last updated: 2026-11-19 (Module 3 procedural restructure; Antora build verified, screenshots re-shot, live-tenant verification outstanding)
 
 ## Where the pieces live
@@ -23,6 +23,21 @@ Last updated: 2026-11-19 (Module 3 procedural restructure; Antora build verified
 | AO Path 2 operator helper + docs | this repo — [`ao-trigger-helper/`](ao-trigger-helper/) (scripts + [`docs/`](ao-trigger-helper/docs/)) |
 
 ## Recently done
+
+- **Tekton is the remediation control plane (24 Nov, tenant `6wprg`).**
+  Chart default `sdlc.drive` is `tekton`. The loop is `lightwell-intake`,
+  then `build-pull-request`, then `build-push-to-main` after a person
+  merges. [`openspec/changes/agent-sandbox-orchestrator`](openspec/changes/agent-sandbox-orchestrator/)
+  is not that control plane: do not build its HTTP service, lane Claims,
+  or SQLite store. `Sandbox/opencode` and Tempo stay.
+  Proven on `6wprg`: `commons-text` `1.9.rhlw-00001` skipped `adapt` on a
+  clean diff, the merge was by hand, Argo went Healthy, and both incidents
+  resolved; `postgresql` `42.3.8.rhlw-00001` skipped `report-generator-app`
+  and created no RenovateJob. Do not press Sync on
+  `lightwell-tenant-6wprg` until this branch is what that Application
+  tracks. A git sync renders `rhpds` `main` and drops intake.
+  → [ADR-069](ADR.md#adr-069--tekton-runs-are-the-remediation-control-plane),
+  [`openspec/changes/tekton-remediation-pipeline`](openspec/changes/tekton-remediation-pipeline/)
 
 - **Sandbox agent traces go to a cluster Tempo (17 Nov).** One
   `lightwell-observability` stack (Tempo pv, OTLP collector, console
@@ -43,10 +58,11 @@ Last updated: 2026-11-19 (Module 3 procedural restructure; Antora build verified
   still recreates a deleted pod. Lab sync on dev cluster `fvllf` (tenant `qkjst`):
   operator CSV in `openshift-operators`, `Sandbox/opencode` Ready in `sdlc-qkjst`, Service
   `opencode:4096` selects that pod, Deployment pruned, pod delete recreated
-  Ready. Automated sync is off on `lb1815-lightwell`, `agent-sandbox`, and
+  Ready.   Automated sync is off on `lb1815-lightwell`, `agent-sandbox`, and
   `lightwell-tenant-qkjst` so `feat/aws-noobaa-support` does not revert the
-  local charts. Orchestrator/lane Claims are still
-  [`openspec/changes/agent-sandbox-orchestrator/`](openspec/changes/agent-sandbox-orchestrator/).
+  local charts. [`openspec/changes/agent-sandbox-orchestrator/`](openspec/changes/agent-sandbox-orchestrator/)
+  is not the remediation control plane.
+  → [ADR-069](ADR.md#adr-069--tekton-runs-are-the-remediation-control-plane)
   → [ADR-065](ADR.md#adr-065--opencode-runs-as-an-agent-sandbox-sandbox),
   [ADR-067](ADR.md#adr-067--use-the-red-hat-build-of-agent-sandbox)
 - **Module 3 restructured into procedural steps (18–19 Nov, committed 19 Nov).**

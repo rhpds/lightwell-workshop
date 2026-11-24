@@ -30,6 +30,15 @@ Integration URLs (`EDA_WEBHOOK_URL`, `OPENCODE_BASE_URL`, Nexus route, and so on
 
 EDA webhook defaults to in-cluster `http://sdlc-remediation-<guid>.<aap-namespace>.svc:5000/`. External GitLab/Nexus use `EDA_WEBHOOK_ROUTE_URL` / `GITLAB_WEBHOOK_TARGET_URL` (defaults: `https://sdlc-remediation-<guid>-<aap-ns>.<ingress>/`).
 
+## Remediation drive (`sdlc.drive`)
+
+| Value | What runs |
+|-------|-----------|
+| `tekton` (default) | `lightwell-intake` once per `.rhlw` artifact, then the two Pipelines as Code runs that already live on the app repos (`build-pull-request` on the merge request, `build-push-to-main` on the default branch). Nexus posts to the EventListener route `lightwell-intake-<guid>`. The chart does not render the AO bootstrap Job, the EDA activation, the bridge, or those job templates. |
+| `ao` | Legacy canvas. Event-Driven Ansible filters the Nexus event, Automation Orchestrator loops the apps, and `cicd-eda-bridge` reports pipeline and Argo CD status. `eda-bootstrap` registers the remediation Ansible job templates. |
+
+`tekton` is the default. Set `sdlc.drive=ao` only when a demo still wants the canvas.
+
 ## Values (from AgnosticV)
 
 ```yaml

@@ -1,4 +1,4 @@
-{{- if .Values.sdlc.enabled }}
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.drive" .) "ao") }}
 apiVersion: batch/v1
 kind: Job
 metadata:

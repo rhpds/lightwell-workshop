@@ -97,6 +97,20 @@ remediation fired nothing and the whole agentic path had no entry point.
 {{- end -}}
 {{- end -}}
 
+{{- define "bootstrap-tenant.intakeAppNames" -}}
+{{- range $i, $app := .Values.gitlab.appSeeds -}}
+{{- if $i }},{{ end }}{{ $app.name }}
+{{- end -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.intakeWebhookUrl" -}}
+{{- printf "http://el-lightwell-intake.build-%s.svc:8080" .Values.guid -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.intakeWebhookRouteUrl" -}}
+{{- printf "https://lightwell-intake-%s.%s" .Values.guid .Values.deployer.domain -}}
+{{- end -}}
+
 {{- define "bootstrap-tenant.gitlabWebhookTargetUrl" -}}
 {{- .Values.sdlc.gitlabWebhookTargetUrl | default (include "bootstrap-tenant.edaWebhookRouteUrl" .) -}}
 {{- end -}}
@@ -205,6 +219,14 @@ remediation never runs. Default to the legacy rulebook unless AO is configured.
 
 {{- define "bootstrap-tenant.opencodeLlmSecretName" -}}
 {{- .Values.sdlc.llm.existingSecret | default "opencode-llm" -}}
+{{- end -}}
+
+{{- define "bootstrap-tenant.drive" -}}
+{{- $d := .Values.sdlc.drive | default "tekton" -}}
+{{- if not (or (eq $d "ao") (eq $d "tekton")) -}}
+{{- fail (printf "sdlc.drive must be ao or tekton, got %q" $d) -}}
+{{- end -}}
+{{- $d -}}
 {{- end -}}
 
 {{- define "bootstrap-tenant.orchestratorEnabled" -}}

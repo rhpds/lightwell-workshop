@@ -8,7 +8,7 @@ same change.
 - **HANDOFF.md** — short operational list (what’s done / next / gotchas).
 - **ADR.md** — why we chose it (context, decision, consequences).
 
-Last synced with HANDOFF: 2026-11-17 (OpenCode image pin `sha-7971cad`)
+Last synced with HANDOFF: 2026-11-24 (Tekton remediation control plane)
 
 ---
 
@@ -693,7 +693,7 @@ Copy and fill for each new decision:
 | **Date** | 2026-11-17 |
 | **Title** | The OpenCode server is `Sandbox/opencode`, not a Deployment |
 | **Context** | Each tenant ran OpenCode as `Deployment/opencode` in `sdlc-<guid>`. AO, EDA, and AAP call Service `opencode:4096`. The agent-sandbox controller was only an untracked chart, and a dual-runtime sketch (`sdlc.runtime`) called helpers that were never committed, so the tenant chart could not render. |
-| **Decision** | `bootstrap-infra` installs kubernetes-sigs/agent-sandbox v1.0.8 in `agent-sandbox-system`. When SDLC is enabled, `bootstrap-tenant` creates `Sandbox/opencode` (`agents.x-k8s.io/v1beta1`) with the same `opencode serve` command, env, service account, and probes. Service `opencode:4096` and Route `opencode-ui` (via `opencode-ui-gate`) stay the caller contract. `sync-gitlab-pat` deletes the `app=opencode` pod so the controller recreates it with the new GitLab token. There is no `sdlc.runtime` flag and no `Deployment/opencode`. Replacing AO, EDA, and AAP remains `openspec/changes/agent-sandbox-orchestrator/`. |
+| **Decision** | `bootstrap-infra` installs kubernetes-sigs/agent-sandbox v1.0.8 in `agent-sandbox-system`. When SDLC is enabled, `bootstrap-tenant` creates `Sandbox/opencode` (`agents.x-k8s.io/v1beta1`) with the same `opencode serve` command, env, service account, and probes. Service `opencode:4096` and Route `opencode-ui` (via `opencode-ui-gate`) stay the caller contract. `sync-gitlab-pat` deletes the `app=opencode` pod so the controller recreates it with the new GitLab token. There is no `sdlc.runtime` flag and no `Deployment/opencode`. Replacing AO, EDA, and AAP on the remediation path is [ADR-069](#adr-069--tekton-runs-are-the-remediation-control-plane), not `openspec/changes/agent-sandbox-orchestrator/`. |
 | **Consequences** | Cluster sync must install the controller before a tenant Sandbox will admit. A pod recreate clears sessions on the emptyDir, as a Deployment rollout already did. Existing tenants must drop `deploy/opencode` if Argo prune leaves it, or the Service selects two pods. The upstream v1.0.8 manifest install is replaced by [ADR-067](#adr-067--use-the-red-hat-build-of-agent-sandbox). |
 | **Relates** | [ADR-005](#adr-005--per-tenant-sandbox-namespaces), [ADR-013](#adr-013--shared-opencode-image-build-to-openshift-integrated-registry), [ADR-029](#adr-029--opencode-ui-gate-for-web-session-visibility), [ADR-058](#adr-058--tenant-users-can-see-the-agents-namespaces-read-only) |
 
@@ -744,10 +744,24 @@ Copy and fill for each new decision:
 
 ---
 
+## ADR-069 — Tekton runs are the remediation control plane
+
+| Field | Content |
+|-------|---------|
+| **Date** | 2026-11-24 |
+| **Title** | Three Tekton runs replace Ansible, Event-Driven Ansible, and Automation Orchestrator on the remediation path |
+| **Context** | The canvas path created a parent incident, queried Trusted Profile Analyzer, opened Renovate merge requests, and closed incidents from Automation Orchestrator. That control plane is the thing Module 3 has to show. [`openspec/changes/agent-sandbox-orchestrator`](openspec/changes/agent-sandbox-orchestrator/) describes a different one: a custom HTTP service, lane Claims, and a SQLite store. The Agent Sandbox operator, `Sandbox/opencode`, and Tempo stay, but they are not the remediation loop. |
+| **Decision** | The remediation control plane is three Tekton runs. `lightwell-intake` runs once per `.rhlw` artifact: parent incident, TPA, policy, one child per platform app, and a RenovateJob only for `remediation_owner: ao`. `build-pull-request` runs on the merge request and calls OpenCode only when the regression scan reports a difference. `build-push-to-main` runs on the merge to the default branch, waits until `acme-apps-{guid}` is Synced and Healthy on the promote commit, and resolves the child; the run that resolves the last sibling resolves the parent. `sdlc.drive` defaults to `tekton`. `ao` still renders the canvas. `remediation_owner: ao` keeps that string and means this Tekton path. `remediation_owner: renovate` is not given a RenovateJob. `auto_approve` stays a risk class and does not merge. A person merges every Lightwell merge request, and GitLab still requires the pipeline to succeed. |
+| **Consequences** | Tenant `6wprg` proved both sides on 24 Nov: `commons-text` `1.9.rhlw-00001` produced one intake run, one Renovate merge request, a green `build-pull-request` that skipped `adapt`, a hand merge, a Healthy `build-push-to-main`, and resolved `INC0023250` and `INC0023249`. `postgresql` `42.3.8.rhlw-00001` commented the skip of `report-generator-app` and created no RenovateJob. New orders follow `tekton` unless they set `sdlc.drive=ao`. Removing the `ao` templates and the AAP and AO operators waits until no demo order still sets `ao`. Do not build the orchestrator service from `agent-sandbox-orchestrator`. |
+| **Relates** | [HANDOFF.md](HANDOFF.md), [`openspec/changes/tekton-remediation-pipeline`](openspec/changes/tekton-remediation-pipeline/) |
+
+---
+
 ## Mapping to HANDOFF.md
 
 | Handoff theme | ADR |
 |---------------|-----|
+| Tekton remediation control plane | ADR-069 |
 | No Lightwell credentials / inject later | ADR-001 |
 | Dashboard off by default | ADR-002 |
 | EDA JTs per org | ADR-003 |

@@ -1,4 +1,4 @@
-{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
+{{- if and .Values.sdlc.enabled (eq (include "bootstrap-tenant.drive" .) "ao") (eq (include "bootstrap-tenant.orchestratorEnabled" . | toString) "true") (or .Values.build.enabled .Values.apps.enabled) }}
 # SA + RBAC for the CI/CD → EDA bridge (PipelineRun + Argo Application watches).
 apiVersion: v1
 kind: ServiceAccount

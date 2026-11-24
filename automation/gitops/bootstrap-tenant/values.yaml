@@ -193,6 +193,10 @@ nexus:
 
 sdlc:
   enabled: true
+  # tekton: lightwell-intake, then the app Pipelines as Code runs.
+  # ao: Event-Driven Ansible + Automation Orchestrator (legacy canvas).
+  # Default is tekton. Set ao only for a demo that still wants the canvas.
+  drive: tekton
   namespace: "" # default sdlc-{guid}; set sdlc-control-plane only for legacy single-tenant labs
   # Source for BOTH the EDA project (rulebooks/) and the Controller project
   # (playbooks/). AO rulebook + start/resume orchestrator playbooks live here.
